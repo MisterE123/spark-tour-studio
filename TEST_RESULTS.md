@@ -188,3 +188,5 @@ Popup photos fill the available width with an 18px inset, rounded corners and na
 - Save/reopen schema, asset discovery and validation include backgrounds. Portable export downloads panorama media and background RAD chunks; referenced export preserves CDN paths and omit-splats behavior.
 - Build and all 36 tests pass. Packaged editor authoring, texture reuse/disposal, mesh alignment/reuse, save/reopen and export pass. Exported viewer checks pass for scene switching, splat cleanup, cancellation, failed loads and retry (test-output/background-1791326749209). Panorama/editor screenshot inspected. Real Quest acceptance remains manual.
 - Self-contained glass/photo check passes with new solid backgrounds (test-output/glass-1791326781194): foreground scene colors transmit through the popup, and photos nearly fill the width with the small inset.
+
+Final background checks pass after strengthening the stale-alignment generation guard (test-output/background-1791326907000).

@@ -11,7 +11,8 @@ export interface Viewpoint {type?:'photosphere'|'orbit'|'slider';autoAnimate?:bo
 export interface Hotspot {id:string;label:string;position:Vec3;kind:'page'|'scene'|'viewpoint';target:string;viewpoint?:string}
 export interface Block {type:'text'|'image'|'link'|'embed';text:string;url:string}
 export interface Page {id:string;title:string;html:string;blocks:Block[]}
-export interface TourScene {walkHeight?:number;thumbnailMode?:'starting-view'|'custom';audio?:AudioTrack;id:string;name:string;source:string;thumbnail:string;transform:Transform;collider:string;colliderTransform:Transform;modes:Mode[];entry:string;walkStart:string;viewpoints:Viewpoint[];hotspots:Hotspot[]}
+export type SceneBackground={type:"solid";color:string}|{type:"panorama";source:string;yawDegrees:number}|{type:"splat";source:string;transform:Transform};
+export interface TourScene {background?:SceneBackground;walkHeight?:number;thumbnailMode?:'starting-view'|'custom';audio?:AudioTrack;id:string;name:string;source:string;thumbnail:string;transform:Transform;collider:string;colliderTransform:Transform;modes:Mode[];entry:string;walkStart:string;viewpoints:Viewpoint[];hotspots:Hotspot[]}
 export interface Project {performance?:PerformanceLibrary;version:1;title:string;description:string;cover:string;startScene:string;scenes:TourScene[];pages:Page[]}
 export interface Hosting {assetBaseUrl:string;sceneUrls:Record<string,string>}
 export interface Snapshot {project:Project;hosting:Hosting;base:string;path:string;recovery?:Project}

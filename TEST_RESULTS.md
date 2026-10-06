@@ -180,3 +180,11 @@ Final Windows portable package: release/Spark Tour Studio 1.8.3.exe; 157,887,476
 - Initialized local Git source history on main. Generated runtime bundles, portable executables, test artifacts and external Splatshop distribution are excluded.
 
 Popup photos fill the available width with an 18px inset, rounded corners and natural aspect ratio; tall images scroll. Browser visual check passes photo width and backdrop transmission assertions (test-output/glass-1791326341300): red-backed panel pixel [200,98,85], blue-backed panel pixel [86,115,202].
+
+## v1.9.0 backgrounds (2026-10-06)
+
+- Added per-scene Solid color / Equirectangular panorama / Gaussian splat selection, local files and URL references, panorama yaw and independent RAD alignment. Same renderer/XR session; background splats share the Spark performance budget. Existing scenes retain the dark backdrop.
+- Background edits preserve the foreground mesh; panorama rotation and splat alignment preserve loaded background resources. Generation checks dispose stale textures, abort streaming meshes and protect replacement resources from late results. Scene changes release the previous background.
+- Save/reopen schema, asset discovery and validation include backgrounds. Portable export downloads panorama media and background RAD chunks; referenced export preserves CDN paths and omit-splats behavior.
+- Build and all 36 tests pass. Packaged editor authoring, texture reuse/disposal, mesh alignment/reuse, save/reopen and export pass. Exported viewer checks pass for scene switching, splat cleanup, cancellation, failed loads and retry (test-output/background-1791326749209). Panorama/editor screenshot inspected. Real Quest acceptance remains manual.
+- Self-contained glass/photo check passes with new solid backgrounds (test-output/glass-1791326781194): foreground scene colors transmit through the popup, and photos nearly fill the width with the small inset.

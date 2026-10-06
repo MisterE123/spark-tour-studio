@@ -22,7 +22,7 @@ For web development, `npm run dev` serves the viewer. The desktop editor uses th
 
 1. **New**: choose an empty project directory, or **Open** an existing project/export folder.
 2. **Add RAD scene**: pick a LichtFeld `.rad`, or add a hosted scene and replace its URL. Local imports reference their original files during editing.
-3. Adjust scene orientation/scale under **Splat transform**. Tour coordinates use meters and Y-up. Set names, thumbnails, allowed modes and entry views.
+3. Adjust scene orientation/scale under **Splat transform**. Tour coordinates use meters and Y-up. Set names, thumbnails, allowed modes and entry views. **Scene → Background** offers Solid color, Equirectangular panorama and Gaussian splat.
 4. Drag to look, use Free Fly and WASD/Q/E to position the camera, then **Capture viewpoint**. Use the Views tab to rename, reorder, duplicate, update or delete viewpoints. Thumbnails are captured with each saved camera view.
 5. For Walk, import a collision GLB or choose **Generate collision mesh…** and select the matching source PLY. The bundled splat-transform 3.7.0 runs locally on your GPU and creates a smooth collision surface; no separate installation is needed. RAD input is not supported by that tool. Large PLYs are first simplified into a temporary collision-only copy (2 million splats by default, or 8 million for Detailed), avoiding oversized GPU buffers. The original stays unchanged; simplified collisions can lose fine details. Choose 8, 15 or 30 cm surface detail, inspect the wireframe, set a walking start above a clear floor, then enable Walk. The generated mesh shares Spark's PLY coordinates and follows the scene transform. This is surface reconstruction, not automatic scene cleanup: openings, noisy captures and incomplete floors may need external repair.
 6. Use **Place bubble** or **Bubble ahead**, then choose **Content** as its bubble type. The bubble label also supplies its popup title. Edit text, images, links and embeds directly in the Bubble inspector, or import HTML. Each new content bubble starts with its own content. Image blocks, the tour cover and scene thumbnail accept drag-and-drop, a native file chooser, or a URL/project path. Dropped images are copied into the project. Put custom pages and their dependencies in a dedicated folder: the importer includes the containing folder during export.
@@ -166,3 +166,17 @@ Scene thumbnails default to their starting viewpoint screenshot. The editor capt
 ## Local crash diagnostics
 
 The Windows editor saves native crash dumps and renderer/GPU failure details beneath `%APPDATA%\spark-tour-studio\diagnostics`. Reports stay on this computer and are never uploaded. If the application crashes, keep this folder with the version and the action that triggered it for diagnosis. Native dumps may contain application memory.
+
+## Scene backgrounds
+
+Each scene can choose a solid hex color, a 360° equirectangular image, or a second streamable RAD splat. Older scenes keep the existing dark backdrop. Panorama images support drag/drop, the file chooser and URLs; use a 2:1 JPEG, PNG, WebP or other supported image and adjust its rotation in degrees. Background splats have independent world-space position, rotation and scale, and no collision geometry. The same renderer and XR session display the foreground and background. Both splats share the performance preset’s streaming budget. Rotation/alignment changes reuse the loaded background assets.
+
+The optional scene `background` field has one of these forms:
+
+```json
+{ "type": "solid", "color": "#264b73" }
+{ "type": "panorama", "source": "media/sky.jpg", "yawDegrees": 0 }
+{ "type": "splat", "source": "splats/sky.rad", "transform": { "position": [0, 0, 0], "rotation": [0, 0, 0], "scale": 1 } }
+```
+
+Transforms use meters and radians, with Y-up. Panorama images resolve relative to the site; background RAD paths use `assetBaseUrl` just like scene splats, and absolute HTTPS URLs override that base. Portable exports include background assets and required RAD companion chunks. Referenced exports preserve CDN references and apply the existing omit-splats option to background splats too.

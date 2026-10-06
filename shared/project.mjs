@@ -13,7 +13,8 @@ const typedViewpoint=viewpoint.refine(v=>v.type!=='orbit'||!!v.orbit,'Orbit view
 const block = z.object({ type:z.enum(['text','image','link','embed']), text:z.string(), url:ref });
 const page = z.object({ id, title:z.string(), html:ref, blocks:z.array(block) });
 const hotspot = z.object({ id, label:z.string(), position:vec, kind:z.enum(['page','scene','viewpoint']), target:z.string(), viewpoint:z.string().optional() });
-const scene = z.object({ walkHeight:finite.min(1).max(2.4).optional(), audio:audio.optional(), id, name:z.string(), source:ref, thumbnail:ref, thumbnailMode:z.enum(['starting-view','custom']).optional(), transform, collider:ref, colliderTransform:transform, modes:z.array(mode), entry:z.string(), walkStart:z.string(), viewpoints:z.array(typedViewpoint), hotspots:z.array(hotspot) });
+export const BackgroundSchema=z.discriminatedUnion('type',[z.object({type:z.literal('solid'),color:z.string().regex(/^#[0-9a-f]{6}$/i)}),z.object({type:z.literal('panorama'),source:ref,yawDegrees:finite.min(-360).max(360).default(0)}),z.object({type:z.literal('splat'),source:ref,transform})]);
+const scene = z.object({ background:BackgroundSchema.optional(), walkHeight:finite.min(1).max(2.4).optional(), audio:audio.optional(), id, name:z.string(), source:ref, thumbnail:ref, thumbnailMode:z.enum(['starting-view','custom']).optional(), transform, collider:ref, colliderTransform:transform, modes:z.array(mode), entry:z.string(), walkStart:z.string(), viewpoints:z.array(typedViewpoint), hotspots:z.array(hotspot) });
 export const ProjectSchema = z.object({ performance:PerformanceLibrarySchema.optional(), version:z.literal(1), title:z.string().min(1), description:z.string(), cover:ref, startScene:z.string(), scenes:z.array(scene), pages:z.array(page) });
 export const HostingSchema = z.object({ assetBaseUrl:z.string().default('./'), sceneUrls:z.record(z.string(),ref).default({}) });
 export function identity(){return {position:[0,0,0],rotation:[0,0,0],scale:1};}
@@ -29,6 +30,7 @@ export function validateProject(value){
  for(const s of p.scenes){
   unique(s.viewpoints,`${s.name} viewpoint`);unique(s.hotspots,`${s.name} bubble`);
   if(!s.modes.length)errors.push(`${s.name}: enable at least one navigation mode.`);
+  if(s.background&&s.background.type!=='solid'){if(!s.background.source)errors.push(`${s.name}: choose a background asset.`);if(s.background.type==='splat'&&s.background.source&&!/\.rad(?:[?#]|$)/i.test(s.background.source))errors.push(`${s.name}: background splat must be a .rad URL or file.`);}
   if(!s.source)errors.push(`${s.name}: choose a RAD source.`);
   if(s.source && !/\.rad(?:[?#]|$)/i.test(s.source))errors.push(`${s.name}: source must be a .rad URL or file.`);
   if(!s.viewpoints.some(v=>v.id===s.entry))errors.push(`${s.name}: missing entry viewpoint.`);
@@ -39,7 +41,7 @@ export function validateProject(value){
 }
 export function assetUrl(ref,base){return new URL(ref,base).href;}
 export function sceneUrl(scene,hosting,base){const override=hosting.sceneUrls?.[scene.id];return override?new URL(override,base).href:new URL(scene.source,new URL(hosting.assetBaseUrl||'./',base)).href;}
-export function allReferences(p){return [p.cover,...p.scenes.flatMap(s=>[s.source,s.collider,s.thumbnail,s.audio?.source,...s.viewpoints.map(v=>v.audio?.source)]),...p.pages.flatMap(pg=>[pg.html,...pg.blocks.filter(b=>b.type==='image').map(b=>b.url)])].filter(Boolean);}
+export function allReferences(p){return [p.cover,...p.scenes.flatMap(s=>[s.source,s.background?.type!=='solid'?s.background?.source:'',s.collider,s.thumbnail,s.audio?.source,...s.viewpoints.map(v=>v.audio?.source)]),...p.pages.flatMap(pg=>[pg.html,...pg.blocks.filter(b=>b.type==='image').map(b=>b.url)])].filter(Boolean);}
 export function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 export function renderPage(page){
  const esc=escapeHtml;

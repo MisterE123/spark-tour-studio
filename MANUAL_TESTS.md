@@ -99,3 +99,10 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 - Check neutral panel translucency and legibility on Quest. Reduced-transparency preference intentionally uses solid neutral panels.
 
 - Check portrait and landscape popup photos: each nearly fills the popup width, retains proportions and scrolls when tall.
+
+## 1.9.0 backgrounds
+
+- Under Scene → Background, choose each type, save/reopen and export. Select panorama images via drop/file/URL; rotate them. Select a streamable RAD and align its world-space position/rotation/scale separately from the foreground.
+- Walk/fly through a scene with a splat background: confirm background positioning/parallax, foreground collision and shared performance tuning. Switch scenes during loading and after failures; check retry and no old background remaining.
+- Verify backgrounds and glass on Quest without an XR session restart. Check pano orientation, splat alignment, memory pressure and contrast over bright/dark backgrounds.
+- Host under a subdirectory and move foreground/background RAD assets to a CDN through hosting configuration; panorama/media paths remain independent. Test a portable export with external networking blocked.

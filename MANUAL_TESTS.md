@@ -97,3 +97,5 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 
 - Move through bright and dark areas: editor panes and visitor controls should show neutral blurred scene colors without a fixed blue/green fill. Inspect text readability and pointer selection with the full canvas under the editor panels.
 - Check neutral panel translucency and legibility on Quest. Reduced-transparency preference intentionally uses solid neutral panels.
+
+- Check portrait and landscape popup photos: each nearly fills the popup width, retains proportions and scrolls when tall.

@@ -200,3 +200,5 @@ Final portable package: release/Spark Tour Studio 1.9.0.exe; 157,877,666 bytes; 
 - Bubble types have distinct info, photograph (sun/mountains) and camera icons. Glass panels/captions/XR textures use slightly darker neutral transparency, preserving scene color transmission.
 - Build and the 37-test suite pass; the additional slope/low-ceiling test also passes (physics subset now 4 tests, 38 tests in total). Browser integration passes current/nearby placement, heading, crouched eye preservation, last-viewpoint return, invalid-position fallback, failed-placement continuation and distinct texture icons. Actual native Preview/Edit buttons preserve pose (test-output/mode-switch-1791328429751). Screenshot inspected.
 - Darker-glass visual check passes: red background yields panel pixel [153,45,32], blue background [33,64,155]; popup photo sizing is preserved (test-output/glass-1791328466336). Real Quest acceptance remains manual.
+
+Final portable package: release/Spark Tour Studio 1.9.1.exe; 157884786 bytes; SHA-256 26E8755CB22B121C4E5B3C15613A429BA422422FEF1DA8B743BDDD13EB9C1C73.

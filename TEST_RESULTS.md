@@ -190,3 +190,5 @@ Popup photos fill the available width with an 18px inset, rounded corners and na
 - Self-contained glass/photo check passes with new solid backgrounds (test-output/glass-1791326781194): foreground scene colors transmit through the popup, and photos nearly fill the width with the small inset.
 
 Final background checks pass after strengthening the stale-alignment generation guard (test-output/background-1791326907000).
+
+Final portable package: release/Spark Tour Studio 1.9.0.exe; 157,877,666 bytes; SHA-256 26409CAB3363E7AC66E65A50DAE7B0021DEBC3237910804CE4ED4967CC9EB9C3.

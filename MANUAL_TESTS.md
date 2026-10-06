@@ -106,3 +106,10 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 - Walk/fly through a scene with a splat background: confirm background positioning/parallax, foreground collision and shared performance tuning. Switch scenes during loading and after failures; check retry and no old background remaining.
 - Verify backgrounds and glass on Quest without an XR session restart. Check pano orientation, splat alignment, memory pressure and contrast over bright/dark backgrounds.
 - Host under a subdirectory and move foreground/background RAD assets to a CDN through hosting configuration; panorama/media paths remain independent. Test a portable export with external networking blocked.
+
+## 1.9.1 mode switches
+
+- Move away from the entry: switch Viewpoints → Drone/Walk and Drone ↔ Walk. Verify position/facing retention where valid, nearby grounded placement, walking-start fallback when no local floor exists, and remaining in the previous mode when neither placement works. Check slopes, walls, transformed colliders and low ceilings.
+- Visit another viewpoint, move away, then return to Viewpoints: it should return to that view. Verify deleting that view falls back to an existing entry/first viewpoint.
+- Move/look in the editor, enter Preview and return to Edit. Camera should stay put, including before the starting thumbnail finishes. Selecting a saved viewpoint explicitly should still use photosphere/orbit/slider controls.
+- Confirm info / sun-and-mountain photograph / camera bubble icons on mouse, touch and Quest. Check slightly darker glass over bright and dark scenes and preserved physical head tracking when switching modes in XR.

@@ -180,3 +180,9 @@ The optional scene `background` field has one of these forms:
 ```
 
 Transforms use meters and radians, with Y-up. Panorama images resolve relative to the site; background RAD paths use `assetBaseUrl` just like scene splats, and absolute HTTPS URLs override that base. Portable exports include background assets and required RAD companion chunks. Referenced exports preserve CDN references and apply the existing omit-splats option to background splats too.
+
+## Changing navigation modes
+
+Switching to Drone keeps the current camera position and facing when clear, or looks for a nearby collision-free camera position. Switching to Walk looks for a floor and full capsule clearance at the current position, then within 3 meters horizontally. If no nearby standing position works, it tries the authored walking start. Walk stays unavailable if neither location is valid. Entering a Walk-only scene and fall recovery use the walking start. Switching to Viewpoints flies to the last visited valid viewpoint in that scene, or its starting/first viewpoint. Remembered views are session-only.
+
+Editor Preview/Edit keeps the camera pose. If the author has moved away from a viewpoint’s geometry, entering Preview keeps the new vantage point; select a saved viewpoint explicitly to use its authored navigation geometry. Initial scene loads still position the camera at the scene’s starting view. Thumbnail refresh is an explicit action and may move the camera to that starting view. Content bubbles use an info icon, scene links use a photograph icon, and viewpoint links use a camera icon. Glass uses a subtle neutral dark shade while keeping background colors visible.

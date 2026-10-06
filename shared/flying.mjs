@@ -16,3 +16,5 @@ export function flyMovement(world,position,desired,exclude){
  }
  return result;
 }
+
+export function nearbyFlyPosition(world,eye,exclude){const shape=new RAPIER.Ball(.2),rotation={x:0,y:0,z:0,w:1};const clear=p=>!world.intersectionWithShape(p,rotation,shape,undefined,undefined,exclude);if(clear(eye))return {...eye};const directions=[];for(let x=-1;x<=1;x++)for(let y=-1;y<=1;y++)for(let z=-1;z<=1;z++){const length=Math.hypot(x,y,z);if(length)directions.push({x:x/length,y:y/length,z:z/length});}for(const distance of [.1,.25,.5,.75,1,1.5,2,3])for(const d of directions){const p={x:eye.x+d.x*distance,y:eye.y+d.y*distance,z:eye.z+d.z*distance};if(clear(p))return p;}return null;}

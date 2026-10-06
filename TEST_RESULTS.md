@@ -192,3 +192,11 @@ Popup photos fill the available width with an 18px inset, rounded corners and na
 Final background checks pass after strengthening the stale-alignment generation guard (test-output/background-1791326907000).
 
 Final portable package: release/Spark Tour Studio 1.9.0.exe; 157,877,666 bytes; SHA-256 26409CAB3363E7AC66E65A50DAE7B0021DEBC3237910804CE4ED4967CC9EB9C3.
+
+## v1.9.1 mode continuity and contrast (2026-10-06)
+
+- Mode switches retain eye position/facing for Drone when clear and search locally for camera clearance when necessary. Walk queries a floor/full standing-capsule clearance locally, then within 3m, then falls back to the walking start. Invalid placements retain the previous mode. Slopes receive enough body clearance; low ceilings are rejected. Initial Walk-only scenes and fall recovery still use the authored start.
+- Viewpoints remembers the last visited view per scene for this session, falling back to entry/first valid view. Preview/Edit no longer jumps to the selected viewpoint or invokes an automatic thumbnail-driven camera reset. Moved preview cameras keep their pose; existing authored geometry remains active when the pose still matches it.
+- Bubble types have distinct info, photograph (sun/mountains) and camera icons. Glass panels/captions/XR textures use slightly darker neutral transparency, preserving scene color transmission.
+- Build and the 37-test suite pass; the additional slope/low-ceiling test also passes (physics subset now 4 tests, 38 tests in total). Browser integration passes current/nearby placement, heading, crouched eye preservation, last-viewpoint return, invalid-position fallback, failed-placement continuation and distinct texture icons. Actual native Preview/Edit buttons preserve pose (test-output/mode-switch-1791328429751). Screenshot inspected.
+- Darker-glass visual check passes: red background yields panel pixel [153,45,32], blue background [33,64,155]; popup photo sizing is preserved (test-output/glass-1791328466336). Real Quest acceptance remains manual.

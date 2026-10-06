@@ -25,3 +25,12 @@ export function characterMovement(world,controller,capsule,body,desired){
  if(obstruction)return movement;
  return {x:forward.x,y:up.y,z:forward.z};
 }
+
+// Search only on mode changes. Keep horizontal position when a safe floor is below it.
+export function nearbyWalkingFeet(world,eye,eyeHeight,exclude,radius=3){
+ const shape=new RAPIER.Capsule(.6,.25),rotation={x:0,y:0,z:0,w:1};
+ const at=(x,z)=>{const origin={x,y:eye.y+.35,z},hit=world.castRayAndGetNormal(new RAPIER.Ray(origin,{x:0,y:-1,z:0}),5.35,true,undefined,undefined,exclude);if(!hit||hit.normal.y<Math.SQRT1_2)return null;const feet={x,y:origin.y-hit.timeOfImpact,z};if(feet.y>eye.y+.1)return null;const clearance=Math.max(.87,.6+.25/hit.normal.y+.02),center={x,y:feet.y+clearance,z};if(world.intersectionWithShape(center,rotation,shape,undefined,undefined,exclude))return null;feet.y+=clearance-.87;return feet;};
+ const same=at(eye.x,eye.z);if(same)return same;
+ for(const distance of [.25,.5,.75,1,1.5,2,3]){if(distance>radius)break;for(let i=0;i<24;i++){const angle=i*Math.PI/12,feet=at(eye.x+Math.cos(angle)*distance,eye.z+Math.sin(angle)*distance);if(feet&&Math.abs(feet.y+eyeHeight-eye.y)<=5)return feet;}}
+ return null;
+}

@@ -1,0 +1,23 @@
+{
+  "format": "spark-tour-performance-preset",
+  "version": 1,
+  "name": "Balanced",
+  "settings": {
+    "pixelRatio": 1.5,
+    "lodSplatCount": 0,
+    "lodSplatScale": 1,
+    "lodRenderScale": 1,
+    "maxSh": 3,
+    "minSortIntervalMs": 0,
+    "sortRadial": true,
+    "minPixelRadius": 0,
+    "maxPixelRadius": 512,
+    "maxStdDev": 2.8284271247461903,
+    "minAlpha": 0.00196078431372549,
+    "coneFov0": 90,
+    "coneFov": 120,
+    "coneFoveate": 0.4,
+    "behindFoveate": 0.2,
+    "xrFoveation": 1
+  }
+}

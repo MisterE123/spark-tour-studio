@@ -1,0 +1,94 @@
+{
+  "name": "spark-tour-studio",
+  "version": "1.8.4",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build && node scripts/licenses.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "editor": "electron .",
+    "launcher": "node scripts/build-launcher.mjs",
+    "package": "npm run build && npm run bundle:collision && npm run launcher && electron-builder --win portable --x64",
+    "build:converter": "node scripts/build-converter.mjs",
+    "bundle:collision": "node scripts/bundle-collision.mjs"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "0.21.0",
+    "@sparkjsdev/spark": "2.3.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "recast-navigation": "0.43.1",
+    "three": "0.186.1",
+    "zod": "4.3.6"
+  },
+  "devDependencies": {
+    "@playcanvas/splat-transform": "3.7.0",
+    "@playwright/test": "1.63.0",
+    "@types/react": "19.2.14",
+    "@types/react-dom": "19.2.3",
+    "@types/three": "0.183.1",
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "postject": "1.0.0-alpha.6",
+    "qrcode": "1.5.4",
+    "selfsigned": "5.5.0",
+    "three-html-render": "0.1.2",
+    "typescript": "5.9.3",
+    "vite": "8.3.1"
+  },
+  "build": {
+    "appId": "studio.sparktour.editor",
+    "productName": "Spark Tour Studio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/**/*",
+      "shared/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "launcher/Launch Tour.exe",
+        "to": "Launch Tour.exe"
+      },
+      {
+        "from": "dist",
+        "to": "viewer",
+        "filter": [
+          "**/*",
+          ".vite/**/*"
+        ]
+      },
+      {
+        "from": "converter",
+        "to": "converter",
+        "filter": [
+          "build-lod.exe",
+          "*.json",
+          "*.txt"
+        ]
+      },
+      {
+        "from": "collision-tools",
+        "to": "collision-tools"
+      },
+      {
+        "from": "collision-tools/node_modules",
+        "to": "collision-tools/node_modules",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "portable",
+      "signAndEditExecutable": false
+    }
+  },
+  "description": "Windows authoring and locally bundled WebXR Gaussian splat tours",
+  "author": "Spark Tour Studio"
+}

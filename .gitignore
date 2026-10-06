@@ -1,0 +1,16 @@
+node_modules/
+dist/
+release/
+launcher/*.exe
+launcher/*.blob
+launcher/sea-config.json
+test-output/
+launcher/bundle.cjs
+.build/
+converter/*.exe
+
+collision-tools/node.exe
+collision-tools/node_modules/
+
+# External standalone tool distribution (not app source)
+tools/Splatshop/

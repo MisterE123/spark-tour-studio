@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "format": {
+      "type": "string",
+      "const": "spark-tour-performance-preset"
+    },
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "pixelRatio": {
+          "default": 1.5,
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 2
+        },
+        "lodSplatCount": {
+          "default": 0,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 8000000
+        },
+        "lodSplatScale": {
+          "default": 1,
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 2
+        },
+        "lodRenderScale": {
+          "default": 1,
+          "type": "number",
+          "minimum": 1,
+          "maximum": 5
+        },
+        "maxSh": {
+          "default": 3,
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "minSortIntervalMs": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 200
+        },
+        "sortRadial": {
+          "default": true,
+          "type": "boolean"
+        },
+        "minPixelRadius": {
+          "default": 0,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "maxPixelRadius": {
+          "default": 512,
+          "type": "number",
+          "minimum": 64,
+          "maximum": 1024
+        },
+        "maxStdDev": {
+          "default": 2.8284271247461903,
+          "type": "number",
+          "minimum": 2,
+          "maximum": 3
+        },
+        "minAlpha": {
+          "default": 0.00196078431372549,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.1
+        },
+        "coneFov0": {
+          "default": 90,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 180
+        },
+        "coneFov": {
+          "default": 120,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 180
+        },
+        "coneFoveate": {
+          "default": 0.4,
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1
+        },
+        "behindFoveate": {
+          "default": 0.2,
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1
+        },
+        "xrFoveation": {
+          "default": 1,
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
+      },
+      "required": [
+        "pixelRatio",
+        "lodSplatCount",
+        "lodSplatScale",
+        "lodRenderScale",
+        "maxSh",
+        "minSortIntervalMs",
+        "sortRadial",
+        "minPixelRadius",
+        "maxPixelRadius",
+        "maxStdDev",
+        "minAlpha",
+        "coneFov0",
+        "coneFov",
+        "coneFoveate",
+        "behindFoveate",
+        "xrFoveation"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "format",
+    "version",
+    "name",
+    "settings"
+  ],
+  "additionalProperties": false,
+  "title": "Spark Tour performance preset v1",
+  "$comment": "Additional semantic validation: settings.coneFov >= settings.coneFov0."
+}

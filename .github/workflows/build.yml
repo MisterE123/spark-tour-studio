@@ -93,7 +93,6 @@ jobs:
     permissions:
       contents: write
       actions: read
-      actions: read
     steps:
       - name: Download verified build assets
         env:

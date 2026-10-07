@@ -207,3 +207,15 @@ Local packaging requires `npm run build:converter` once before `npm run package`
 
 
 A failed publishing step can be recovered through Actions → **Publish tested release** → **Run workflow**. Supply the existing version tag and the original build run ID. Publishing verifies that the tag matches the tested build commit, that the Windows packaging job passed, and that every downloadable file matches its SHA-256 manifest. It does not move tags or rebuild the application.
+
+## Bubble appearance and mouse capture (1.9.4)
+
+Tour & branding includes Bubble translucency (0% most opaque to 100% clear), Global bubble size (0.5–3× the default footprint), and Distance translucency. The distance effect gradually clears the glass farther from the camera: at 10 meters it applies half the selected effect, approaching the full effect at long range. The icon and border remain readable. Settings apply to content, scene-link and viewpoint-link bubbles in desktop, mobile and WebXR viewing.
+
+Each bubble has a Size slider. 0 uses the global size; 1 doubles it; 2 triples it, up to 4 (five times global). Existing projects retain their original appearance. These optional preferences are saved in `bubbles: {translucency, size, distanceFade}` on the project and `size` on each hotspot; they survive save, reopening and export.
+
+Walk paths smoothly steer the desktop/phone view toward travel while retaining the current pitch. WebXR paths leave headset facing under the visitor's control. In Drone and Walk visitor modes, click the scene to capture the mouse, then move it to look without holding a button. A small center dot aims bubble selection and walking clicks. Escape releases the cursor and stops a path; opening content or settings releases capture. Right-drag still pans. Editor placement/gizmos and touch gestures keep their ordinary pointer controls.
+
+The supplied Google Material Symbols SVG paths are bundled locally (no font-service requests), with Apache-2.0 license and attribution in `licenses/` and `THIRD_PARTY.md`. The info, viewpoint and scene-link symbols have distinct shapes.
+
+Legacy content bubbles with empty references reconnect to their stable content ID or a unique unused content title when opened, recovered or exported. An empty bubble gets its own empty content page automatically; authors do not need to manage page links. Explicit broken scene/viewpoint destinations still need correction. Export includes only content used by bubbles, so unused legacy content does not block delivery; the working project retains it for the existing-content copy tool. Local link/embed files and imported HTML assets are included. Starting-view thumbnails ignore unused custom-image references, and validation/export resolve splat delivery settings consistently with the viewer.

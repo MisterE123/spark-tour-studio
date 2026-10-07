@@ -6,6 +6,11 @@ relicensed by this project.
 
 - Spark, Three.js, React, Zod, Recast Navigation, Electron and splat-transform:
   MIT (with their included notices).
+- Google Material Symbols: Copyright Google LLC, Apache-2.0. The locally bundled
+  info, viewpoint and scene vector paths are supplied Material Symbols, resized
+  and recolored for glass. Source: https://github.com/google/material-design-icons
+  and https://developers.google.com/fonts/docs/material_symbols . Full license:
+  `licenses/Google-Material-Symbols-LICENSE.txt` (included in every tour export).
 - Rapier: Apache-2.0, distributed with its license text.
 - Adobe SPZ: ISC.
 - The bundled Node.js runtime includes its own MIT license and third-party

@@ -62,6 +62,8 @@ jobs:
         run: npx electron-builder --win --x64 --dir
       - name: Check packaged authoring and exported viewer
         run: node scripts/scene-navigation-check.mjs
+      - name: Check bubble settings and captured movement
+        run: node scripts/bubble-settings-check.mjs
       - name: Build portable Windows editor
         if: github.event_name != 'pull_request'
         run: npx electron-builder --prepackaged release/win-unpacked --win portable --x64

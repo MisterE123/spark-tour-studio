@@ -1,3 +1,5 @@
+import {normalizeBubbleContent,usedContent} from './authoring.mjs';
+import {BubbleSettingsSchema} from './bubbles.mjs';
 import { z } from 'zod';
 import {ViewControlsSchema} from './viewpoints.mjs';
 import {PerformanceLibrarySchema} from './performance.mjs';
@@ -12,11 +14,11 @@ const viewpoint = z.object({...ViewControlsSchema.shape, listed:z.boolean().opti
 const typedViewpoint=viewpoint.refine(v=>v.type!=='orbit'||!!v.orbit,'Orbit views need orbit geometry').refine(v=>v.type!=='slider'||!!v.slider,'Slider views need plane geometry');
 const block = z.object({ type:z.enum(['text','image','link','embed']), text:z.string(), url:ref });
 const page = z.object({ id, title:z.string(), html:ref, blocks:z.array(block) });
-const hotspot = z.object({ id, label:z.string(), position:vec, kind:z.enum(['page','scene','viewpoint']), target:z.string(), viewpoint:z.string().optional() });
+const hotspot = z.object({ size:finite.min(0).max(4).optional(), id, label:z.string(), position:vec, kind:z.enum(['page','scene','viewpoint']), target:z.string(), viewpoint:z.string().optional() });
 export const BackgroundSchema=z.discriminatedUnion('type',[z.object({type:z.literal('solid'),color:z.string().regex(/^#[0-9a-f]{6}$/i)}),z.object({type:z.literal('panorama'),source:ref,yawDegrees:finite.min(-360).max(360).default(0)}),z.object({type:z.literal('splat'),source:ref,transform})]);
 const scene = z.object({ background:BackgroundSchema.optional(), walkHeight:finite.min(1).max(2.4).optional(), audio:audio.optional(), id, name:z.string(), source:ref, thumbnail:ref, thumbnailMode:z.enum(['starting-view','custom']).optional(), transform, collider:ref, colliderTransform:transform, modes:z.array(mode), entry:z.string(), walkStart:z.string(), viewpoints:z.array(typedViewpoint), hotspots:z.array(hotspot) });
-export const ProjectSchema = z.object({ performance:PerformanceLibrarySchema.optional(), version:z.literal(1), title:z.string().min(1), description:z.string(), cover:ref, startScene:z.string(), scenes:z.array(scene), pages:z.array(page) });
-export const HostingSchema = z.object({ assetBaseUrl:z.string().default('./'), sceneUrls:z.record(z.string(),ref).default({}) });
+export const ProjectSchema = z.object({ bubbles:BubbleSettingsSchema.optional(), performance:PerformanceLibrarySchema.optional(), version:z.literal(1), title:z.string().min(1), description:z.string(), cover:ref, startScene:z.string(), scenes:z.array(scene), pages:z.array(page) }).transform(normalizeBubbleContent);
+export const HostingSchema = z.object({ assetBaseUrl:ref.default('./'), sceneUrls:z.record(z.string(),ref).default({}) });
 export function identity(){return {position:[0,0,0],rotation:[0,0,0],scale:1};}
 export function blankProject(){return {version:1,title:'Untitled tour',description:'A new perspective. A place to explore.',cover:'',startScene:'',scenes:[],pages:[]};}
 export function newScene(id,name,source){return {id,name,source,thumbnail:'',transform:identity(),collider:'',colliderTransform:identity(),modes:['jumps','fly'],entry:'start',walkStart:'start',viewpoints:[{id:'start',name:'Starting view',position:[0,1.7,3],rotation:[0,0,0]}],hotspots:[]};}
@@ -34,14 +36,16 @@ export function validateProject(value){
   if(!s.source)errors.push(`${s.name}: choose a RAD source.`);
   if(s.source && !/\.rad(?:[?#]|$)/i.test(s.source))errors.push(`${s.name}: source must be a .rad URL or file.`);
   if(!s.viewpoints.some(v=>v.id===s.entry))errors.push(`${s.name}: missing entry viewpoint.`);
-  if(s.modes.includes('explore')&&(!s.collider||!s.viewpoints.some(v=>v.id===s.walkStart)))errors.push(`${s.name}: Explore needs a collider and walking start.`);
-  for(const h of s.hotspots){const targets=h.kind==='page'?p.pages:h.kind==='scene'?p.scenes:s.viewpoints;if(!targets.some(t=>t.id===h.target))errors.push(`${s.name}: bubble “${h.label}” has a broken ${h.kind} link.`);if(h.kind==='scene'&&h.viewpoint&&!p.scenes.find(t=>t.id===h.target)?.viewpoints.some(v=>v.id===h.viewpoint))errors.push(`${s.name}: destination viewpoint is missing.`);}
+  if(s.modes.includes('explore')&&(!s.collider||!s.viewpoints.some(v=>v.id===s.walkStart)))errors.push(`${s.name}: Walk needs a collider and walking start.`);
+  for(const h of s.hotspots){const targets=h.kind==='page'?p.pages:h.kind==='scene'?p.scenes:s.viewpoints;if(!targets.some(t=>t.id===h.target))errors.push(`${s.name}: bubble “${h.label}” ${h.kind==='page'?'is missing its content':`has a broken ${h.kind==='scene'?'scene':'viewpoint'} link`}.`);if(h.kind==='scene'&&h.viewpoint&&!p.scenes.find(t=>t.id===h.target)?.viewpoints.some(v=>v.id===h.viewpoint))errors.push(`${s.name}: destination viewpoint is missing.`);}
  }
  return errors;
 }
 export function assetUrl(ref,base){return new URL(ref,base).href;}
 export function sceneUrl(scene,hosting,base){const override=hosting.sceneUrls?.[scene.id];return override?new URL(override,base).href:new URL(scene.source,new URL(hosting.assetBaseUrl||'./',base)).href;}
-export function allReferences(p){return [p.cover,...p.scenes.flatMap(s=>[s.source,s.background?.type!=='solid'?s.background?.source:'',s.collider,s.thumbnail,s.audio?.source,...s.viewpoints.map(v=>v.audio?.source)]),...p.pages.flatMap(pg=>[pg.html,...pg.blocks.filter(b=>b.type==='image').map(b=>b.url)])].filter(Boolean);}
+// Resolve splat delivery exactly as the viewer does, independently of app/media URLs.
+export function splatReference(source,hosting={},override=false){if(!source)return '';const root='https://spark-tour.local/';const url=new URL(source,override?root:new URL(hosting.assetBaseUrl||'./',root));return url.origin===new URL(root).origin?decodeURIComponent(url.pathname.slice(1)):url.href;}
+export function allReferences(p,hosting={}){return [p.cover,...p.scenes.flatMap(s=>[splatReference(hosting.sceneUrls?.[s.id]||s.source,hosting,!!hosting.sceneUrls?.[s.id]),s.background?.type==='splat'?splatReference(s.background.source,hosting):s.background?.type==='panorama'?s.background.source:'',s.collider,s.thumbnailMode==='starting-view'?'':s.thumbnail,s.audio?.source,...s.viewpoints.map(v=>v.audio?.source)]),...usedContent(p).flatMap(pg=>pg.html?[pg.html]:pg.blocks.filter(b=>b.type==='image'||(b.type!=='text'&&!/^https?:/i.test(b.url))).map(b=>b.url))].filter(Boolean);}
 export function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 export function renderPage(page){
  const esc=escapeHtml;

@@ -35,3 +35,20 @@ export function renameBubble(project,sceneId,id,label){
  const shared=project.scenes.some(s=>s.hotspots.some(h=>h!==bubble&&h.kind==='page'&&h.target===bubble.target));
  ensureBubbleContent(project,sceneId,id,shared?bubble.target:undefined);
 }
+
+// Repair the pre-inline-content workflow without guessing at broken explicit links.
+// Stable content IDs win; a unique, unclaimed title recovers older empty references.
+export function normalizeBubbleContent(project){
+ const claimed=new Set(project.scenes.flatMap(s=>s.hotspots.filter(h=>h.kind==='page'&&h.target).map(h=>h.target)));
+ for(const scene of project.scenes)for(const bubble of scene.hotspots){
+  if(bubble.kind!=='page'||project.pages.some(p=>p.id===bubble.target))continue;
+  let content=project.pages.find(p=>p.id==='content-'+bubble.id);
+  if(!content&&!bubble.target){const matches=project.pages.filter(p=>p.title===bubble.label&&!claimed.has(p.id));if(matches.length===1)content=matches[0];}
+  if(content){bubble.target=content.id;claimed.add(content.id);continue;}
+  if(bubble.target)continue;
+  let id='content-'+bubble.id,index=2;while(project.pages.some(p=>p.id===id))id='content-'+bubble.id+'-'+index++;
+  project.pages.push({id,title:bubble.label,html:'',blocks:[]});bubble.target=id;claimed.add(id);
+ }
+ return project;
+}
+export function usedContent(project){const targets=new Set(project.scenes.flatMap(s=>s.hotspots.filter(h=>h.kind==='page').map(h=>h.target)));return project.pages.filter(p=>targets.has(p.id));}

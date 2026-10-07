@@ -12,16 +12,24 @@ if ($LASTEXITCODE -ne 0 -or $tagSha -ne $run.headSha) { throw 'Build commit does
 $artifactName = "spark-tour-studio-windows-x64-$($run.headSha)"
 gh run download $runId --repo $repo --name $artifactName --dir artifacts
 if ($LASTEXITCODE -ne 0) { throw 'Cannot download tested build assets' }
-$expected = @("Spark Tour Studio $($tag.Substring(1)).exe", 'Launch Tour.exe', "Spark-Tour-Web-Runtime-$($tag.Substring(1)).zip")
+$expected = @("Spark-Tour-Studio-$($tag.Substring(1)).exe", 'Launch-Tour.exe', "Spark-Tour-Web-Runtime-$($tag.Substring(1)).zip")
+# Older artifacts used spaces; normalize them for GitHub's download filenames.
+$legacy = @{ "Spark Tour Studio $($tag.Substring(1)).exe" = $expected[0]; 'Launch Tour.exe' = $expected[1] }
 $entries = Get-Content -LiteralPath artifacts/SHA256SUMS.txt
 if ($entries.Count -ne $expected.Count) { throw 'Unexpected checksum manifest' }
 foreach ($line in $entries) {
   if ($line -notmatch '^([a-f0-9]{64})  (.+)$') { throw 'Malformed checksum manifest' }
   $hash = $Matches[1]; $name = $Matches[2]
-  if ($name -notin $expected) { throw 'Unexpected artifact filename' }
+  if ($name -notin $expected -and -not $legacy.ContainsKey($name)) { throw 'Unexpected artifact filename' }
   $actual = (Get-FileHash -LiteralPath (Join-Path artifacts $name) -Algorithm SHA256).Hash
   if ($actual.ToLowerInvariant() -ne $hash) { throw "Checksum mismatch: $name" }
 }
+foreach ($name in $legacy.Keys) {
+  $source = Join-Path artifacts $name
+  if (Test-Path -LiteralPath $source) { Move-Item -LiteralPath $source -Destination (Join-Path artifacts $legacy[$name]) }
+}
+$entries = @($expected | ForEach-Object { (Get-FileHash -LiteralPath (Join-Path artifacts $_) -Algorithm SHA256).Hash.ToLowerInvariant() + '  ' + $_ })
+[IO.File]::WriteAllText((Join-Path $PWD 'artifacts/SHA256SUMS.txt'), ($entries -join "`n") + "`n", [Text.UTF8Encoding]::new($false))
 $files = @($expected | ForEach-Object { (Resolve-Path -LiteralPath (Join-Path artifacts $_)).Path })
 $files += (Resolve-Path -LiteralPath artifacts/SHA256SUMS.txt).Path
 $files += (Resolve-Path -LiteralPath artifacts/LICENSE).Path

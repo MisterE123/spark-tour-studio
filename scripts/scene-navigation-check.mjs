@@ -19,7 +19,7 @@ try{
  await choose(project);await page.getByRole('button',{name:'Open',exact:true}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);
  await page.getByRole('button',{name:'views',exact:true}).click();await page.locator('.viewpoint-card').filter({hasText:'Private entry'}).click();
  await page.getByLabel('Listed viewpoint').check();await page.getByLabel('Listed viewpoint').uncheck();
- await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByText('Saved project',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByText('Saved project',{exact:true}).waitFor({state:'attached'});
  await choose(out);await page.getByRole('button',{name:'Export tour ↗'}).click();await page.getByRole('button',{name:'Choose folder & export'}).click();await page.locator('.modal-shade').waitFor({state:'hidden',timeout:120000});
  await choose(project);await page.getByRole('button',{name:'Open',exact:true}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);
  assert.equal(await page.evaluate(()=>window.tourRuntime.active.viewpoints.find(v=>v.id==='hidden').listed),false);

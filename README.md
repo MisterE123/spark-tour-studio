@@ -37,7 +37,7 @@ Undo/redo covers tour edits. Autosave recovery is offered when reopening a proje
 - **Free Fly:** WASD movement, Q/E vertical movement, Shift acceleration, drag to look. Touch devices have a movement pad.
 - **Walk:** Rapier capsule controller against a static triangle collision mesh. Walls, ground, slopes and low steps are handled independently of splat LoD. Starts without a nearby floor or inside collision geometry are rejected. Click a splat surface to follow a route over the collider; a guide line shows the route. Unreachable clicks do nothing. Manual movement or Escape cancels the route. The bundled Recast worker builds the walkable mesh locally.
 
-On Quest, hold a trigger to aim and release to teleport. Point at a bubble or menu button and click the trigger to select it. Grip opens/closes the translucent tour menu. **Drone flight:** left stick moves forward/back/sideways, right stick lifts/turns. The Options tab can swap the sticks, change speed and turning, mute audio, and choose flying or fading between viewpoints. **Walk:** left stick moves, right stick turns. Snap turning defaults to 30 degrees. Scene entry defaults to Viewpoints when enabled; smooth movement is selected explicitly. The menu has a separate confirmation before ending VR.
+On Quest, hold a trigger to aim and release to teleport. Point at a bubble or menu button and click the trigger to select it. Grip opens/closes the translucent tour menu. **Drone flight:** left stick moves forward/back/sideways, right stick lifts/turns. The Options tab can swap the sticks, change speed and turning, mute audio, and choose flying or fading between viewpoints. **Walk:** left stick moves, right stick turns. Snap turning defaults to 30 degrees. Scene entry retains the current mode when enabled and usable; initial entry defaults to Viewpoints when enabled. The menu has a separate confirmation before ending VR.
 
 Scene changes keep the same renderer and XRSession. The viewer never navigates the top-level page to switch scenes. One active splat scene is retained; new scene requests invalidate older load results and dispose old buffers/physics resources.
 
@@ -110,7 +110,7 @@ The editor bundles Spark 2.3.1's unmodified Rust `build-lod` tool, compiled in r
 
 Converted assets are stored in `assets/converted/<id>/` inside the project and travel through Save As/export like imported RAD assets. Save the project after importing. Large PLY files can require substantial RAM and conversion time; the converter reads the splats into memory. This release does not provide an out-of-core conversion algorithm. It does not generate collision geometry.
 
-Developer rebuild: install Rust 1.98.1 (Windows x64 GNU toolchain) into `.build/cargo` and `.build/rustup`, without changing PATH, or supply `CARGO_HOME` and `RUSTUP_HOME`. Run `npm run build:converter` before packaging. The script verifies the pinned Spark v2.3.1 archive checksum, uses Cargo.lock and release optimizations, and records executable provenance and license notices in `converter/`. It downloads the source archive if needed. No Rust source modifications are applied.
+Developer rebuild: install Rust 1.98.1 (Windows x64 GNU or MSVC toolchain) into `.build/cargo` and `.build/rustup`, without changing PATH, or supply `CARGO_HOME` and `RUSTUP_HOME`. Run `npm run build:converter` before packaging. The script verifies the pinned Spark v2.3.1 archive checksum, uses Cargo.lock and release optimizations, and records executable provenance and license notices in `converter/`. It downloads the source archive if needed. No Rust source modifications are applied.
 
 Importer verification: `node --test tests/converter.test.mjs`, `node scripts/ply-import-check.mjs`, and `node scripts/render-import-check.mjs <export-folder>`. Set `SPARK_PACKAGED=1` to run the import UI check against `release/win-unpacked/Spark Tour Studio.exe`.
 
@@ -193,3 +193,14 @@ Editor Preview/Edit keeps the camera pose. If the author has moved away from a v
 Changing scenes retains the current movement mode when it is enabled and usable in the destination. Otherwise it uses Viewpoints when enabled, then another usable mode. Walk arrivals use the designated walking start; a scene bubble with an explicit destination viewpoint instead finds standing clearance near that viewpoint. Failed loads and retries retain the selected mode. Scene changes retain the existing renderer and XR session.
 
 In Views, uncheck **Listed in visitor views** to hide a viewpoint from the visitor's numbered view strip and VR Views menu. Unlisted views remain editable, usable as scene/walking starts, and reachable through viewpoint or scene bubbles. All views in older projects remain listed. Project JSON stores the optional boolean `listed`; only `false` hides a view. Listing does not restrict access to a view or its content.
+
+
+## License and automatic builds
+
+Spark Tour Studio's original code is MIT-licensed; see [LICENSE](LICENSE). Bundled dependencies retain their respective terms and notices in [THIRD_PARTY.md](THIRD_PARTY.md) and the exported `licenses/` directory. Tour authors retain responsibility for their own scan and media rights.
+
+GitHub Actions builds and tests Windows x64 on pushes to `main`, pull requests, version tags and manual runs. It installs pinned Node 24.21.0 and Rust 1.98.1, builds the Spark converter from checksum-verified source, runs the tests, builds the site/launcher/collision tools, and checks the packaged editor plus exported viewer. Branch and manual builds provide a downloadable artifact containing the portable editor, standalone tour launcher, web runtime template and SHA-256 checksums. The web runtime template contains no authored scene assets; use the editor to export an actual tour.
+
+Pushing a new `vX.Y.Z` tag publishes a GitHub Release after the build passes. The tag must match `package.json`; existing release tags must not be moved. Update the package and lockfile version first with `npm version X.Y.Z --no-git-tag-version`, commit the change, then create and push the matching tag. The executables are unsigned. Quest hardware and GPU collision-generation acceptance remain manual checks.
+
+Local packaging requires `npm run build:converter` once before `npm run package`. Supply `CARGO_HOME` and `RUSTUP_HOME` for the pinned Rust installation; Windows GNU and MSVC toolchains are supported. GitHub's hosted Windows runner uses MSVC. Build outputs, private configuration, local scan data and caches are excluded from Git.

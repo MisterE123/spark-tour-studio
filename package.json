@@ -32,6 +32,7 @@
     "electron": "44.4.5",
     "electron-builder": "26.15.3",
     "esbuild": "0.28.2",
+    "fflate": "0.8.3",
     "postject": "1.0.0-alpha.6",
     "qrcode": "1.5.4",
     "selfsigned": "5.5.0",
@@ -48,7 +49,9 @@
     "files": [
       "desktop/**/*",
       "shared/**/*",
-      "package.json"
+      "package.json",
+      "LICENSE",
+      "THIRD_PARTY.md"
     ],
     "extraResources": [
       {
@@ -90,5 +93,11 @@
     }
   },
   "description": "Windows authoring and locally bundled WebXR Gaussian splat tours",
-  "author": "Spark Tour Studio"
+  "author": "Spark Tour Studio",
+  "license": "MIT",
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.28.2": true,
+    "webgpu@0.4.0": true
+  }
 }

@@ -14,3 +14,25 @@ collision-tools/node_modules/
 
 # External standalone tool distribution (not app source)
 tools/Splatshop/
+
+# Local tour data, credentials and build outputs
+artifacts/
+.env
+.env.*
+!.env.example
+.sources.json
+*.pem
+*.key
+*.pfx
+*.p12
+*.rad
+*.radc
+*.ply
+*.ckpt
+*.safetensors
+*.log
+*.glb
+*.splat
+*.ksplat
+*.spz
+*.sog

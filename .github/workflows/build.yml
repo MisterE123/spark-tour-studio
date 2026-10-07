@@ -1,0 +1,107 @@
+name: Build Spark Tour Studio
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  windows:
+    name: Windows x64 checks and package
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Set up pinned Node runtime
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.21.0'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Check release tag matches package version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_NAME -ne "v$version") { throw 'Release tag must match package.json version' }
+      - name: Set up pinned Rust compiler
+        run: |
+          rustup toolchain install 1.98.1-x86_64-pc-windows-msvc --profile minimal
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          rustup default 1.98.1-x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "CARGO_HOME=$(Join-Path $env:USERPROFILE '.cargo')" >> $env:GITHUB_ENV
+          "RUSTUP_HOME=$(Join-Path $env:USERPROFILE '.rustup')" >> $env:GITHUB_ENV
+      - name: Build Spark Rust converter from verified source
+        run: npm run build:converter
+      - name: Run unit and integration tests
+        run: npm test
+      - name: Build local web runtime and license notices
+        run: npm run build
+      - name: Bundle collision tools
+        run: npm run bundle:collision
+      - name: Build Windows tour launcher
+        run: npm run launcher
+      - name: Package editor for native checks
+        run: npx electron-builder --win --x64 --dir
+      - name: Check packaged authoring and exported viewer
+        run: node scripts/scene-navigation-check.mjs
+      - name: Build portable Windows editor
+        if: github.event_name != 'pull_request'
+        run: npx electron-builder --prepackaged release/win-unpacked --win portable --x64
+      - name: Prepare downloadable builds and checksums
+        if: github.event_name != 'pull_request'
+        run: node scripts/build-artifacts.mjs
+      - name: Upload builds
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: spark-tour-studio-windows-x64-${{ github.sha }}
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: build-diagnostics-${{ github.run_id }}
+          path: test-output/
+          if-no-files-found: ignore
+          retention-days: 7
+  release:
+    name: Publish tagged release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: windows
+    runs-on: windows-2025
+    permissions:
+      contents: write
+    steps:
+      - name: Download verified build assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download ${{ github.run_id }} --repo ${{ github.repository }} --name spark-tour-studio-windows-x64-${{ github.sha }} --dir artifacts
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -LiteralPath artifacts -File | ForEach-Object FullName
+          gh release create $env:GITHUB_REF_NAME @files --repo $env:GITHUB_REPOSITORY --verify-tag --generate-notes --title "Spark Tour Studio $env:GITHUB_REF_NAME"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

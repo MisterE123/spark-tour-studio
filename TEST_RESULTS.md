@@ -287,3 +287,18 @@ Local build: `release/Spark Tour Studio 1.11.0.exe`, 158,888,000 bytes; SHA-256 
 Local build: `artifacts/Spark-Tour-Studio-1.11.0-windows-x64.zip`, 257,039,143 bytes; SHA-256 `19CDB57DD48F7FC79370DB9546685AC026F779B902D3634F478A45DD39D63576`.
 
 Actual portable wrapper cold start verifies version 1.11.0, the final bundled editor, hidden isolated profile and normal close with exit code 0 (test-output/portable-final-cdp-1791406083531). Windows ZIP entries and checksums are verified.
+
+## v1.11.1 blended hemisphere backgrounds (2026-10-07)
+
+- Solid backgrounds have independently editable top/bottom hemisphere colors with a smooth, linear-color horizon blend. Matching colors use the single-color background path. Legacy projects retain their original color in both halves; optional topColor/bottomColor fields survive saved and exported JSON. No new dependency or sky asset is needed.
+- The background follows camera position separately for each render eye and keeps its world-up horizon. Clearing or changing scenes disposes the hemisphere geometry/material; foreground splats and annotations are unaffected by color edits.
+- Production build and all 76 unit/integration tests pass. Source native/portable-export and actual WebGL color/gradient checks pass (test-output/hemisphere-background-1791406481964).
+- Final packaged checks verify legacy picker values, readable swatch size, undo/redo, unchanged foreground mesh, actual project reopening, portable export, exact upper/lower RGB, intermediate smooth horizon samples, altitude-independent horizon, both camera eye offsets, disposal, cancellation and offline phone viewing (test-output/hemisphere-background-1791406928367). Packaged tour ordering/search/loading, safe destinations, help/version, rapid replacements and mocked XR session/head-tracking regression also pass (test-output/tour-directory-1791406928367). Editor and gradient screenshots were visually inspected.
+- The 149-file tracked/nonignored audit finds no scan data, binaries, oversized files or credential patterns. CI runs the new packaged background check.
+
+Eye-offset rendering checks do not replace real Quest headset/controller acceptance. GitHub build/release results are left for the user to check.
+
+Actual portable wrapper cold start verifies version 1.11.1, the final bundled editor, hidden isolated profile and normal close with exit code 0 (test-output/portable-final-cdp-1791407209799). Windows ZIP entries and checksums are verified.
+
+Local build: `release/Spark Tour Studio 1.11.1.exe`, 158,897,271 bytes; SHA-256 `CE5B1E6B162D38B695E96B06788B395FC70BFC2F23EC8F9B786D1FC089043A2A`.
+Local build: `artifacts/Spark-Tour-Studio-1.11.1-windows-x64.zip`, 257,048,954 bytes; SHA-256 `93E88B12925F1A136ED560A8764164817D229F725C60059C0CF95DAA5912C2F0`.

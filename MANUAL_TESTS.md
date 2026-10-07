@@ -1,5 +1,12 @@
 # Manual acceptance
 
+## v1.11.1 hemisphere backgrounds
+
+- Open an existing solid-color scene and confirm both hemisphere pickers initially show its old color. Set distinct upper/lower colors and look above, below and across the horizon; check a soft transition, phone layout and both Quest eyes.
+- Move far from the origin, fly up/down and turn the headset. The horizon should stay world-up without parallax or a sharp boundary. Match both colors for a uniform background.
+- Adjust colors while streaming a scene, undo/redo, save/reopen and export. Check foreground annotations/camera/streaming are retained and that exported viewing works offline. Switch between hemispheres, panorama, splat and old single-color scenes; verify cleanup and rapid changes.
+
+
 ## v1.11 tour directory, ordering and help
 
 - Select scenes in Tour order and move them up/down. Check boundary controls, undo/redo, name browsing, save/reopen and export. Splash scenes, visitor scene chooser and Quest scene menu should follow the saved order; stable links and the chosen starting scene should stay intact.

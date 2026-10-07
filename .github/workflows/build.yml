@@ -80,6 +80,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/tour-directory-check.mjs
+      - name: Check hemisphere colors, horizon blend and background cleanup
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/hemisphere-background-check.mjs
       - name: Check streamed precision and queued scene replacement
         env:
           SPARK_PACKAGED: '1'

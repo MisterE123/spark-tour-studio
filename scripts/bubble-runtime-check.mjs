@@ -37,7 +37,9 @@ try{
  assert.equal(await page.evaluate(()=>r.bubbles.children[0].material.opacity),1);
  const retained=await page.evaluate(()=>{const object=r.bubbles.children[0],icon=object.material.map,caption=object.children.find(child=>child.userData.caption).material.map;r.active.hotspots[0].label='Updated';r.active.name='South';r.active.viewpoints[0].name='Entrance';r.syncHotspots();return {object:object===r.bubbles.children[0],icon:icon===object.material.map,caption:caption!==object.children.find(child=>child.userData.caption).material.map,selection:r.selected===object,labels:r.bubbles.children.map(child=>child.userData.badgeTitle)};});
  assert.deepEqual(retained,{object:true,icon:true,caption:true,selection:true,labels:['Updated','Go to View: Entrance','Go to Scene: South']},'text edits update the existing badge without losing selection or rebuilding all textures');
- await page.evaluate(()=>{r.setEditing(false);r.project.bubbles.distanceFade=0;r.project.bubbles.occlusion=true;r.rig.position.set(0,1.7,3);r.camera.rotation.set(0,0,0);r.rig.rotation.set(0,0,0);r.scene.updateMatrixWorld(true);const mock=new THREE.Group();mock.visible=true;mock.minRaycastOpacity=.2;mock.paged={};mock.raycastIndices={numSplats:1,indices:new Uint32Array([0])};mock.raycast=(ray,hits)=>{window.occlusionCalls=(window.occlusionCalls||0)+1;window.opacityThreshold=mock.minRaycastOpacity;if(ray.far>1)hits.push({distance:1,point:ray.ray.at(1,new THREE.Vector3()),object:mock});};r.content.add(mock);r.mesh=mock;r.frame(r.last+200);r.frame(r.last+20);});
+ await page.evaluate(()=>{r.setEditing(false);r.project.bubbles.distanceFade=0;r.project.bubbles.occlusion=true;r.rig.position.set(0,1.7,3);r.camera.rotation.set(0,0,0);r.rig.rotation.set(0,0,0);r.scene.updateMatrixWorld(true);const mock=new THREE.Group();mock.visible=true;mock.minRaycastOpacity=.2;mock.paged={};mock.raycastIndices={numSplats:1,indices:new Uint32Array([0])};mock.raycast=(ray,hits)=>{window.occlusionCalls=(window.occlusionCalls||0)+1;window.opacityThreshold=mock.minRaycastOpacity;if(ray.far>1)hits.push({distance:1,point:ray.ray.at(1,new THREE.Vector3()),object:mock});};r.content.add(mock);r.mesh=mock;r.frame(r.last+200);});
+ assert.equal(await hit(),'info','one blocked sample does not make a bubble flicker away');
+ await page.evaluate(()=>{r.frame(r.last+200);r.frame(r.last+200);r.frame(r.last+20);});
  assert.equal(await hit(),null,'opaque splats can hide a bubble without a collision mesh');
  assert.equal(await page.evaluate(()=>r.bubbles.children[0].visible),false);
  assert.equal(await page.evaluate(()=>opacityThreshold),.55);
@@ -46,13 +48,19 @@ try{
  assert.equal(cached,0,'stationary checks are cached instead of raycasting every frame');
  await page.evaluate(()=>{r.mesh.raycast=(ray,hits)=>{if(ray.far>2.8)hits.push({distance:2.8,point:ray.ray.at(2.8,new THREE.Vector3()),object:r.mesh});};r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);r.frame(r.last+20);});
  assert.equal(await hit(),'info','the marker host surface near the endpoint does not occlude its bubble');
- await page.evaluate(()=>{r.mesh.raycast=()=>{};r.world={castRay:()=>({timeOfImpact:1})};r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);r.frame(r.last+20);});
+ // Slight endpoint burial and a partly exposed rim stay visible; a broad wall
+ // still hides the complete marker after repeated observations.
+ await page.evaluate(()=>{r.mesh.raycast=()=>{};r.world={castRay:(ray,limit)=>limit>2.55?{timeOfImpact:2.55}:null};r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);r.frame(r.last+200);});
+ assert.equal(await hit(),'info','rough geometry close to the surface placement is tolerated');
+ await page.evaluate(()=>{r.world={castRay:ray=>ray.dir.y>.01?null:{timeOfImpact:1}};r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);r.frame(r.last+200);});
+ assert.equal(await hit(),'info','a visible upper rim is not culled by the center ray');
+ await page.evaluate(()=>{r.world={castRay:()=>({timeOfImpact:1})};r.bubbleOcclusion=new WeakMap();for(let i=0;i<4;i++)r.frame(r.last+200);});
  assert.equal(await hit(),null,'collider occlusion uses the same selection cutoff');
  await page.evaluate(()=>{r.setEditing(true);r.selectHotspot('info');r.frame(r.last+20);});
  assert.equal(await hit(),'info','selection reveals an occluded bubble in Edit');
  await page.evaluate(async()=>{r.setEditing(false);r.world=undefined;r.mesh.removeFromParent();r.mesh=undefined;r.active.source='/bubble-test.rad';r.active.hotspots[0].position=[0,1.7,-3];await r.load(r.project,{assetBaseUrl:'./',sceneUrls:{}},location.href,'north');});
  await page.waitForFunction(()=>{r.frame(r.last+20);return r.spark.display?.numSplats===1&&r.mesh?.paged?.numSplats===1;});
- await page.evaluate(()=>{r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);});
+ await page.evaluate(()=>{r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);r.frame(r.last+200);r.frame(r.last+200);});
  assert.equal(await hit(),null,'the real paged RAD splat hides a bubble behind it');
  assert.ok(await page.evaluate(()=>!!r.mesh.paged&&r.mesh.paged.numSplats===1));
  await page.evaluate(()=>{r.rig.position.x=3;r.scene.updateMatrixWorld(true);r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);});

@@ -11,7 +11,7 @@ export function bubbleVisibility(strength=0,distance=0,reveal=false){
 }
 // Leave room around a marker placed on a splat surface; the host surface should
 // not hide its own bubble because of Gaussian thickness or coarse streamed LoD.
-export function bubbleOcclusionLimit(distance){return Math.max(0,distance-Math.max(.35,distance*.02));}
+export function bubbleOcclusionLimit(distance){return Math.max(0,distance-Math.max(.65,distance*.025));}
 // Base glass transparency and whole-bubble distance visibility are independent.
 // Size is a multiplier on the existing footprint; a bubble's zero adds nothing.
 export function bubbleAppearance(settings={},size=0,distance=0,reveal=false){

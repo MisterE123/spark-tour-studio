@@ -3,11 +3,12 @@ import {sceneThumbnail,listedViewpoints} from '../shared/viewpoints.mjs';
 import {defaultPerformance} from '../shared/performance.mjs';
 import React,{useState,useEffect} from 'react';
 import {createRoot} from 'react-dom/client';
-import {TourRuntime} from './runtime';
-import type {Project,Hosting,Mode,Page} from './model';
+import {TourRuntime} from './runtime';import {SceneLoading} from './scene-loading';
+import type {Project,Hosting,Mode,Page,TourDestination} from './model';
 import {validateProject,ProjectSchema,HostingSchema} from '../shared/project.mjs';
 import {Button,Field,Stage,ControlsHelp,TouchPad,ContentModal,useMobileControls,MobileControlSetting} from './ui';
 import {Icon,IconButton,InspectorSection,type IconName} from './icons';
+import {TourDirectory} from './tour-directory';
 import './style.css';
 
 const homeHosting:Hosting={assetBaseUrl:'./',sceneUrls:{}};
@@ -21,6 +22,7 @@ function Viewer(){
  const [rt,setRt]=useState<TourRuntime|null>(null),[sceneId,setSceneId]=useState(''),[started,setStarted]=useState(false);
  const [status,setStatus]=useState(''),[error,setError]=useState(false),[mode,setMode]=useState<Mode>('jumps');
  const [settings,setSettings]=useState(false),[page,setPage]=useState<Page|null>(null),[loadError,setLoadError]=useState('');
+ const [requested,setRequested]=useState<TourDestination|null>(null);
  const [speed,setSpeed]=useState(2),[snap,setSnap]=useState(true),[swapSticks,setSwapSticks]=useState(false),[muted,setMuted]=useState(false);
  const base=new URL('./',location.href).href;
  useEffect(()=>{
@@ -29,15 +31,16 @@ function Viewer(){
    fetch(new URL('config/hosting.json',base)).then(r=>r.ok?r.json():{})
   ]).then(([p,h])=>{const parsed=ProjectSchema.parse(p) as Project;const issues=validateProject(parsed);if(issues.length)throw Error(issues.join('\n'));setProject(parsed);setHosting(HostingSchema.parse(h));setSceneId(parsed.startScene);}).catch(e=>setLoadError(String(e)));
  },[]);
- useEffect(()=>{if(!rt)return;rt.onStatus=(s,e)=>{setStatus(s);setError(!!e);};rt.onScene=setSceneId;rt.onViewpoint=setViewpointId;rt.onMode=setMode;rt.onPage=setPage;},[rt]);
+ useEffect(()=>{if(!rt)return;rt.onStatus=(s,e)=>{setStatus(s);setError(!!e);};rt.onScene=id=>{setSceneId(id);setRequested(value=>value?.sceneId===id?value:null);};rt.onViewpoint=setViewpointId;rt.onMode=setMode;rt.onPage=setPage;},[rt]);
  useEffect(()=>{if(rt&&project){const library=project.performance||defaultPerformance();rt.applyPerformance(library.presets.find(p=>p.id===library.defaultPresetId)!.settings);}},[rt,project]);
  const current=project?.scenes.find(s=>s.id===sceneId);
  const selectedView=current?.viewpoints.find(v=>v.id===viewpointId);
  const titleImage=project?.cover||(current?sceneThumbnail(current):'');
- const begin=()=>{if(rt&&project){setStarted(true);setSettings(false);rt.blocked=false;rt.audio.unlock();void rt.load(project,hosting,base,sceneId);}};
- const goHome=()=>{setStarted(false);setSettings(false);if(rt){rt.blocked=true;rt.audio.stop();}};
+ const begin=()=>{if(rt&&project){setRequested(null);setStarted(true);setSettings(false);rt.blocked=false;rt.audio.unlock();void rt.load(project,hosting,base,sceneId);}};
+ const visit=(destination:TourDestination)=>{if(!rt||!project)return;setRequested(destination);setPage(null);setStarted(true);setSettings(false);rt.blocked=false;rt.project=project;rt.hosting=hosting;rt.base=base;if(!started&&rt.active?.id===destination.sceneId&&rt.ready){rt.audio.unlock();rt.audio.setScene(rt.active.audio,base);}void rt.visit(destination);};
+ const goHome=()=>{setStarted(false);setSettings(false);setPage(null);if(rt){rt.blocked=true;rt.audio.stop();}};
  const modes=<div className="mode-tabs" role="group" aria-label="Movement mode">{current?.modes.map(m=><button key={m} title={modeName[m]} aria-pressed={mode===m} className={mode===m?'active':''} onClick={()=>rt?.setMode(m)}><Icon name={modeIcon[m]}/>{modeName[m]}</button>)}</div>;
- return <main className="viewer"><Stage onReady={setRt}/>
+ return <main className="viewer"><Stage onReady={setRt}/>{started&&<SceneLoading runtime={rt}/>}
   {!started?<section className="title-screen">
    <div className="title-copy"><div className="eyebrow">SPARK TOUR / SPATIAL EXPERIENCES</div><h1>{project?.title||'A new perspective.'}</h1><p className="lead">{project?.description||'Explore places as if you were there.'}</p>
     {loadError?<div className="notice error">{loadError}<p><a href="editor.html">Open editor information</a></p></div>:<>
@@ -46,10 +49,10 @@ function Viewer(){
     </>}
     <InspectorSection title="Controls help" icon="help"><ControlsHelp/></InspectorSection><div className="subtle">Powered by Spark · Gaussian splat experiences</div>
    </div>
-   <div className="title-art" style={titleImage?{backgroundImage:'url('+new URL(titleImage,base).href+')'}:undefined}>{!titleImage&&<><div className="orb orb-one"/><div className="orb orb-two"/><div className="orbit"/><span>EXPERIENCE<br/>EVERY DIMENSION</span></>}</div>
+   <div className="title-side"><div className="title-art" style={titleImage?{backgroundImage:'url('+new URL(titleImage,base).href+')'}:undefined}>{!titleImage&&<><div className="orb orb-one"/><div className="orb orb-two"/><div className="orbit"/></>}</div>{project&&!loadError&&<TourDirectory project={project} base={base} disabled={!rt} onVisit={visit}/>}</div>
   </section>:<>
    <div className="viewer-header"><div><small>{project?.title}</small><h2>{current?.name}</h2></div><div className="actions">
-    <select title="Choose scene" aria-label="Scene" value={sceneId} onChange={e=>void rt?.selectScene(e.target.value)}>{project?.scenes.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select>
+    <select title="Choose scene" aria-label="Scene" value={sceneId} onChange={e=>{setRequested(null);void rt?.selectScene(e.target.value);}}>{project?.scenes.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select>
     <IconButton icon="menu" label="Return to start" onClick={goHome}>Start</IconButton>
     <IconButton icon="settings" label="Settings" aria-expanded={settings} onClick={()=>setSettings(!settings)}>Settings</IconButton>
     <IconButton icon="head_mounted_device" label="Enter VR" onClick={()=>void rt?.enterXR()}>Enter VR</IconButton>
@@ -62,7 +65,7 @@ function Viewer(){
    <TouchPad runtime={rt} enabled={mobile.enabled} mode={mode}/>
    {mode==='explore'&&<div className="walk-hint">Click to walk · WASD or Escape cancels · Shift crouches · Space jumps</div>}
   </>}
-  {status&&started&&<div role="status" className={'status '+(error?'error':'')}><Icon name={error?'error':'schedule'}/>{status}{mode==='explore'&&!error&&<Button onClick={()=>{rt?.routes.cancel();setStatus('');}}><Icon name="close"/>Stop walking</Button>}{error&&<><Button onClick={()=>void rt?.selectScene(sceneId)}><Icon name="refresh"/>Retry</Button><Button onClick={goHome}><Icon name="menu"/>Choose scene</Button></>}</div>}
+  {status&&started&&!rt?.loading&&<div role="status" className={'status '+(error?'error':'')}><Icon name={error?'error':'schedule'}/>{status}{mode==='explore'&&!error&&<Button onClick={()=>{rt?.routes.cancel();setStatus('');}}><Icon name="close"/>Stop walking</Button>}{error&&<><Button onClick={()=>requested?void rt?.visit(requested):void rt?.selectScene(sceneId)}><Icon name="refresh"/>Retry</Button><Button onClick={goHome}><Icon name="menu"/>Choose scene</Button></>}</div>}
   {settings&&<section className="settings floating" role="dialog" aria-label="Viewing settings"><header><h3><Icon name="settings"/>Viewing settings</h3><IconButton icon="close" label="Close settings" onClick={()=>setSettings(false)}/></header>
    <InspectorSection title="Movement" icon="directions_walk" defaultOpen className="settings-group">
     {started&&modes}

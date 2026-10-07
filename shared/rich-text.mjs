@@ -17,7 +17,7 @@ const inlineTypes=new Set(['text','hardBreak']);
 const blockTypes=new Set(['paragraph','heading','blockquote','bulletList','orderedList','image','horizontalRule']);
 const node=z.lazy(()=>z.object({
  type:z.enum(['doc','paragraph','heading','blockquote','bulletList','orderedList','listItem','text','hardBreak','image','horizontalRule']),
- attrs:z.object({level:z.number().int().min(1).max(3).optional(),start:z.number().int().min(1).max(100000).optional(),src:reference.optional(),alt:z.string().max(4000).nullable().optional(),title:z.string().max(4000).nullable().optional()}).optional(),
+ attrs:z.object({textAlign:z.enum(['left','center','right','justify']).nullable().optional(),level:z.number().int().min(1).max(3).optional(),start:z.number().int().min(1).max(100000).optional(),src:reference.optional(),alt:z.string().max(4000).nullable().optional(),title:z.string().max(4000).nullable().optional()}).optional(),
  text:z.string().max(120000).optional(),marks:z.array(mark).max(8).optional(),content:z.array(node).max(6000).optional()
 }).superRefine((n,ctx)=>{
  const children=n.content||[],fail=message=>ctx.addIssue({code:'custom',message});
@@ -32,6 +32,7 @@ const node=z.lazy(()=>z.object({
 }).transform(n=>{
  const clean={type:n.type};if(n.type==='text'){clean.text=n.text;if(n.marks?.length)clean.marks=n.marks;}
  if(n.type==='heading')clean.attrs={level:n.attrs.level};
+ if(['paragraph','heading'].includes(n.type)&&n.attrs?.textAlign)clean.attrs={...clean.attrs,textAlign:n.attrs.textAlign};
  if(n.type==='orderedList'&&n.attrs?.start)clean.attrs={start:n.attrs.start};
  if(n.type==='image')clean.attrs={src:n.attrs.src,alt:n.attrs.alt||'',title:n.attrs.title||''};
  if(!['text','hardBreak','image','horizontalRule'].includes(n.type))clean.content=n.content||[];
@@ -78,6 +79,6 @@ export function renderRichText(value,base=''){
   if(n.type==='hardBreak')return '<br>';
   if(n.type==='image')return `<figure><img src="${esc(resolveRichReference(n.attrs.src,base))}" alt="${esc(n.attrs.alt||'')}" title="${esc(n.attrs.title||'')}" loading="lazy"></figure>`;
   if(n.type==='horizontalRule')return '<hr>';
-  const html=(n.content||[]).map(render).join('');if(n.type==='doc')return html;const tag={paragraph:'p',heading:'h'+n.attrs?.level,blockquote:'blockquote',bulletList:'ul',orderedList:'ol',listItem:'li'}[n.type];return tag?`<${tag}${n.type==='orderedList'&&n.attrs?.start?` start="${n.attrs.start}"`:''}>${html}</${tag}>`:html;
+  const html=(n.content||[]).map(render).join('');if(n.type==='doc')return html;const tag={paragraph:'p',heading:'h'+n.attrs?.level,blockquote:'blockquote',bulletList:'ul',orderedList:'ol',listItem:'li'}[n.type],alignment=['paragraph','heading'].includes(n.type)&&n.attrs?.textAlign?` style="text-align:${n.attrs.textAlign}${n.attrs.textAlign==='justify'?';white-space:normal':''}"`:'';return tag?`<${tag}${alignment}${n.type==='orderedList'&&n.attrs?.start?` start="${n.attrs.start}"`:''}>${html}</${tag}>`:html;
  };return render(parsed.data.doc);
 }

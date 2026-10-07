@@ -2,6 +2,7 @@ import React,{useEffect,useRef,useState} from 'react';
 import {EditorContent,useEditor} from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
+import TextAlign from '@tiptap/extension-text-align';
 import type {RichTextDocument} from './model';
 import {IconButton} from './icons';
 import {RichTextSchema,plainTextDocument,richTextPlainText,resolveRichReference,safeContentReference} from '../shared/rich-text.mjs';
@@ -18,9 +19,9 @@ export function RichTextEditor({value,text,base,disabled=false,onChange,importIm
  const fileInput=useRef<HTMLInputElement>(null);
  const content=value||plainTextDocument(text);
  const editor=useEditor({
-  extensions:[StarterKit.configure({heading:{levels:[1,2,3]},codeBlock:false,link:{openOnClick:false,autolink:true,defaultProtocol:'https',isAllowedUri:url=>safeContentReference(url)}}),Image.extend({renderHTML({HTMLAttributes}){return ['img',{...HTMLAttributes,src:resolveRichReference(String(HTMLAttributes.src||''),base)}];}}).configure({allowBase64:false})],
+  extensions:[StarterKit.configure({heading:{levels:[1,2,3]},codeBlock:false,link:{openOnClick:false,autolink:true,defaultProtocol:'https',isAllowedUri:url=>safeContentReference(url)}}),TextAlign.configure({types:['heading','paragraph']}),Image.extend({renderHTML({HTMLAttributes}){return ['img',{...HTMLAttributes,src:resolveRichReference(String(HTMLAttributes.src||''),base)}];}}).configure({allowBase64:false})],
   content:content.doc,editable:!disabled,shouldRerenderOnTransaction:true,
-  editorProps:{attributes:{role:'textbox','aria-multiline':'true','aria-label':'Bubble rich text','data-placeholder':'Tell the story of this place.'},transformPastedHTML(html){const parsed=new DOMParser().parseFromString(html,'text/html');for(const element of parsed.querySelectorAll('script,style,iframe,object,embed'))element.remove();for(const element of parsed.querySelectorAll('[href]'))if(!safeContentReference(element.getAttribute('href')||''))element.removeAttribute('href');for(const element of parsed.querySelectorAll('img'))if(!safeContentReference(element.getAttribute('src')||''))element.remove();return parsed.body.innerHTML;}},
+  editorProps:{attributes:{role:'textbox','aria-multiline':'true','aria-label':'Bubble rich text','data-placeholder':'Write text…'},transformPastedHTML(html){const parsed=new DOMParser().parseFromString(html,'text/html');for(const element of parsed.querySelectorAll('script,style,iframe,object,embed'))element.remove();for(const element of parsed.querySelectorAll('[href]'))if(!safeContentReference(element.getAttribute('href')||''))element.removeAttribute('href');for(const element of parsed.querySelectorAll('img'))if(!safeContentReference(element.getAttribute('src')||''))element.remove();return parsed.body.innerHTML;}},
   onUpdate({editor}){const parsed=RichTextSchema.safeParse({version:1,doc:editor.getJSON()});if(!parsed.success){setError(parsed.error.issues[0]?.message||'This content cannot be saved.');return;}setError('');change.current(parsed.data as RichTextDocument,richTextPlainText(parsed.data));}
  },[base]);
  useEffect(()=>{if(editor)editor.setEditable(!disabled);},[editor,disabled]);
@@ -31,6 +32,7 @@ export function RichTextEditor({value,text,base,disabled=false,onChange,importIm
  return <div className="rich-text-editor" onDragOverCapture={e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();}} onDropCapture={e=>{const file=e.dataTransfer.files[0];if(file){e.preventDefault();e.stopPropagation();void addImage(file);}}}>
   <div className="rich-toolbar" role="toolbar" aria-label="Text formatting">
    <select aria-label="Paragraph style" disabled={buttonDisabled} value={editor.isActive('heading',{level:1})?'h1':editor.isActive('heading',{level:2})?'h2':editor.isActive('heading',{level:3})?'h3':'paragraph'} onChange={e=>{if(e.target.value==='paragraph')editor.chain().focus().setParagraph().run();else editor.chain().focus().toggleHeading({level:+e.target.value.slice(1) as 1|2|3}).run();}}><option value="paragraph">Text</option><option value="h1">H1</option><option value="h2">H2</option><option value="h3">H3</option></select>
+   <select aria-label="Text alignment" title="Align the selected paragraphs or headings" className="text-alignment" disabled={buttonDisabled} value={(editor.isActive('heading')?editor.getAttributes('heading'):editor.getAttributes('paragraph')).textAlign||'left'} onChange={e=>editor.chain().focus().setTextAlign(e.target.value).run()}><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option><option value="justify">Justified</option></select>
    <IconButton icon="format_bold" label="Bold" aria-pressed={editor.isActive('bold')} disabled={buttonDisabled} onClick={()=>editor.chain().focus().toggleBold().run()}/>
    <IconButton icon="format_italic" label="Italic" aria-pressed={editor.isActive('italic')} disabled={buttonDisabled} onClick={()=>editor.chain().focus().toggleItalic().run()}/>
    <IconButton icon="format_underlined" label="Underline" aria-pressed={editor.isActive('underline')} disabled={buttonDisabled} onClick={()=>editor.chain().focus().toggleUnderline().run()}/>

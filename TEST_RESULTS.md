@@ -269,3 +269,21 @@ The actual portable EXE passes cold start, version 1.10.1, final bundled UI, iso
 
 Local portable EXE: `release/Spark Tour Studio 1.10.1.exe`, 158,886,831 bytes; SHA-256 `EB81ABDDD04039B5313C1EDEB63AC32EA2FC877850905D21F91D4086EECAB9ED`.
 Windows ZIP: `artifacts/Spark-Tour-Studio-1.10.1-windows-x64.zip`, 257,030,814 bytes; SHA-256 `6E6F285B742859C42CDF8C89DE2A33B32F3196DDEF035744100B256639A49C2B`.
+
+## v1.11.0 tour directory, ordering, scene loading and help (2026-10-07)
+
+- Scenes default to saved Tour order with move-up/down controls; name sorting is a browsing choice. Native checks verify order changes preserve the mesh/camera, stable IDs and starting scene, with undo/redo, save/reopen and export.
+- The splash directory searches scenes, listed views, descriptions and generated bubble text. Scoped scene/object destinations visit viewpoints or clear positions near bubbles; info content opens, while link-bubble visits wait for marker selection to follow the link. Walking and simulated XR visits ground against the fixture floor while preserving local head tracking. Unlisted views are absent as direct view results.
+- Optional occlusion tolerates surface burial and visible upper/side rims, requires consecutive obstruction observations and retains bounded/cached ray work. The actual paged RAD regression verifies splat/collider occlusion and mouse/XR picking priority (test-output/bubble-runtime-1791405411410).
+- Rich text paragraphs/headings retain left/center/right/justified alignment in project data, popups and exported pages. Tiptap TextAlign 3.31.4 is pinned and bundled locally with its MIT notice. New bubble text is empty; existing authored content is preserved.
+- Scene loading uses a scene thumbnail with tour-cover fallback and a preparation-stage progress bar in shared preview/viewer, plus an in-world XR panel. Deferred RAD metadata and collision responses exercise cover display, progress milestones, broken-cover fallback, success/failure cleanup and retry. The bar does not claim to measure all streamed LoD bytes.
+- Help displays the built package version and distribution instructions for HTTPS websites, CDN RAD/RADC hosting/configuration, offline launcher use and local-network Quest sharing.
+- All 75 unit/integration tests pass and the production build passes. Final packaged native/exported-browser checks cover the new features, rapid requests, renderer/canvas/session identity, preserved mocked XR head position/orientation, phone layout and blocked external networking (test-output/tour-directory-1791405411292). Packaged 120-bubble browser, panels, rich-media editing, duplication, save and portable export also pass (test-output/ui-polish-1791405409921). Loading/splash/help screenshots were visually inspected.
+- Tracked/nonignored source audit checks 147 files and finds no credential patterns, scan data, generated executables or oversized files. A compatible source-map-js patch removes the reported high development dependency advisory; eight moderate development-toolchain advisories remain.
+
+These checks use synthetic assets and a mocked XR session; actual Quest optics/controllers, rough real scans and large-tour performance remain manual acceptance items. GitHub now includes the new packaged regression; release results are left for the user to check.
+
+Local build: `release/Spark Tour Studio 1.11.0.exe`, 158,888,000 bytes; SHA-256 `A992E7C6FA3A961837F9D391332EA50EF5E74A9862FDCC3D961DC4BFBFE7F20B`.
+Local build: `artifacts/Spark-Tour-Studio-1.11.0-windows-x64.zip`, 257,039,143 bytes; SHA-256 `19CDB57DD48F7FC79370DB9546685AC026F779B902D3634F478A45DD39D63576`.
+
+Actual portable wrapper cold start verifies version 1.11.0, the final bundled editor, hidden isolated profile and normal close with exit code 0 (test-output/portable-final-cdp-1791406083531). Windows ZIP entries and checksums are verified.

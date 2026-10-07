@@ -16,7 +16,7 @@ export function ensureBubbleContent(project,sceneId,bubbleId,sourceId){
  const bubble=project.scenes.find(s=>s.id===sceneId)?.hotspots.find(h=>h.id===bubbleId);if(!bubble)return;
  let content=!sourceId&&project.pages.find(p=>p.id===bubble.target);
  if(!content){const id='content-'+bubbleId,source=project.pages.find(p=>p.id===sourceId);content=!sourceId&&project.pages.find(p=>p.id===id);
-  if(!content){content=source?{...structuredClone(source),id}:{id,title:bubble.label,html:'',blocks:[{type:'text',text:'Tell the story of this place.',url:''}]};const index=project.pages.findIndex(p=>p.id===id);if(index<0)project.pages.push(content);else project.pages[index]=content;}}
+  if(!content){content=source?{...structuredClone(source),id}:{id,title:bubble.label,html:'',blocks:[{type:'text',text:'',url:''}]};const index=project.pages.findIndex(p=>p.id===id);if(index<0)project.pages.push(content);else project.pages[index]=content;}}
  content.title=bubble.label;bubble.kind='page';bubble.target=content.id;delete bubble.viewpoint;return content;
 }
 export function addContentBubble(project,sceneId,id,position){

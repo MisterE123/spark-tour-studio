@@ -1,5 +1,16 @@
 # Manual acceptance
 
+## v1.11 tour directory, ordering and help
+
+- Select scenes in Tour order and move them up/down. Check boundary controls, undo/redo, name browsing, save/reopen and export. Splash scenes, visitor scene chooser and Quest scene menu should follow the saved order; stable links and the chosen starting scene should stay intact.
+- Search the splash directory by scene, view name, description and bubble content words. Check duplicated names across scenes, empty results, a large tour and phone scrolling. Unlisted viewpoints should stay absent. Select results in other scenes and during failures; retry should complete the original destination visit.
+- Visit information and link bubbles in Viewpoints, Drone and Walk. Information opens its popup; a link-bubble result should go to the marker before its link is selected. Check nearby clearance, floors, walls and rough terrain. In Quest, verify preserved physical tracking and XR session identity through destination visits.
+- Place bubbles partly in rough ground or at mesh edges. With occlusion enabled, slight surface burial or a visible rim should remain visible; broad obstructions should hide them after repeated checks. Try sparse LoD updates, movement and the occlusion checkbox separately.
+- Justify paragraphs/headings, mix alignment with links/lists/images, undo/redo, reopen and export. Verify popup and page alignment in desktop/mobile browsers, including Firefox. XR continues to use structured text panels.
+- Open Help → Distribution instructions and About & licenses. Verify the version matches the EXE; follow the website, CDN and Launch Tour.exe steps using a fresh export and another network device.
+
+- Throttle a scene load: its thumbnail/cover and progress bar should appear until scene preparation finishes; repeat with a missing thumbnail, failed scene, rapid scene changes and VR. The preparation bar must clear on failure or success. New bubbles should have empty text.
+
 ## v1.10 interface and bubble visibility
 
 - Resize and hide/restore each editor panel. Restart and confirm the layout returns. Reset layout and use divider arrow keys.

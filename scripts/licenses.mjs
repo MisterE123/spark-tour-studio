@@ -1,5 +1,5 @@
 import fs from 'node:fs/promises';import path from 'node:path';
-await fs.mkdir('dist/licenses',{recursive:true});const list=[];const bundledPackages=new Set();const queue=['selfsigned','qrcode','@tiptap/react','@tiptap/pm','@tiptap/starter-kit','@tiptap/extension-image'];while(queue.length){const name=queue.pop();if(bundledPackages.has(name))continue;bundledPackages.add(name);const pkg=JSON.parse(await fs.readFile(path.join('node_modules',name,'package.json'),'utf8'));queue.push(...Object.keys(pkg.dependencies||{}));}
+await fs.mkdir('dist/licenses',{recursive:true});const list=[];const bundledPackages=new Set();const queue=['selfsigned','qrcode','@tiptap/react','@tiptap/pm','@tiptap/starter-kit','@tiptap/extension-image','@tiptap/extension-text-align'];while(queue.length){const name=queue.pop();if(bundledPackages.has(name))continue;bundledPackages.add(name);const pkg=JSON.parse(await fs.readFile(path.join('node_modules',name,'package.json'),'utf8'));queue.push(...Object.keys(pkg.dependencies||{}));}
 await fs.copyFile('licenses/Google-Material-Symbols-LICENSE.txt','dist/licenses/Google-Material-Symbols-LICENSE.txt');
 await fs.copyFile('LICENSE','dist/licenses/Spark-Tour-Studio-LICENSE.txt');await fs.copyFile('THIRD_PARTY.md','dist/licenses/THIRD_PARTY.md');
 await fs.copyFile('collision-tools/Node-LICENSE.txt','dist/licenses/Node-LICENSE.txt');

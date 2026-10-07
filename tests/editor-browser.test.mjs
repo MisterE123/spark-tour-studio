@@ -6,6 +6,7 @@ test('browser sorting/filtering preserves authored order and stable ties',()=>{
  assert.deepEqual(browserItems(items,{query:'bubble',type:'page',sort:'created'}).map(row=>row.item.id),['a','c']);
  assert.deepEqual(browserItems(items,{sort:'distance',distance:item=>item.id==='a'?10:2,descending:true}).map(row=>row.item.id),['a','b','c']);
  assert.deepEqual(items.map(item=>item.id),['a','b','c']);
+ assert.deepEqual(browserItems(items,{sort:'order'}).map(row=>row.item.id),['a','b','c']);
 });
 test('editor panel layout bounds corrupt preferences and keeps restore state',()=>{
  assert.deepEqual(editorLayout({left:-1,right:9999,browser:false},1000),{left:180,right:500,browser:false,inspector:true});

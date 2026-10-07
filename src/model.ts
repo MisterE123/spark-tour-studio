@@ -5,6 +5,7 @@ export type PerformanceLibrary=z.infer<typeof PerformanceLibrarySchema>;
 export type PerformancePresetFile=z.infer<typeof PerformancePresetSchema>;
 export type Vec3=[number,number,number];
 export type Mode='jumps'|'fly'|'explore';
+export interface TourDestination {sceneId:string;kind:'scene'|'viewpoint'|'bubble';id:string}
 export interface Transform {position:Vec3;rotation:Vec3;scale:number}
 export interface AudioTrack {source:string;loop:boolean;volume:number}
 export interface Viewpoint {listed?:boolean;type?:'photosphere'|'orbit'|'slider';autoAnimate?:boolean;animationSpeed?:number;orbit?:{center:Vec3;radius:number;azimuthBounds?:[number,number];elevationBounds?:[number,number]};slider?:{origin:Vec3;rotation:Vec3;bounds?:[number,number]};description?:string;audio?:AudioTrack;thumbnail?:string;id:string;name:string;position:Vec3;rotation:Vec3}

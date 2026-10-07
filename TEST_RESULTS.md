@@ -211,3 +211,5 @@ Final portable package: release/Spark Tour Studio 1.9.1.exe; 157884786 bytes; SH
 - Build and all 39 tests pass. Packaged native editor checkbox/save/reopen/export and exported browser mode switches pass for all three modes, rapid selections, failed loads/retry, disabled-mode fallback, explicit Walk entry and unlisted bubble links. XR menu filtering verified with a simulated presenting flag; real Quest session/controls acceptance remains manual (test-output/scene-navigation-1791338323488).
 
 Extended packaged integration passes all-unlisted ordinary scene entry, missing-collider fallback and invalid-walking-start fallback from active Walk (test-output/scene-navigation-1791338461167).
+
+Final portable package: release/Spark Tour Studio 1.9.2.exe; 157880592 bytes; SHA-256 7E1932C3D7DC7CA998F06338196100AE28092112C5699DD51095CF521036F6B2.

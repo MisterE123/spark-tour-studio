@@ -8,7 +8,7 @@ const ref = z.string().refine(s => !s || ((!/^[a-z][a-z0-9+.-]*:/i.test(s)||/^ht
 const id = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'Use letters, digits, underscores or hyphens');
 const mode = z.enum(['jumps','fly','explore']);
 const audio = z.object({source:ref,loop:z.boolean().default(false),volume:finite.min(0).max(1).default(1)});
-const viewpoint = z.object({...ViewControlsSchema.shape, description:z.string().max(4000).optional(), audio:audio.optional(), thumbnail:z.string().regex(/^data:image\/(?:jpeg|png|webp);base64,[a-zA-Z0-9+/=]+$/).max(300000).optional(), id, name:z.string(), position:vec, rotation:vec });
+const viewpoint = z.object({...ViewControlsSchema.shape, listed:z.boolean().optional(), description:z.string().max(4000).optional(), audio:audio.optional(), thumbnail:z.string().regex(/^data:image\/(?:jpeg|png|webp);base64,[a-zA-Z0-9+/=]+$/).max(300000).optional(), id, name:z.string(), position:vec, rotation:vec });
 const typedViewpoint=viewpoint.refine(v=>v.type!=='orbit'||!!v.orbit,'Orbit views need orbit geometry').refine(v=>v.type!=='slider'||!!v.slider,'Slider views need plane geometry');
 const block = z.object({ type:z.enum(['text','image','link','embed']), text:z.string(), url:ref });
 const page = z.object({ id, title:z.string(), html:ref, blocks:z.array(block) });

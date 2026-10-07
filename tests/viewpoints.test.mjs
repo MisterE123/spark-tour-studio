@@ -1,6 +1,18 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {ViewNavigation,defaultViewControls,sceneThumbnail} from '../shared/viewpoints.mjs';import {blankProject,newScene,ProjectSchema} from '../shared/project.mjs';
+import test from 'node:test';import assert from 'node:assert/strict';import {ViewNavigation,defaultViewControls,sceneThumbnail,listedViewpoints} from '../shared/viewpoints.mjs';import {blankProject,newScene,ProjectSchema} from '../shared/project.mjs';
 const view={id:'a',name:'View',position:[0,1.7,3],rotation:[0,0,0]};
 test('photospheres retain position, animation stops on control and existing project views stay compatible',()=>{const n=new ViewNavigation({...view,autoAnimate:true});n.animate(1);assert.notEqual(n.pose().rotation[1],0);n.drag(10,10);assert.deepEqual(n.pose().position,view.position);assert.equal(n.animate(1),null);const p=blankProject();p.scenes=[newScene('a','Scene','x.rad')];p.startScene='a';assert.equal(ProjectSchema.parse(p).scenes[0].viewpoints[0].type,undefined);});
 test('orbit preserves radius and clamps bounds, slider stays on oriented plane inside rectangle',()=>{const n=new ViewNavigation({...view,type:'orbit',orbit:{center:[0,1.7,0],radius:3,azimuthBounds:[-45,45],elevationBounds:[-20,20]}});const pose=n.drag(10000,10000),delta=pose.position.map((v,i)=>v-[0,1.7,0][i]);assert.ok(Math.abs(Math.hypot(...delta)-3)<1e-8);assert.ok(Math.abs(n.yaw)<=Math.PI/4&&Math.abs(n.pitch)<=20*Math.PI/180);const slider=new ViewNavigation({...view,type:'slider',slider:{origin:[1,2,3],rotation:[0,Math.PI/2,0],bounds:[4,2]}});slider.drag(-10000,-10000);assert.ok(Math.abs(slider.pose().position[0]-1)<1e-8);assert.equal(slider.u,2);assert.equal(slider.v,-1);});
 test('typed geometry round trips, invalid bounds fail, starting screenshot and custom images resolve',()=>{const p=blankProject(),s=newScene('a','Scene','x.rad');p.scenes=[s];p.startScene='a';s.viewpoints[0]={...s.viewpoints[0],...defaultViewControls(view,'orbit'),autoAnimate:true,animationSpeed:.1,thumbnail:'data:image/jpeg;base64,YQ=='};const round=ProjectSchema.parse(JSON.parse(JSON.stringify(p)));assert.equal(round.scenes[0].viewpoints[0].orbit.radius,3);assert.equal(sceneThumbnail(round.scenes[0]),s.viewpoints[0].thumbnail);s.thumbnailMode='custom';s.thumbnail='media/cover.png';assert.equal(sceneThumbnail(s),'media/cover.png');s.viewpoints[0].orbit.azimuthBounds=[10,-10];assert.equal(ProjectSchema.safeParse(p).success,false);delete s.viewpoints[0].orbit;assert.equal(ProjectSchema.safeParse(p).success,false);});
 test('bounded idle motion starts from the authored pose without a snap',()=>{for(const controls of [{type:'orbit',orbit:{center:[0,1.7,0],radius:3,azimuthBounds:[-20,60],elevationBounds:[-10,40]}},{type:'slider',slider:{origin:[0,1.7,3],rotation:[0,0,0],bounds:[4,2]}}]){const n=new ViewNavigation({...view,...controls,autoAnimate:true}),first=n.pose();assert.deepEqual(n.animate(0),first);const later=n.animate(.01);assert.ok(Math.hypot(...later.position.map((v,i)=>v-first.position[i]))<.01);}});
+
+test('unlisted entry views round trip and stay linkable without appearing in visitor lists',()=>{
+ const p=blankProject(),s=newScene('a','Scene','x.rad');p.scenes=[s];p.startScene='a';
+ s.viewpoints[0].listed=false;s.viewpoints.push({...view,id:'listed',listed:true},{...view,id:'legacy'});
+ s.hotspots=[{id:'link',label:'Entry',position:[0,0,0],kind:'viewpoint',target:'start'}];
+ const round=ProjectSchema.parse(JSON.parse(JSON.stringify(p))).scenes[0];
+ assert.deepEqual(listedViewpoints(round).map(v=>v.id),['listed','legacy']);
+ assert.equal(round.viewpoints.find(v=>v.id===round.entry).listed,false);
+ assert.equal(round.hotspots[0].target,round.entry);
+ round.viewpoints.forEach(v=>v.listed=false);assert.deepEqual(listedViewpoints(round),[]);
+ s.viewpoints[0].listed='no';assert.equal(ProjectSchema.safeParse(p).success,false);
+});

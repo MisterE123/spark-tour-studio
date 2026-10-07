@@ -7,7 +7,7 @@ export type Vec3=[number,number,number];
 export type Mode='jumps'|'fly'|'explore';
 export interface Transform {position:Vec3;rotation:Vec3;scale:number}
 export interface AudioTrack {source:string;loop:boolean;volume:number}
-export interface Viewpoint {type?:'photosphere'|'orbit'|'slider';autoAnimate?:boolean;animationSpeed?:number;orbit?:{center:Vec3;radius:number;azimuthBounds?:[number,number];elevationBounds?:[number,number]};slider?:{origin:Vec3;rotation:Vec3;bounds?:[number,number]};description?:string;audio?:AudioTrack;thumbnail?:string;id:string;name:string;position:Vec3;rotation:Vec3}
+export interface Viewpoint {listed?:boolean;type?:'photosphere'|'orbit'|'slider';autoAnimate?:boolean;animationSpeed?:number;orbit?:{center:Vec3;radius:number;azimuthBounds?:[number,number];elevationBounds?:[number,number]};slider?:{origin:Vec3;rotation:Vec3;bounds?:[number,number]};description?:string;audio?:AudioTrack;thumbnail?:string;id:string;name:string;position:Vec3;rotation:Vec3}
 export interface Hotspot {id:string;label:string;position:Vec3;kind:'page'|'scene'|'viewpoint';target:string;viewpoint?:string}
 export interface Block {type:'text'|'image'|'link'|'embed';text:string;url:string}
 export interface Page {id:string;title:string;html:string;blocks:Block[]}

@@ -202,3 +202,12 @@ Final portable package: release/Spark Tour Studio 1.9.0.exe; 157,877,666 bytes; 
 - Darker-glass visual check passes: red background yields panel pixel [153,45,32], blue background [33,64,155]; popup photo sizing is preserved (test-output/glass-1791328466336). Real Quest acceptance remains manual.
 
 Final portable package: release/Spark Tour Studio 1.9.1.exe; 157884786 bytes; SHA-256 26E8755CB22B121C4E5B3C15613A429BA422422FEF1DA8B743BDDD13EB9C1C73.
+
+
+## v1.9.2 scene modes and listed views (2026-10-06)
+
+- Scene loading retains the previous mode through asset loading, failure and retry. On success it reinitializes movement in the new world, choosing an enabled usable fallback where necessary. Walk uses walking start for ordinary arrivals and grounds near explicit scene-link entry points. No renderer or XR session replacement was added.
+- Optional viewpoint `listed` persists through project parsing, editor save/reopen and export. Missing fields retain legacy listed behavior; `false` hides visitor strip and XR menu items without removing valid entry/link targets. The editor exposes a checkbox and marks unlisted view cards.
+- Build and all 39 tests pass. Packaged native editor checkbox/save/reopen/export and exported browser mode switches pass for all three modes, rapid selections, failed loads/retry, disabled-mode fallback, explicit Walk entry and unlisted bubble links. XR menu filtering verified with a simulated presenting flag; real Quest session/controls acceptance remains manual (test-output/scene-navigation-1791338323488).
+
+Extended packaged integration passes all-unlisted ordinary scene entry, missing-collider fallback and invalid-walking-start fallback from active Walk (test-output/scene-navigation-1791338461167).

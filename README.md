@@ -186,3 +186,10 @@ Transforms use meters and radians, with Y-up. Panorama images resolve relative t
 Switching to Drone keeps the current camera position and facing when clear, or looks for a nearby collision-free camera position. Switching to Walk looks for a floor and full capsule clearance at the current position, then within 3 meters horizontally. If no nearby standing position works, it tries the authored walking start. Walk stays unavailable if neither location is valid. Entering a Walk-only scene and fall recovery use the walking start. Switching to Viewpoints flies to the last visited valid viewpoint in that scene, or its starting/first viewpoint. Remembered views are session-only.
 
 Editor Preview/Edit keeps the camera pose. If the author has moved away from a viewpoint’s geometry, entering Preview keeps the new vantage point; select a saved viewpoint explicitly to use its authored navigation geometry. Initial scene loads still position the camera at the scene’s starting view. Thumbnail refresh is an explicit action and may move the camera to that starting view. Content bubbles use an info icon, scene links use a photograph icon, and viewpoint links use a camera icon. Glass uses a subtle neutral dark shade while keeping background colors visible.
+
+
+### Scene navigation and unlisted views
+
+Changing scenes retains the current movement mode when it is enabled and usable in the destination. Otherwise it uses Viewpoints when enabled, then another usable mode. Walk arrivals use the designated walking start; a scene bubble with an explicit destination viewpoint instead finds standing clearance near that viewpoint. Failed loads and retries retain the selected mode. Scene changes retain the existing renderer and XR session.
+
+In Views, uncheck **Listed in visitor views** to hide a viewpoint from the visitor's numbered view strip and VR Views menu. Unlisted views remain editable, usable as scene/walking starts, and reachable through viewpoint or scene bubbles. All views in older projects remain listed. Project JSON stores the optional boolean `listed`; only `false` hides a view. Listing does not restrict access to a view or its content.

@@ -113,3 +113,10 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 - Visit another viewpoint, move away, then return to Viewpoints: it should return to that view. Verify deleting that view falls back to an existing entry/first viewpoint.
 - Move/look in the editor, enter Preview and return to Edit. Camera should stay put, including before the starting thumbnail finishes. Selecting a saved viewpoint explicitly should still use photosphere/orbit/slider controls.
 - Confirm info / sun-and-mountain photograph / camera bubble icons on mouse, touch and Quest. Check slightly darker glass over bright and dark scenes and preserved physical head tracking when switching modes in XR.
+
+
+## Scene modes and unlisted entry points
+
+- Select Drone, Walk or Viewpoints; change scenes from the scene picker and scene bubbles. The destination retains that mode when enabled; unsupported or invalid Walk destinations fall back to an enabled usable mode. In Walk, ordinary scene arrivals use walking start; an explicit bubble destination grounds near that entry.
+- Uncheck Listed in visitor views on a scene entry. Save/reopen/export; verify it is absent from the browser view strip and Quest Views menu but scene entry and direct bubble links still reach it. Unlist every view and verify scene entry continues to work without visitor list buttons.
+- In Quest, switch scenes repeatedly and rapidly in each mode, retry a failed destination, and verify the XR session remains active and movement works in the new scene.

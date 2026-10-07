@@ -256,3 +256,16 @@ Final Windows ZIP: `artifacts/Spark-Tour-Studio-1.9.4-windows-x64.zip`, 255,839,
 
 Local portable EXE: `release/Spark Tour Studio 1.10.0.exe`, 158,881,055 bytes; SHA-256 `9C07B480B987F7D03E1CC46F2B037021527717A823D908637106AA1309F59600`.
 Windows ZIP: `artifacts/Spark-Tour-Studio-1.10.0-windows-x64.zip`, 257,024,732 bytes; SHA-256 `3910623F3ABE6F71242AAEBF0CD86F7C13DC98918A55ECEEF086433034B92123`.
+
+## v1.10.1 performance draft retention and walking look takeover (2026-10-07)
+
+- Reproduced the performance-panel regression in the old packaged v1.10.0: ExtSplats reverted on reopening. Performance editing state now belongs to the project session and survives tab/dialog changes without reapplying stored settings or replacing the streaming pool. Explicit preset selection, saved/default changes, undo/redo and opening another project still apply stored values.
+- Walking releases automatic heading after 12 accumulated pixels of mouse/touch look, while continuing the route. Small individual drag events count cumulatively and do not create a new walking click on release. A new destination restores automatic turning; XR heading stays independent.
+- Production TypeScript/Vite build and all 72 automated tests pass. Source native regression verifies ExtSplats, numeric/name drafts, nondefault selection, unchanged Spark instance, explicit selection, save/reopen, default undo/redo and project reset (`test-output/performance-state-1791398195553`). Exported-viewer regression passes real mouse drag, actual pointer lock, touch events, continued movement, new-route reset and simulated XR heading preservation (`test-output/bubble-settings-1791398082133`).
+- The final packaged editor passes the same performance retention/default/undo/save/reopen/project-reset checks (`test-output/performance-state-1791398549132`). Packaged authoring/export and its exported viewer pass bubble settings, local icon licenses, pointer capture/Escape, continued route movement and mouse/touch view takeover (`test-output/bubble-settings-1791398549557`). CI includes the new native performance regression. The tracked/nonignored source audit checks 139 files and finds no credential patterns, scan data, generated executables or oversized files.
+- Bubble occlusion remains unchanged as requested. Synthetic fixtures are used; actual headset navigation and large-capture visual quality remain manual acceptance items.
+
+The actual portable EXE passes cold start, version 1.10.1, final bundled UI, isolated hidden profile and ordinary close with exit code 0 (`test-output/portable-final-cdp-1791398783276`). Windows ZIP contents and embedded checksums are verified.
+
+Local portable EXE: `release/Spark Tour Studio 1.10.1.exe`, 158,886,831 bytes; SHA-256 `EB81ABDDD04039B5313C1EDEB63AC32EA2FC877850905D21F91D4086EECAB9ED`.
+Windows ZIP: `artifacts/Spark-Tour-Studio-1.10.1-windows-x64.zip`, 257,030,814 bytes; SHA-256 `6E6F285B742859C42CDF8C89DE2A33B32F3196DDEF035744100B256639A49C2B`.

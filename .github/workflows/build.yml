@@ -72,6 +72,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/ui-polish-check.mjs
+      - name: Check performance settings survive panel navigation
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/performance-state-check.mjs
       - name: Check streamed precision and queued scene replacement
         env:
           SPARK_PACKAGED: '1'

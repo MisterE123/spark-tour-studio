@@ -133,5 +133,11 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 
 ## ExtSplats and PLY re-import (v1.10)
 
+- Enable ExtSplats, change numeric controls and rename the draft; close/reopen settings and switch Tour/Delivery/Performance tabs. Confirm the draft and live scene precision remain unchanged. Save a new preset, set it as default, undo/redo, save/reopen and open another project; verify stored/default values apply intentionally.
 - Compare a large-coordinate capture with Extended splat precision off/on, using the same view and detail budget. Check banding, foreground/background alignment, memory use and Quest frame rate. Change presets repeatedly during loading and VR, and verify the canvas/XR session and camera pose remain continuous.
 - Re-import an annotated scene from an updated PLY in the same coordinates. Confirm bubbles, content, views, transforms, collider and navigation settings survive save/reopen/export. Edit annotations while conversion is queued/running; those edits should remain. Cancel or fail a conversion and confirm the previous RAD still works. Changing/deleting the target before completion must not recreate it or replace a newer source.
+
+## Walking look takeover (v1.10.1)
+
+- Follow a route on desktop and phone. Tiny look jitter should retain automatic turning; after 12 accumulated pixels of deliberate look, walking continues without pulling the view direction back. Check left drag, captured mouse movement and touch drag, including several small events and input while the path is loading.
+- Select another destination and confirm automatic turning returns. Manual movement or Escape still cancels walking. Verify real Quest head tracking remains independent of route direction.

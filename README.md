@@ -39,7 +39,7 @@ Undo/redo covers tour edits. Autosave recovery is offered when reopening a proje
 
 - **Viewpoints:** saved photosphere, orbit or slider views, with smooth camera transitions.
 - **Drone:** WASD movement, Q/E vertical movement, Shift acceleration, drag to look. Touch devices have a movement pad.
-- **Walk:** Rapier capsule controller against a static triangle collision mesh. Walls, ground, slopes and low steps are handled independently of splat LoD. Starts without a nearby floor or inside collision geometry are rejected. Click a splat surface to follow a route over the collider; a guide line shows the route. Unreachable clicks do nothing. Manual movement or Escape cancels the route. The bundled Recast worker builds the walkable mesh locally.
+- **Walk:** Rapier capsule controller against a static triangle collision mesh. Walls, ground, slopes and low steps are handled independently of splat LoD. Starts without a nearby floor or inside collision geometry are rejected. Click a splat surface to follow a route over the collider; a guide line shows the route. Desktop and touch views turn along the path until deliberate look movement takes control, then continue walking with your chosen view direction. Clicking a new destination restores automatic turning. XR never turns the tracked head automatically. Unreachable clicks do nothing. Manual movement or Escape cancels the route. The bundled Recast worker builds the walkable mesh locally.
 
 On Quest, hold a trigger to aim and release to teleport. Point at a bubble or menu button and click the trigger to select it. Grip opens/closes the translucent tour menu. **Drone flight:** left stick moves forward/back/sideways, right stick lifts/turns. The Options tab can swap the sticks, change speed and turning, mute audio, and choose flying or fading between viewpoints. **Walk:** left stick moves, right stick turns. Snap turning defaults to 30 degrees. Scene entry retains the current mode when enabled and usable; initial entry defaults to Viewpoints when enabled. The menu has a separate confirmation before ending VR.
 
@@ -134,6 +134,8 @@ Desktop navigation: left-drag looks around; right-drag pans in the camera plane;
 ## Performance presets (v1.5)
 
 Open **Tools → Performance presets**. Tune settings against the live FPS/splat-count readout, name the result, then choose **Save preset** or **Save as new preset**. **Use as tour default** sets the initial viewer profile; Save the project to persist it. Presets participate in undo/redo and autosave. Import/export buttons exchange standalone JSON preset files between projects.
+
+The selected preset, unfinished name and live adjustments (including ExtSplats) survive closing settings and switching tabs. Selecting a stored preset, changing the saved tour default or opening a project loads its stored values. Save a preset and the project to keep adjustments after restarting.
 
 Viewer Settings includes all saved presets and Advanced performance controls. Visitor changes last across scene transitions without rewriting the project. Resolution cap applies to desktop rendering; XR foveation is a headset/browser hint. The preset controls do not change source splats, and rendered splat targets are not hard memory limits.
 

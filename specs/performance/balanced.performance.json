@@ -18,6 +18,7 @@
     "coneFov": 120,
     "coneFoveate": 0.4,
     "behindFoveate": 0.2,
-    "xrFoveation": 1
+    "xrFoveation": 1,
+    "pagedExtSplats": false
   }
 }

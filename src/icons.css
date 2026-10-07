@@ -1,0 +1,16 @@
+.material-icon{display:inline-block;vertical-align:middle;flex:none;pointer-events:none}
+button .material-icon,a .material-icon{margin-inline-end:.4em}
+.icon-button{display:inline-flex;align-items:center;justify-content:center;gap:.35rem;min-width:36px;min-height:36px}
+.icon-button:not(.icon-with-label){padding:.45rem}
+.icon-button .material-icon{margin:0}
+.inspector-section{margin:.75rem 0;border-block-start:1px solid var(--line,rgba(255,255,255,.15));padding-block-start:.6rem}
+.inspector-section>summary{display:flex;align-items:center;gap:.5rem;cursor:pointer;list-style:none;padding:.35rem 0;font-weight:600}
+.inspector-section>summary::-webkit-details-marker{display:none}
+.inspector-section>summary::after{content:'›';margin-inline-start:auto;transform:rotate(0);opacity:.7;transition:transform .15s}
+.inspector-section[open]>summary::after{transform:rotate(90deg)}
+.inspector-section-body{padding-block-start:.65rem}
+.inspector-section summary:focus-visible{outline:2px solid currentColor;outline-offset:3px;border-radius:4px}
+.settings-group>summary .material-icon{opacity:.8}
+.settings-group .mode-tabs{flex-wrap:wrap;position:static;margin:0 0 .6rem}
+.control-tooltip{position:fixed;z-index:1000;pointer-events:none;max-width:220px;padding:7px 10px;border:1px solid #ffffff40;border-radius:8px;background:rgba(24,24,24,.88);backdrop-filter:blur(12px);color:#f5f5f5;font-size:11px;line-height:1.4;box-shadow:0 4px 18px #0003;animation:show-control-tooltip .12s .25s both}
+@keyframes show-control-tooltip{from{opacity:0}to{opacity:1}}

@@ -10,6 +10,7 @@ A portable preset is a UTF-8 JSON file, conventionally `name.performance.json`:
 
 | Setting | Range | Default | Meaning |
 | --- | --- | --- | --- |
+| pagedExtSplats | boolean | false | Use extended precision for the shared foreground/background streaming pool. 32 bytes per base splat instead of 16. |
 | pixelRatio | 0.5–2 | 1.5 | Desktop pixel-density cap, additionally capped by device pixel ratio. Does not resize the XR framebuffer. |
 | lodSplatCount | integer 0–8,000,000 | 0 | Base visible-splat target; 0 uses Spark's device defaults. |
 | lodSplatScale | 0.25–2 | 1 | Multiplier on the base target. |
@@ -27,7 +28,9 @@ A portable preset is a UTF-8 JSON file, conventionally `name.performance.json`:
 | behindFoveate | 0.05–1 | 0.2 | Behind-view LoD detail fraction. |
 | xrFoveation | 0–1 | 1 | XR compositor foveation; browser/headset may ignore this hint. |
 
-These values apply live without changing the scene or ending an XR session. Sort throttling and culling can introduce visible artifacts. Splat targets are not hard GPU-memory limits: the application retains an 8,388,608-splat paging pool. SH rendering limits do not promise reduced streamed file size. FPS is observed frame cadence, not GPU timing; compare presets on the actual capture/device.
+Numeric settings apply live. Changing `pagedExtSplats` recreates Spark's streaming pool and reloads the current scene and its background, preserving the camera position, movement mode, and active WebXR session. The WebGL renderer and canvas are retained. The application keeps an 8,388,608-splat paging pool; extended precision uses more memory and bandwidth. Sort throttling and culling can introduce visible artifacts. Splat targets are not hard GPU-memory limits. SH rendering limits do not promise reduced streamed file size. FPS is observed frame cadence, not GPU timing; compare presets on the actual capture/device.
+
+ExtSplats stores source coordinates as float32 rather than the compact pool's float16, reducing additional coordinate quantization while decoding RAD files. It cannot restore precision already lost when the source RAD was created. Spark's intermediate accumulator remains camera-relative and uses its normal compact encoding. See [Spark's precision and streaming documentation](https://sparkjs.dev/docs/lod-getting-started/#handling-huge-coordinates) and [ExtSplats encoding](https://sparkjs.dev/docs/ext-splats/).
 
 ## Tour storage and precedence
 

@@ -1,5 +1,15 @@
 # Manual acceptance
 
+## v1.10 interface and bubble visibility
+
+- Resize and hide/restore each editor panel. Restart and confirm the layout returns. Reset layout and use divider arrow keys.
+- Search a scene with hundreds of bubbles; sort by name, camera distance and created order. Select duplicate names, filter types and create a bubble while a restrictive filter is active. Confirm selection does not move the camera; Frame does.
+- Rename destination scenes/views and verify automatic link bubble labels in the editor, exported viewer and XR.
+- Verify 0% bubble translucency over bright and dark surfaces. Increase distance fade, check the displayed cutoff distance, and confirm faded bubbles let walking clicks and XR rays through.
+- Toggle Hide obscured bubbles on/off. Test inside/outside walls, surface-attached bubbles, transformed scenes, sparse captures and newly streamed details. Check that the selected editor bubble remains visible and that disabled culling restores ordinary distance visibility.
+- Type formatted content with headings, lists, quotes, links and local images. Undo, reopen and export; confirm formatting/media survive in the popup and individual page. Check long content, image width, scrolling and links on mobile/Quest.
+- On Quest 3/3S inspect the new dark glass menu, icon faces, navigation controls, distance/occlusion picking and rich-content panel pagination on a representative capture.
+
 The user's LichtFeld export will be tested manually. No matching collision GLB was available during implementation. The following checks remain necessary before production use.
 
 ## LichtFeld scene
@@ -8,7 +18,7 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 - For chunked RAD, verify companion requests and missing-chunk Retry behavior. Test a monolithic file on a range-capable CDN.
 - Add two more scenes; switch rapidly and repeatedly. Inspect memory after stabilization and verify old scenes stop streaming.
 - Place a bubble on the scene, move it with the gizmo, save/reopen, and verify its location.
-- Exercise a scene with large coordinates. The v1 runtime uses Spark's default compact encoding; rebase the capture if precision artifacts appear.
+- Exercise a scene with large coordinates. Compare compact storage with Extended splat precision in performance settings; check whether coordinate banding disappears without moving the authored annotations.
 
 ## Collision
 
@@ -112,7 +122,7 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 - Move away from the entry: switch Viewpoints → Drone/Walk and Drone ↔ Walk. Verify position/facing retention where valid, nearby grounded placement, walking-start fallback when no local floor exists, and remaining in the previous mode when neither placement works. Check slopes, walls, transformed colliders and low ceilings.
 - Visit another viewpoint, move away, then return to Viewpoints: it should return to that view. Verify deleting that view falls back to an existing entry/first viewpoint.
 - Move/look in the editor, enter Preview and return to Edit. Camera should stay put, including before the starting thumbnail finishes. Selecting a saved viewpoint explicitly should still use photosphere/orbit/slider controls.
-- Confirm info / sun-and-mountain photograph / camera bubble icons on mouse, touch and Quest. Check slightly darker glass over bright and dark scenes and preserved physical head tracking when switching modes in XR.
+- Confirm distinct info / outgoing photograph / stacked-location bubble icons on mouse, touch and Quest. Check slightly darker glass over bright and dark scenes and preserved physical head tracking when switching modes in XR.
 
 
 ## Scene modes and unlisted entry points
@@ -120,3 +130,8 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 - Select Drone, Walk or Viewpoints; change scenes from the scene picker and scene bubbles. The destination retains that mode when enabled; unsupported or invalid Walk destinations fall back to an enabled usable mode. In Walk, ordinary scene arrivals use walking start; an explicit bubble destination grounds near that entry.
 - Uncheck Listed in visitor views on a scene entry. Save/reopen/export; verify it is absent from the browser view strip and Quest Views menu but scene entry and direct bubble links still reach it. Unlist every view and verify scene entry continues to work without visitor list buttons.
 - In Quest, switch scenes repeatedly and rapidly in each mode, retry a failed destination, and verify the XR session remains active and movement works in the new scene.
+
+## ExtSplats and PLY re-import (v1.10)
+
+- Compare a large-coordinate capture with Extended splat precision off/on, using the same view and detail budget. Check banding, foreground/background alignment, memory use and Quest frame rate. Change presets repeatedly during loading and VR, and verify the canvas/XR session and camera pose remain continuous.
+- Re-import an annotated scene from an updated PLY in the same coordinates. Confirm bubbles, content, views, transforms, collider and navigation settings survive save/reopen/export. Edit annotations while conversion is queued/running; those edits should remain. Cancel or fail a conversion and confirm the previous RAD still works. Changing/deleting the target before completion must not recreate it or replace a newer source.

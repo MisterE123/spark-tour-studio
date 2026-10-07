@@ -64,6 +64,18 @@ jobs:
         run: node scripts/scene-navigation-check.mjs
       - name: Check bubble settings and captured movement
         run: node scripts/bubble-settings-check.mjs
+      - name: Check bubble ray picking and streamed occlusion
+        run: node scripts/bubble-runtime-check.mjs
+      - name: Check precision reloads and persistent XR tracking
+        run: node scripts/extended-precision-check.mjs
+      - name: Check editor panels, rich content and portable export
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/ui-polish-check.mjs
+      - name: Check streamed precision and queued scene replacement
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/advanced-import-check.mjs
       - name: Build portable Windows editor
         if: github.event_name != 'pull_request'
         run: npx electron-builder --prepackaged release/win-unpacked --win portable --x64
@@ -105,6 +117,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $files = Get-ChildItem -LiteralPath artifacts -File | ForEach-Object FullName
+          # Array wrapping matters when the artifact contains one ZIP: splatting a
+          # scalar string would pass each filename character as a separate argument.
+          $files = @(Get-ChildItem -LiteralPath artifacts -File -Filter '*-windows-x64.zip' | ForEach-Object FullName)
+          if ($files.Count -ne 1) { throw 'Expected exactly one Windows release ZIP' }
           gh release create $env:GITHUB_REF_NAME @files --repo $env:GITHUB_REPOSITORY --verify-tag --generate-notes --title "Spark Tour Studio $env:GITHUB_REF_NAME"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

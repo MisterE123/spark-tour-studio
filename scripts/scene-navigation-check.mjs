@@ -12,16 +12,18 @@ const bad=structuredClone(a);bad.id='bad';bad.name='Failed';bad.source='main.rad
 p.scenes=[a,b,c,bad];p.startScene='a';
 await fs.writeFile(path.join(project,'config/tour.json'),JSON.stringify(p));await fs.writeFile(path.join(project,'config/hosting.json'),'{}');
 const fixture=radFixture();await fs.writeFile(path.join(project,'main.rad'),fixture.rad);await fs.writeFile(path.join(project,'floor.glb'),floorGlb());
-const app=await electron.launch({executablePath:path.resolve('release/win-unpacked/Spark Tour Studio.exe'),env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
+const development=process.argv.includes('--dev');
+const app=await electron.launch({executablePath:development?createRequire(import.meta.url)('electron'):path.resolve('release/win-unpacked/Spark Tour Studio.exe'),args:development?[path.resolve('.')]:[],env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
 try{
  const page=await app.firstWindow();await page.waitForSelector('.studio');await page.goto(page.url()+'?diagnostics=1');
  const choose=async folder=>app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({filePaths:[folder],canceled:false});},folder);
- await choose(project);await page.getByRole('button',{name:'Open',exact:true}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);
- await page.getByRole('button',{name:'views',exact:true}).click();await page.locator('.viewpoint-card').filter({hasText:'Private entry'}).click();
+ const openProject=async()=>{await page.getByRole('button',{name:'File',exact:true}).click();await page.getByRole('menuitem',{name:'Open project',exact:true}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);};
+ await choose(project);await openProject();
+ await page.getByRole('tab',{name:'Views',exact:true}).click();await page.locator('.object-row').filter({hasText:'Private entry'}).click();
  await page.getByLabel('Listed viewpoint').check();await page.getByLabel('Listed viewpoint').uncheck();
- await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByText('Saved project',{exact:true}).waitFor({state:'attached'});
- await choose(out);await page.getByRole('button',{name:'Export tour ↗'}).click();await page.getByRole('button',{name:'Choose folder & export'}).click();await page.locator('.modal-shade').waitFor({state:'hidden',timeout:120000});
- await choose(project);await page.getByRole('button',{name:'Open',exact:true}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);
+ await page.getByRole('button',{name:'Save',exact:true}).click();await page.locator('.statusbar [role=status]').filter({hasText:'Project saved.'}).waitFor();
+ await choose(out);await page.getByRole('button',{name:'Export tour',exact:true}).click();await page.getByRole('button',{name:'Choose folder & export'}).click();await page.locator('.modal-shade').waitFor({state:'hidden',timeout:120000});
+ await choose(project);await openProject();
  assert.equal(await page.evaluate(()=>window.tourRuntime.active.viewpoints.find(v=>v.id==='hidden').listed),false);
  assert.equal(JSON.parse(await fs.readFile(path.join(out,'config/tour.json'),'utf8')).scenes[0].viewpoints.find(v=>v.id==='hidden').listed,false);
  console.log('PASS: native Listed control, save/reopen and folder export',root);
@@ -29,7 +31,7 @@ try{
 const {startServer}=createRequire(import.meta.url)('../desktop/server.cjs'),{server,url}=await startServer({root:out});
 const browser=await chromium.launch({channel:'msedge',headless:true,args:['--enable-webgl','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 try{
- const page=await browser.newPage();await page.goto(url+'?diagnostics=1');await page.getByRole('button',{name:'Enter tour ↗'}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);
+ const page=await browser.newPage();await page.goto(url+'?diagnostics=1');await page.getByRole('button',{name:'Enter tour',exact:true}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);
  assert.equal(await page.locator('.tour-viewpoint').count(),1);assert.equal(await page.locator('.tour-viewpoint').filter({hasText:'Private entry'}).count(),0);
  await page.evaluate(async()=>{
   const r=window.tourRuntime,require=(value,message)=>{if(!value)throw Error(message);};

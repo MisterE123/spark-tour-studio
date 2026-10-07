@@ -111,26 +111,13 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1
+        },
+        "pagedExtSplats": {
+          "type": "boolean",
+          "default": false,
+          "description": "Extended 32-byte streamed-splat encoding. Recreates the shared foreground/background paging pool when changed; preserves viewer position and WebXR session."
         }
       },
-      "required": [
-        "pixelRatio",
-        "lodSplatCount",
-        "lodSplatScale",
-        "lodRenderScale",
-        "maxSh",
-        "minSortIntervalMs",
-        "sortRadial",
-        "minPixelRadius",
-        "maxPixelRadius",
-        "maxStdDev",
-        "minAlpha",
-        "coneFov0",
-        "coneFov",
-        "coneFoveate",
-        "behindFoveate",
-        "xrFoveation"
-      ],
       "additionalProperties": false
     }
   },

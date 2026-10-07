@@ -21,7 +21,7 @@ export function ensureBubbleContent(project,sceneId,bubbleId,sourceId){
 }
 export function addContentBubble(project,sceneId,id,position){
  const scene=project.scenes.find(s=>s.id===sceneId);if(!scene)return;
- scene.hotspots.push({id,label:'New bubble',position,kind:'page',target:''});ensureBubbleContent(project,sceneId,id);
+ scene.hotspots.push({id,label:'New bubble',position,kind:'page',target:'',createdAt:Date.now()});ensureBubbleContent(project,sceneId,id);
 }
 export function removeBubble(project,sceneId,id){
  const scene=project.scenes.find(s=>s.id===sceneId),bubble=scene?.hotspots.find(h=>h.id===id);if(!scene||!bubble)return;
@@ -52,3 +52,49 @@ export function normalizeBubbleContent(project){
  return project;
 }
 export function usedContent(project){const targets=new Set(project.scenes.flatMap(s=>s.hotspots.filter(h=>h.kind==='page').map(h=>h.target)));return project.pages.filter(p=>targets.has(p.id));}
+
+// A conversion result only commits after it is complete. Re-import changes the
+// source on the current scene object, so edits made during conversion survive.
+export function applySceneImport(project,job){
+ if(job.state!=='completed'||!job.result?.source)return {status:'ignored'};
+ if(job.replaceSceneId){
+  const scene=project.scenes.find(s=>s.id===job.replaceSceneId);
+  if(!scene)return {status:'discarded',message:`${job.name}: the scene was deleted while importing.`};
+  if(scene.source===job.result.source)return {status:'already'};
+  if(job.expectedSource!==undefined&&scene.source!==job.expectedSource)return {status:'discarded',message:`${scene.name}: its source changed while importing. The generated RAD was kept without replacing the scene.`};
+  scene.source=job.result.source;return {status:'replaced',sceneId:scene.id,source:scene.source};
+ }
+ if(project.scenes.some(s=>s.id===job.result.id))return {status:'already'};
+ project.scenes.push(structuredClone(job.result));if(!project.startScene)project.startScene=job.result.id;
+ return {status:'added',sceneId:job.result.id};
+}
+
+// Keep an explicitly edited source effective when delivery has a scene
+// override. Native file relinks are project-local even with a CDN asset base.
+export function setSceneSource(project,hosting,sceneId,source,local=false){
+ const scene=project.scenes.find(s=>s.id===sceneId);if(!scene)return false;
+ let otherBase=false;if(local){const base='https://spark-tour.local/project/';try{otherBase=new URL('asset.rad',new URL(hosting.assetBaseUrl||'./',base)).href!==new URL('asset.rad',base).href;}catch{otherBase=true;}}
+ if(hosting.sceneUrls?.[sceneId]||otherBase)hosting.sceneUrls={...hosting.sceneUrls,[sceneId]:source};
+ scene.source=source;return true;
+}
+
+export function duplicateBubble(project,sceneId,id,newId){
+ const scene=project.scenes.find(s=>s.id===sceneId),source=scene?.hotspots.find(h=>h.id===id);if(!source)return;
+ const copy={...structuredClone(source),id:newId,createdAt:Date.now()};
+ if(copy.kind==='page')copy.label=copy.label+' copy';scene.hotspots.push(copy);
+ if(copy.kind==='page')ensureBubbleContent(project,sceneId,newId,source.target);
+ return copy;
+}
+export function duplicateViewpoint(project,sceneId,id,newId){
+ const scene=project.scenes.find(s=>s.id===sceneId),source=scene?.viewpoints.find(v=>v.id===id);if(!source)return;
+ const copy={...structuredClone(source),id:newId,name:source.name+' copy'};scene.viewpoints.push(copy);return copy;
+}
+export function duplicateScene(project,id,newId,makeId){
+ const source=project.scenes.find(s=>s.id===id);if(!source)return;
+ const copy={...structuredClone(source),id:newId,name:source.name+' copy'},views=new Map();
+ for(const view of copy.viewpoints){const next=makeId();views.set(view.id,next);view.id=next;}
+ copy.entry=views.get(copy.entry)||'';copy.walkStart=views.get(copy.walkStart)||'';
+ for(const bubble of copy.hotspots){bubble.id=makeId();bubble.createdAt=Date.now();if(bubble.kind==='viewpoint')bubble.target=views.get(bubble.target)||bubble.target;if(bubble.kind==='scene'&&bubble.target===id){bubble.target=newId;if(bubble.viewpoint)bubble.viewpoint=views.get(bubble.viewpoint)||bubble.viewpoint;}}
+ project.scenes.push(copy);for(const bubble of copy.hotspots)if(bubble.kind==='page')ensureBubbleContent(project,newId,bubble.id,bubble.target);
+ return copy;
+}

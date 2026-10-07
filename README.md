@@ -20,21 +20,25 @@ For web development, `npm run dev` serves the viewer. The desktop editor uses th
 
 ## Author a tour
 
-1. **New**: choose an empty project directory, or **Open** an existing project/export folder.
-2. **Add RAD scene**: pick a LichtFeld `.rad`, or add a hosted scene and replace its URL. Local imports reference their original files during editing.
+1. **File → New project**: choose an empty project directory, or **File → Open project** to reopen a project/export. Save, Preview and Export remain one-click actions.
+2. **Add → RAD scenes**: pick one or more LichtFeld `.rad` files, or use **Add → Hosted scene**. Local imports reference their original files during editing.
 3. Adjust scene orientation/scale under **Splat transform**. Tour coordinates use meters and Y-up. Set names, thumbnails, allowed modes and entry views. **Scene → Background** offers Solid color, Equirectangular panorama and Gaussian splat.
-4. Drag to look, use Free Fly and WASD/Q/E to position the camera, then **Capture viewpoint**. Use the Views tab to rename, reorder, duplicate, update or delete viewpoints. Thumbnails are captured with each saved camera view.
+4. Drag to look, use Drone and WASD/Q/E to position the camera, then **Add → Capture viewpoint**. Select Views in the tour browser to choose a view. Its inspector lets you rename, reorder, duplicate, update or delete it. Thumbnails are captured with each saved camera view.
 5. For Walk, import a collision GLB or choose **Generate collision mesh…** and select the matching source PLY. The bundled splat-transform 3.7.0 runs locally on your GPU and creates a smooth collision surface; no separate installation is needed. RAD input is not supported by that tool. Large PLYs are first simplified into a temporary collision-only copy (2 million splats by default, or 8 million for Detailed), avoiding oversized GPU buffers. The original stays unchanged; simplified collisions can lose fine details. Choose 8, 15 or 30 cm surface detail, inspect the wireframe, set a walking start above a clear floor, then enable Walk. The generated mesh shares Spark's PLY coordinates and follows the scene transform. This is surface reconstruction, not automatic scene cleanup: openings, noisy captures and incomplete floors may need external repair.
-6. Use **Place bubble** or **Bubble ahead**, then choose **Content** as its bubble type. The bubble label also supplies its popup title. Edit text, images, links and embeds directly in the Bubble inspector, or import HTML. Each new content bubble starts with its own content. Image blocks, the tour cover and scene thumbnail accept drag-and-drop, a native file chooser, or a URL/project path. Dropped images are copied into the project. Put custom pages and their dependencies in a dedicated folder: the importer includes the containing folder during export.
-7. Other bubble types change scenes or go to viewpoints. Refine positions with the gizmo or inspector. Surface picking uses the currently available splat detail. Existing content can be copied from the bubble inspector; older tours remain compatible.
-8. Preview, validate under **Hosting & validation**, save, then export to an empty folder outside the project.
+6. Use **Place bubble** or **Add → Information bubble**, then choose **Content** as its bubble type. The bubble label also supplies its popup title. Edit formatted text, headings, lists, quotes, images and links in the Bubble inspector. Rich text supports image URLs, file selection and drop. Separate image/link/embed blocks remain supported; custom HTML lives under Advanced content. Each new content bubble starts with its own content. Image blocks, the tour cover and scene thumbnail accept drag-and-drop, a native file chooser, or a URL/project path. Dropped images are copied into the project. Put custom pages and their dependencies in a dedicated folder: the importer includes the containing folder during export.
+7. Scene and View link bubbles derive their labels automatically from their destinations (for example, “Go to Scene: North” and “Go to View: Start”). Refine positions with the gizmo or inspector. Surface picking uses the currently available splat detail. Existing content can be copied from the bubble inspector; older tours remain compatible.
+8. Preview, validate under **Tools → Validate project**, save, then export to an empty folder outside the project.
+
+The tour browser has Scenes, Views and Bubbles tabs. Search, filter bubble types, or sort by Name, Distance or Created order. Distance uses world meters and pauses while the list is under the pointer or has keyboard focus. Selecting an object preserves the camera; Frame selected moves it explicitly. New bubbles become visible even when the previous search/filter would hide them.
+
+Drag either panel divider to resize it; the dividers also accept arrow keys. Hide/restore panels through View or their corner controls. Reset panel layout restores both panels. Layout and browser preferences stay on this computer and are not exported. Tour settings, performance presets and hosting choices live under Tools; scene properties stay in the inspector.
 
 Undo/redo covers tour edits. Autosave recovery is offered when reopening a project. Original assets are not deleted when removing scenes. Relink missing assets in the scene/content inspectors. `.sources.json` records authoring-only external file locations; it is not exported.
 
 ## Navigation
 
-- **Viewpoints:** saved viewpoints, with a short fade.
-- **Free Fly:** WASD movement, Q/E vertical movement, Shift acceleration, drag to look. Touch devices have a movement pad.
+- **Viewpoints:** saved photosphere, orbit or slider views, with smooth camera transitions.
+- **Drone:** WASD movement, Q/E vertical movement, Shift acceleration, drag to look. Touch devices have a movement pad.
 - **Walk:** Rapier capsule controller against a static triangle collision mesh. Walls, ground, slopes and low steps are handled independently of splat LoD. Starts without a nearby floor or inside collision geometry are rejected. Click a splat surface to follow a route over the collider; a guide line shows the route. Unreachable clicks do nothing. Manual movement or Escape cancels the route. The bundled Recast worker builds the walkable mesh locally.
 
 On Quest, hold a trigger to aim and release to teleport. Point at a bubble or menu button and click the trigger to select it. Grip opens/closes the translucent tour menu. **Drone flight:** left stick moves forward/back/sideways, right stick lifts/turns. The Options tab can swap the sticks, change speed and turning, mute audio, and choose flying or fading between viewpoints. **Walk:** left stick moves, right stick turns. Snap turning defaults to 30 degrees. Scene entry retains the current mode when enabled and usable; initial entry defaults to Viewpoints when enabled. The menu has a separate confirmation before ending VR.
@@ -104,11 +108,13 @@ The `.rad` container supports both ordinary splats and a LoD hierarchy. This tou
 
 ## Import a PLY (v1.1)
 
-Choose **Import PLY scene** in the scene sidebar after creating/opening a project. Select Quality (Bhattacharyya) or Quick (Tiny LoD), choose the maximum spherical-harmonics degree, and click **Choose PLY & queue**. Degree 3 preserves all available SH coefficients; lower limits reduce output size. The converter expects supported Gaussian splat PLY data; Spark 2.3.1's PLY decoder uses binary little-endian PLY.
+Choose **Add → PLY scenes** after creating/opening a project. Select Quality (Bhattacharyya) or Quick (Tiny LoD), choose the maximum spherical-harmonics degree, and click **Choose PLY & queue**. Degree 3 preserves all available SH coefficients; lower limits reduce output size. The converter expects supported Gaussian splat PLY data; Spark 2.3.1's PLY decoder uses binary little-endian PLY.
 
 The editor bundles Spark 2.3.1's unmodified Rust `build-lod` tool, compiled in release mode with CPU features. End users need neither Rust nor Node.js. Conversion runs outside the renderer, with live stage messages and a Cancel button. It uses `--gsplat --rad-chunked`, validates the resulting LoD metadata and every companion chunk, then adds the scene. The original PLY is unchanged. A temporary hard link avoids copying on compatible local volumes; otherwise the PLY is copied with streaming I/O. Failed/cancelled output is removed, with available diagnostics kept in `conversion-logs/`.
 
 Converted assets are stored in `assets/converted/<id>/` inside the project and travel through Save As/export like imported RAD assets. Save the project after importing. Large PLY files can require substantial RAM and conversion time; the converter reads the splats into memory. This release does not provide an out-of-core conversion algorithm. It does not generate collision geometry.
+
+To update an existing scan, select its scene and choose **Source asset → Re-import PLY** (also under Tools). Choose the updated PLY in the same coordinate system, then queue it with the desired LoD/SH settings. Successful conversion replaces only the scene's source: IDs, bubbles, content, viewpoints, alignment, colliders and navigation settings remain intact, including annotations edited during conversion. Failure/cancellation leaves the current source unchanged. If the target was deleted or its source changed, the result is not applied. Previous generated files remain available for undo. A relative per-scene hosting override points to the new local RAD, and save/recovery/undo retain that override together with the source.
 
 Developer rebuild: install Rust 1.98.1 (Windows x64 GNU or MSVC toolchain) into `.build/cargo` and `.build/rustup`, without changing PATH, or supply `CARGO_HOME` and `RUSTUP_HOME`. Run `npm run build:converter` before packaging. The script verifies the pinned Spark v2.3.1 archive checksum, uses Cargo.lock and release optimizations, and records executable provenance and license notices in `converter/`. It downloads the source archive if needed. No Rust source modifications are applied.
 
@@ -127,15 +133,17 @@ Desktop navigation: left-drag looks around; right-drag pans in the camera plane;
 
 ## Performance presets (v1.5)
 
-Open **Performance** in the editor sidebar. Tune settings against the live FPS/splat-count readout, name the result, then choose **Save preset** or **Save as new preset**. **Use as tour default** sets the initial viewer profile; Save the project to persist it. Presets participate in undo/redo and autosave. Import/export buttons exchange standalone JSON preset files between projects.
+Open **Tools → Performance presets**. Tune settings against the live FPS/splat-count readout, name the result, then choose **Save preset** or **Save as new preset**. **Use as tour default** sets the initial viewer profile; Save the project to persist it. Presets participate in undo/redo and autosave. Import/export buttons exchange standalone JSON preset files between projects.
 
 Viewer Settings includes all saved presets and Advanced performance controls. Visitor changes last across scene transitions without rewriting the project. Resolution cap applies to desktop rendering; XR foveation is a headset/browser hint. The preset controls do not change source splats, and rendered splat targets are not hard memory limits.
+
+**Precision & storage → Extended splat precision (ExtSplats)** enables Spark's 32-byte streamed storage with float32 centers for foreground and background RAD. It can avoid coordinate banding introduced by the compact 16-byte runtime representation, at higher GPU memory/bandwidth cost. It is saved as `pagedExtSplats` in performance presets and defaults off. Changing it reloads the streamed resources while keeping the camera, canvas, movement mode and WebXR session. It cannot recover precision already discarded when creating the source file. Spark documents the distinction between loaded and paged precision in [Handling huge coordinates](https://sparkjs.dev/docs/lod-getting-started/#handling-huge-coordinates).
 
 See [the versioned preset specification](specs/performance/README.md), [JSON Schema](specs/performance/preset.schema.json), and [complete example](specs/performance/balanced.performance.json). Export includes copies of each preset and the specification. Runtime code, WASM and workers remain bundled locally.
 
 ## Scene import queue
 
-Add RAD scene and Import PLY scene both accept multiple files. Choose the PLY conversion method and SH degree for each batch; those settings stay attached to the queued files. Imports run serially to avoid concurrent converter memory use, and each successful import adds a scene named after its source file. RAD imports validate the paged header and companion chunks, then reference the source folder; PLY imports write converted chunks inside the project. Originals are preserved.
+**Add → RAD scenes** and **Add → PLY scenes** both accept multiple files. Choose the PLY conversion method and SH degree for each batch; those settings stay attached to the queued files. Imports run serially to avoid concurrent converter memory use, and each successful import adds a scene named after its source file. RAD imports validate the paged header and companion chunks, then reference the source folder; PLY imports write converted chunks inside the project. Originals are preserved.
 
 Open **Import queue** in the sidebar to see progress, cancel individual jobs, retry failures or clear finished jobs. **Pause after current** lets the active import finish before stopping; you can add more files while paused or running. Failed jobs do not block later imports. Editing and Save remain available during imports; switching projects, Save as, export and collision generation wait until pending imports finish or are cancelled. Completed scenes use the normal project save and autosave workflow. The pending queue is session-only and is cancelled when the editor closes; it does not resume after restart.
 
@@ -185,7 +193,7 @@ Transforms use meters and radians, with Y-up. Panorama images resolve relative t
 
 Switching to Drone keeps the current camera position and facing when clear, or looks for a nearby collision-free camera position. Switching to Walk looks for a floor and full capsule clearance at the current position, then within 3 meters horizontally. If no nearby standing position works, it tries the authored walking start. Walk stays unavailable if neither location is valid. Entering a Walk-only scene and fall recovery use the walking start. Switching to Viewpoints flies to the last visited valid viewpoint in that scene, or its starting/first viewpoint. Remembered views are session-only.
 
-Editor Preview/Edit keeps the camera pose. If the author has moved away from a viewpoint’s geometry, entering Preview keeps the new vantage point; select a saved viewpoint explicitly to use its authored navigation geometry. Initial scene loads still position the camera at the scene’s starting view. Thumbnail refresh is an explicit action and may move the camera to that starting view. Content bubbles use an info icon, scene links use a photograph icon, and viewpoint links use a camera icon. Glass uses a subtle neutral dark shade while keeping background colors visible.
+Editor Preview/Edit keeps the camera pose. If the author has moved away from a viewpoint’s geometry, entering Preview keeps the new vantage point; select a saved viewpoint explicitly to use its authored navigation geometry. Initial scene loads still position the camera at the scene’s starting view. Thumbnail refresh is an explicit action and may move the camera to that starting view. Content bubbles use an info icon, scene links use an outgoing photograph icon, and viewpoint links use stacked location frames. Glass uses a subtle neutral dark shade while keeping background colors visible.
 
 
 ### Scene navigation and unlisted views
@@ -208,9 +216,9 @@ Local packaging requires `npm run build:converter` once before `npm run package`
 
 A failed publishing step can be recovered through Actions → **Publish tested release** → **Run workflow**. Supply the existing version tag and the original build run ID. Publishing verifies that the tag matches the tested build commit, that the Windows packaging job passed, and that every downloadable file matches its SHA-256 manifest. It does not move tags or rebuild the application.
 
-## Bubble appearance and mouse capture (1.9.4)
+## Bubble appearance and mouse capture
 
-Tour & branding includes Bubble translucency (0% most opaque to 100% clear), Global bubble size (0.5–3× the default footprint), and Distance translucency. The distance effect gradually clears the glass farther from the camera: at 10 meters it applies half the selected effect, approaching the full effect at long range. The icon and border remain readable. Settings apply to content, scene-link and viewpoint-link bubbles in desktop, mobile and WebXR viewing.
+Tour settings include Bubble translucency (0% opaque to 100% clear), Global bubble size (0.5–3× the default footprint), and Distance fade. Distance fade hides the entire bubble farther from the camera; it is independent of the glass translucency. Settings apply to content, scene-link and viewpoint-link bubbles in desktop, mobile and WebXR viewing.
 
 Each bubble has a Size slider. 0 uses the global size; 1 doubles it; 2 triples it, up to 4 (five times global). Existing projects retain their original appearance. These optional preferences are saved in `bubbles: {translucency, size, distanceFade}` on the project and `size` on each hotspot; they survive save, reopening and export.
 
@@ -219,3 +227,11 @@ Walk paths smoothly steer the desktop/phone view toward travel while retaining t
 The supplied Google Material Symbols SVG paths are bundled locally (no font-service requests), with Apache-2.0 license and attribution in `licenses/` and `THIRD_PARTY.md`. The info, viewpoint and scene-link symbols have distinct shapes.
 
 Legacy content bubbles with empty references reconnect to their stable content ID or a unique unused content title when opened, recovered or exported. An empty bubble gets its own empty content page automatically; authors do not need to manage page links. Explicit broken scene/viewpoint destinations still need correction. Export includes only content used by bubbles, so unused legacy content does not block delivery; the working project retains it for the existing-content copy tool. Local link/embed files and imported HTML assets are included. Starting-view thumbnails ignore unused custom-image references, and validation/export resolve splat delivery settings consistently with the viewer.
+
+## Bubble visibility and rich content (v1.10)
+
+Tour settings separate glass translucency, whole-bubble distance fade, size and optional occlusion culling. At 0% translucency the bubble interior is opaque. Distance fade affects the icon, rim, glass and label together: higher strength hides bubbles sooner, with a displayed distance. Below 5% visibility a bubble no longer intercepts mouse, touch or XR rays. Selected editor bubbles remain visible for placement.
+
+**Hide obscured bubbles** is optional and defaults on. It uses a loaded collider and Spark's currently available streamed splats to check line of sight, with bounded work per frame and a surface tolerance. No extra splat scenes or files are loaded. Visibility can lag by a fraction of a second and reflects available LoD; thin surfaces or incomplete scans can affect results. Disable it in Tour settings independently of distance fade.
+
+Formatted text is stored as versioned rich JSON on text blocks; the plain text is retained for compatibility. Existing plain text, image/link/embed blocks and HTML pages remain readable. Popups and individual exported pages share the same safe renderer. Generated XR panels preserve readable headings/list text, images and links through native panels. The editor's rich-text libraries are bundled locally and excluded from the exported visitor runtime. Google icons are bundled SVG paths, including the chosen viewpoint and equirectangular panorama icons; no icon font is fetched.

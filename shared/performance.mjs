@@ -1,6 +1,7 @@
 import {z} from 'zod';
 const number=(min,max,value)=>z.number().finite().min(min).max(max).default(value);
 export const PerformanceSettingsSchema=z.object({
+ pagedExtSplats:z.boolean().default(false),
  pixelRatio:number(.5,2,1.5),lodSplatCount:z.number().int().min(0).max(8000000).default(0),lodSplatScale:number(.25,2,1),lodRenderScale:number(1,5,1),maxSh:z.number().int().min(0).max(3).default(3),minSortIntervalMs:number(0,200,0),sortRadial:z.boolean().default(true),minPixelRadius:number(0,3,0),maxPixelRadius:number(64,1024,512),maxStdDev:number(2,3,Math.sqrt(8)),minAlpha:number(0,.1,.5/255),coneFov0:number(0,180,90),coneFov:number(0,180,120),coneFoveate:number(.1,1,.4),behindFoveate:number(.05,1,.2),xrFoveation:number(0,1,1)
 }).strict().refine(s=>s.coneFov>=s.coneFov0,{message:'Outer detail angle must be at least the central angle.',path:['coneFov']});
 export const PerformancePresetSchema=z.object({format:z.literal('spark-tour-performance-preset'),version:z.literal(1),name:z.string().trim().min(1).max(80),settings:PerformanceSettingsSchema}).strict();

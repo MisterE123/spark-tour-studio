@@ -4,7 +4,8 @@ The MIT license in `LICENSE` covers Spark Tour Studio's original code.
 Dependencies retain their own copyright and license terms; they are not
 relicensed by this project.
 
-- Spark, Three.js, React, Zod, Recast Navigation, Electron and splat-transform:
+- Spark, Three.js, React, Zod, Recast Navigation, Electron, Tiptap OSS,
+  ProseMirror and splat-transform:
   MIT (with their included notices).
 - Google Material Symbols: Copyright Google LLC, Apache-2.0. The locally bundled
   info, viewpoint and scene vector paths are supplied Material Symbols, resized

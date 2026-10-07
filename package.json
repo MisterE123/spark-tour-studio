@@ -1,6 +1,6 @@
 {
   "name": "spark-tour-studio",
-  "version": "1.9.4",
+  "version": "1.10.0",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
@@ -17,6 +17,10 @@
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",
     "@sparkjsdev/spark": "2.3.1",
+    "@tiptap/extension-image": "3.31.4",
+    "@tiptap/pm": "3.31.4",
+    "@tiptap/react": "3.31.4",
+    "@tiptap/starter-kit": "3.31.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "recast-navigation": "0.43.1",

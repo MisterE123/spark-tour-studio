@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';import path from 'node:path';import {createHash} from 'node:crypto';import {zipSync} from 'fflate';
+import {execFileSync} from 'node:child_process';
 if(process.platform!=='win32')throw Error('Build release archives on Windows.');
 const {version}=JSON.parse(await fs.readFile('package.json','utf8'));
 if(!/^\d+\.\d+\.\d+(?:-[\w.-]+)?$/.test(version))throw Error('Invalid package version.');
@@ -14,4 +15,6 @@ const names=[`Spark-Tour-Studio-${version}.exe`,'Launch-Tour.exe',path.basename(
 let checksums='';for(const name of names){const bytes=await fs.readFile(path.join('artifacts',name));checksums+=createHash('sha256').update(bytes).digest('hex')+'  '+name+'\n';}
 await fs.writeFile('artifacts/SHA256SUMS.txt',checksums);
 await fs.copyFile('LICENSE','artifacts/LICENSE');await fs.copyFile('THIRD_PARTY.md','artifacts/THIRD_PARTY.md');
+execFileSync(process.execPath,['scripts/release-zip.mjs','pack','artifacts',version],{stdio:'inherit'});
+execFileSync(process.execPath,['scripts/release-zip.mjs','verify',`artifacts/Spark-Tour-Studio-${version}-windows-x64.zip`,version],{stdio:'inherit'});
 console.log('Prepared Windows editor, launcher, web runtime and SHA-256 checksums.');

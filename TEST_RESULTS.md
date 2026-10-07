@@ -213,3 +213,10 @@ Final portable package: release/Spark Tour Studio 1.9.1.exe; 157884786 bytes; SH
 Extended packaged integration passes all-unlisted ordinary scene entry, missing-collider fallback and invalid-walking-start fallback from active Walk (test-output/scene-navigation-1791338461167).
 
 Final portable package: release/Spark Tour Studio 1.9.2.exe; 157880592 bytes; SHA-256 7E1932C3D7DC7CA998F06338196100AE28092112C5699DD51095CF521036F6B2.
+
+## v1.9.3 local build and ZIP delivery (2026-10-07)
+
+- Local build and all 39 tests pass. Packaged editor version and MIT license verified; startup/window-close smoke test exits with code 0 (test-output/close-1791381083867). Standalone launcher passes paths-with-spaces, no-Node-in-PATH, ranges, HTTPS sharing, QR and shutdown checks.
+- Local portable editor: release/Spark Tour Studio 1.9.3.exe; 157883033 bytes; SHA-256 5D10F2A2B87743C5425B112B924B111662C65725F996FBE0FF4C9A7C55D4C281.
+- Complete Windows ZIP: artifacts/Spark-Tour-Studio-1.9.3-windows-x64.zip; 255830039 bytes; SHA-256 25B43B6C10936EE0596B7D570C6D4751F3905B657B93457A687E421A53055448. ZIP contents and internal checksums verified. Includes editor, launcher, web runtime archive, licenses and a short readme; application structure is unchanged.
+- GitHub workflows now deliver a single Windows ZIP. Version changes are built locally and pushed with matching new tags; GitHub release results are checked by the user. No GitHub result is claimed for this packaging update.

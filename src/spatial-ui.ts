@@ -14,4 +14,16 @@ export function updateBadge(root:THREE.Mesh,symbol:string,title:string,glassOpac
  root.userData.badgeTitle=title;root.userData.glassOpacity=glassOpacity;
 }
 export function badgeVisibility(root:THREE.Object3D,visibility:number){root.visible=visibility>0;root.userData.interactive=visibility>=.05;root.traverse(child=>{if(child instanceof THREE.Mesh){const material=child.material as THREE.MeshBasicMaterial;material.opacity=visibility;}});}
-export function panel(text:string,width:number,height:number,bg='rgba(0,0,0,.22)',icon?:IconName){const mesh=new THREE.Mesh(new THREE.PlaneGeometry(width,height),new THREE.MeshBasicMaterial({map:textTexture(text,768,Math.max(100,Math.round(768*height/width)),bg,Math.round(34*1.65/width),icon),side:THREE.FrontSide,transparent:true,depthTest:false,depthWrite:false,toneMapped:false}));mesh.renderOrder=100;return mesh;}
+export function panel(text:string,width:number,height:number,bg='rgba(0,0,0,.22)',icon?:IconName){const mesh=new THREE.Mesh(new THREE.PlaneGeometry(width,height),new THREE.MeshBasicMaterial({map:textTexture(text,768,Math.max(32,Math.round(768*height/width)),bg,Math.round(34*1.65/width),icon),side:THREE.FrontSide,transparent:true,depthTest:false,depthWrite:false,toneMapped:false}));mesh.renderOrder=100;return mesh;}
+// Fit the image plane itself. Assigning a photograph to a fixed menu rectangle
+// stretches it, and leaves its caption inaccessible when replacing a text map.
+export function imagePanel(url:string,width:number,height:number,valid:()=>boolean=()=>true){
+ const mesh=panel('Loading image…',width,height,'rgba(0,0,0,.12)','image_arrow_up');mesh.userData.imageState='loading';
+ const fail=()=>{if(!valid()||!mesh.parent)return;const material=mesh.material;material.map?.dispose();material.map=textTexture('Image unavailable',768,Math.round(768*height/width),'rgba(0,0,0,.12)',34,'error');material.needsUpdate=true;mesh.userData.imageState='error';};
+ if(!url){queueMicrotask(fail);return mesh;}
+ new THREE.TextureLoader().load(url,texture=>{
+  if(!valid()||!mesh.parent){texture.dispose();return;}
+  const image=texture.image as HTMLImageElement,w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;if(!w||!h){texture.dispose();fail();return;}
+  const fit=Math.min(width/w,height/h);mesh.geometry.dispose();mesh.geometry=new THREE.PlaneGeometry(w*fit,h*fit);texture.colorSpace=THREE.SRGBColorSpace;mesh.material.map?.dispose();mesh.material.map=texture;mesh.material.needsUpdate=true;mesh.userData.imageState='ready';mesh.userData.imageAspect=w/h;
+ },undefined,fail);return mesh;
+}

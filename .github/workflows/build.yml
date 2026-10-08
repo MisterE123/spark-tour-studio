@@ -84,6 +84,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/hemisphere-background-check.mjs
+      - name: Check live alignment and XR content/navigation polish
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/xr-polish-check.mjs
       - name: Check streamed precision and queued scene replacement
         env:
           SPARK_PACKAGED: '1'

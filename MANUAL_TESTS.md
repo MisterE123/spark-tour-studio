@@ -1,5 +1,12 @@
 # Manual acceptance
 
+## v1.11.2 live edits and XR polish
+
+- With the collision wireframe enabled, edit scene/collider position, rotation and scale, relink the GLB and undo. Confirm the overlay remains visible, the RAD does not reload, camera stays in place, and Walk physics follows the new geometry.
+- On Quest, enter directly into the tour, open the compact menu with grip/wrist, and confirm ray targets and text are comfortable. Select viewpoints across walls in Drone and Walk; a temporary transition fade must clear. Deliberately lean through geometry and confirm the physical-head fade still works.
+- Open a bubble containing text, wide and tall images, rich-text images and several blocks. Check every page via triggers and left stick, correct aspect ratios/captions, disabled boundary buttons, and usable controls after a failed image request. Rapidly close/page while images load.
+- Search-jump to information bubbles in another scene on desktop, phone and Quest. Confirm a nearby valid position facing the bubble, with physical headset pitch/roll unchanged. Check the full-screen cover behind the glass title/search panels on short/tall windows and mobile. The directory should initially show Scenes in tour order; select Views/Bubbles/All to search other content.
+
 ## v1.11.1 hemisphere backgrounds
 
 - Open an existing solid-color scene and confirm both hemisphere pickers initially show its old color. Set distinct upper/lower colors and look above, below and across the horizon; check a soft transition, phone layout and both Quest eyes.

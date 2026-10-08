@@ -42,6 +42,7 @@ function Viewer(){
  const modes=<div className="mode-tabs" role="group" aria-label="Movement mode">{current?.modes.map(m=><button key={m} title={modeName[m]} aria-pressed={mode===m} className={mode===m?'active':''} onClick={()=>rt?.setMode(m)}><Icon name={modeIcon[m]}/>{modeName[m]}</button>)}</div>;
  return <main className="viewer"><Stage onReady={setRt}/>{started&&<SceneLoading runtime={rt}/>}
   {!started?<section className="title-screen">
+   <div className="title-art title-backdrop" role="img" aria-label="Tour cover" style={titleImage?{backgroundImage:'url('+new URL(titleImage,base).href+')'}:undefined}>{!titleImage&&<><div className="orb orb-one"/><div className="orb orb-two"/><div className="orbit"/></>}</div>
    <div className="title-copy"><div className="eyebrow">SPARK TOUR / SPATIAL EXPERIENCES</div><h1>{project?.title||'A new perspective.'}</h1><p className="lead">{project?.description||'Explore places as if you were there.'}</p>
     {loadError?<div className="notice error">{loadError}<p><a href="editor.html">Open editor information</a></p></div>:<>
      <Field label="Start exploring"><select value={sceneId} onChange={e=>setSceneId(e.target.value)}>{project?.scenes.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
@@ -49,7 +50,7 @@ function Viewer(){
     </>}
     <InspectorSection title="Controls help" icon="help"><ControlsHelp/></InspectorSection><div className="subtle">Powered by Spark · Gaussian splat experiences</div>
    </div>
-   <div className="title-side"><div className="title-art" style={titleImage?{backgroundImage:'url('+new URL(titleImage,base).href+')'}:undefined}>{!titleImage&&<><div className="orb orb-one"/><div className="orb orb-two"/><div className="orbit"/></>}</div>{project&&!loadError&&<TourDirectory project={project} base={base} disabled={!rt} onVisit={visit}/>}</div>
+   <div className="title-side">{project&&!loadError&&<TourDirectory project={project} base={base} disabled={!rt} onVisit={visit}/>}</div>
   </section>:<>
    <div className="viewer-header"><div><small>{project?.title}</small><h2>{current?.name}</h2></div><div className="actions">
     <select title="Choose scene" aria-label="Scene" value={sceneId} onChange={e=>{setRequested(null);void rt?.selectScene(e.target.value);}}>{project?.scenes.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select>

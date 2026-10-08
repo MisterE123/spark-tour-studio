@@ -5,10 +5,10 @@ import {Icon} from './icons';
 type DirectoryEntry=TourDestination&{sceneName:string;label:string;description:string;thumbnail:string;bubbleKind?:'page'|'scene'|'viewpoint'};
 
 export function TourDirectory({project,base,disabled,onVisit}:{project:Project;base:string;disabled?:boolean;onVisit:(destination:TourDestination)=>void}){
- const [query,setQuery]=useState(''),[kind,setKind]=useState('all');
+ const [query,setQuery]=useState(''),[kind,setKind]=useState('scene');
  const entries=useMemo(()=>tourDirectory(project) as DirectoryEntry[],[project]),results=useMemo(()=>searchTour(entries,query,kind) as DirectoryEntry[],[entries,query,kind]);
  return <section className="tour-directory" aria-label="Explore tour contents">
-  <header><div className="eyebrow">FIND YOUR WAY</div><h2>Places & stories</h2></header>
+  <header><div className="eyebrow">FIND YOUR WAY</div><h2>{kind==='scene'?'Choose a scene':'Places & stories'}</h2></header>
   <label className="directory-search"><Icon name="search"/><input type="search" aria-label="Search tour contents" placeholder="Search scenes, views or stories…" value={query} onChange={e=>setQuery(e.target.value)}/></label>
   <div className="directory-filters" role="group" aria-label="Search category">{[['all','All'],['scene','Scenes'],['viewpoint','Views'],['bubble','Bubbles']].map(([value,label])=><button key={value} aria-pressed={kind===value} onClick={()=>setKind(value)}>{label}</button>)}</div>
   <div className="directory-results" role="list" aria-label="Tour contents">

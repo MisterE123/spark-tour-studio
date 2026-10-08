@@ -2,6 +2,8 @@
 // These vectors are part of the local application bundle; they never load a font or remote resource.
 import {bubbleIcons} from './bubble-icons';
 export const materialSymbols={
+  chevron_left:'M560-240 320-480l240-240 56 56-184 184 184 184-56 56Z',
+  chevron_right:'m400-240-56-56 184-184-184-184 56-56 240 240-240 240Z',
   chat_info:bubbleIcons.info,
   photo:bubbleIcons.viewpoint,
   image_arrow_up:bubbleIcons.scene,

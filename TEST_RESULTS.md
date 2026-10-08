@@ -1,5 +1,17 @@
 # Verification results
 
+## v1.11.2 live alignment and XR polish (2026-10-07)
+
+- All 76 unit/integration tests and the TypeScript production build passed.
+- Packaged editor checks passed for live one-degree splat rotation, collider alignment and matching physics vertices, wireframe visibility, collider replacement/undo, camera/streamed-mesh continuity, preview, save and portable folder export. The existing scene ordering, saved project, 120-bubble browser, rich content, help/version and distribution checks also passed.
+- Exported viewer checks passed with external networking blocked: full-screen cover behind glass title/search panels, Scenes selected initially in authored order, desktop/mobile layouts, scene/view/bubble search jumps, failed destination retry, loading cover/progress and same renderer/session across transitions.
+- Actual Three controller rays and trigger events reached all five synthetic content sections, including standalone and rich-text images. Left-thumbstick paging, page count, disabled boundary controls, retained captions and failed-image navigation passed. Wide/portrait image geometry retained natural aspect ratios; WebGL pixel sampling confirmed the photograph appeared in the card. Closing a browser popup clears the runtime selection; VR entry discards stale content and starts with its menu closed.
+- A 4000×1848 JPEG from the supplied tour loaded through its saved external-source mapping and rendered with the correct aspect ratio. The original project was only read, and its media was not published.
+- Simulated tracked-head checks preserved local head position/rotation and XR session identity while facing a searched bubble. Viewpoint selection and jumps across a vertical collision mesh cleared the transition/head-crossing overlay. Existing compact/extended RAD precision changes, rapid destination changes and resource/session restoration tests passed.
+- Final Windows portable EXE cold-started with version 1.11.2 and the final bundled runtime, then exited with code 0 on ordinary window close. Release ZIP contents and embedded checksums passed verification.
+- Local EXE: 172,780,849 bytes; SHA-256 `CB140F730CF44B6234DD3CFB0D8F7A919646CD9B54A779210C1AA3F7AEED8F1E`. Local Windows ZIP: 270,933,715 bytes; SHA-256 `E3E0D2DAF390020D24C83706663ECF6FF4438BCBB5CC3BB5D5A520E315447EC9`.
+- These XR checks use a simulated session and software WebGL rendering. Real Quest 3/3S controller comfort, stereo presentation and physical head tracking still require the headset checks in MANUAL_TESTS.md.
+
 Validated on Windows x64, 2026-09-25.
 
 - TypeScript production build: passed; Spark 2.2.0 and runtime dependencies bundled locally.

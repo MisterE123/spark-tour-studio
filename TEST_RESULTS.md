@@ -1,5 +1,15 @@
 # Verification results
 
+## v1.11.3 saved performance controls (2026-10-08)
+
+- All 78 unit/integration tests and the TypeScript production build passed. Added checks validate custom tour settings, old-project defaults, invalid settings, unmodified named snapshots and both export modes.
+- The isolated editor check exercised all 17 tuning fields, including ExtSplats and radial sorting. Settings survived panel/tab navigation, recoverable autosave, ordinary Save and renderer reload, Save As, preset save/copy/import/export/deletion, undo/redo and switching to a different project. No named-preset save or separate default action was required to retain adjustments.
+- Portable and referenced folder exports retained the resolved profile in tour configuration and the active preset exchange copy. Cold exported viewers with all external networking blocked retained every field through scene transitions. Actual foreground/background streaming pools preserved the synthetic RAD's `1024.125` float32 center rather than its compact `1024` representation.
+- The existing precision regression passed foreground/background pooling, rapid toggles, failed/delayed scene requests, camera/mode/physics continuity, and unchanged renderer/canvas/simulated XR session identity. Real headset behavior remains a manual check.
+- Repeated the full persistence/export check with the final packaged Windows editor. Visitor preset selection and advanced tuning applied live and survived scene changes without rewriting authored defaults; SH changes marked the live mesh for regeneration.
+- Final portable EXE cold-started with version 1.11.3 and the final bundled runtime, then exited with code 0 on ordinary close. Release ZIP contents and embedded checksums passed verification. Source audit found no private configuration, credentials, large data or generated binaries among 151 source files.
+- Local EXE: 172,790,272 bytes; SHA-256 `17AB5C5A27B32A9EC4B2DD737E0E8FF7BDF1A5AAB6F5CC1AE60B21CD7483B9DA`. Local Windows ZIP: 270,943,257 bytes; SHA-256 `8E78E5A0DD8870B375285527E43B4F6AB036EEFAE6CBCE71F3F331E8F248E4C7`.
+
 ## v1.11.2 live alignment and XR polish (2026-10-07)
 
 - All 76 unit/integration tests and the TypeScript production build passed.

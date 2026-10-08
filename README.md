@@ -145,15 +145,15 @@ Desktop navigation: left-drag looks around; right-drag pans in the camera plane;
 
 ## Performance presets (v1.5)
 
-Open **Tools → Performance presets**. Tune settings against the live FPS/splat-count readout, name the result, then choose **Save preset** or **Save as new preset**. **Use as tour default** sets the initial viewer profile; Save the project to persist it. Presets participate in undo/redo and autosave. Import/export buttons exchange standalone JSON preset files between projects.
+Open **Tools → Performance presets**. Every adjustment becomes part of the tour immediately and is included in export; use the normal project **Save** to retain it after reopening. Selecting or importing a preset sets the tour's starting profile. Controls participate in undo/redo and recoverable autosave. Name the result and choose **Save preset** or **Save as new preset** to keep a reusable snapshot. Import/export buttons exchange standalone JSON preset files between projects.
 
-The selected preset, unfinished name and live adjustments (including ExtSplats) survive closing settings and switching tabs. Selecting a stored preset, changing the saved tour default or opening a project loads its stored values. Save a preset and the project to keep adjustments after restarting.
+The selected preset, unfinished name and adjustments (including ExtSplats) survive closing settings and switching tabs. Custom adjustments are saved independently of named presets, so checking ExtSplats does not require a separate preset-save or default-setting step. Selecting a stored preset replaces custom adjustments with its stored values. Project Save, Save As, and autosave recovery retain all performance controls.
 
 Viewer Settings includes all saved presets and Advanced performance controls. Visitor changes last across scene transitions without rewriting the project. Resolution cap applies to desktop rendering; XR foveation is a headset/browser hint. The preset controls do not change source splats, and rendered splat targets are not hard memory limits.
 
 **Precision & storage → Extended splat precision (ExtSplats)** enables Spark's 32-byte streamed storage with float32 centers for foreground and background RAD. It can avoid coordinate banding introduced by the compact 16-byte runtime representation, at higher GPU memory/bandwidth cost. It is saved as `pagedExtSplats` in performance presets and defaults off. Changing it reloads the streamed resources while keeping the camera, canvas, movement mode and WebXR session. It cannot recover precision already discarded when creating the source file. Spark documents the distinction between loaded and paged precision in [Handling huge coordinates](https://sparkjs.dev/docs/lod-getting-started/#handling-huge-coordinates).
 
-See [the versioned preset specification](specs/performance/README.md), [JSON Schema](specs/performance/preset.schema.json), and [complete example](specs/performance/balanced.performance.json). Export includes copies of each preset and the specification. Runtime code, WASM and workers remain bundled locally.
+See [the versioned preset specification](specs/performance/README.md), [JSON Schema](specs/performance/preset.schema.json), and [complete example](specs/performance/balanced.performance.json). Export includes copies of each named preset, the active tour settings at `performance/active/preset.performance.json`, and the specification. The viewer uses the settings saved in `config/tour.json`. Runtime code, WASM and workers remain bundled locally.
 
 ## Scene import queue
 

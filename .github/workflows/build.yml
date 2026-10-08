@@ -72,10 +72,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/ui-polish-check.mjs
-      - name: Check performance settings survive panel navigation
+      - name: Check saved performance settings and exported precision
         env:
           SPARK_PACKAGED: '1'
-        run: node scripts/performance-state-check.mjs
+        run: node scripts/performance-persistence-check.mjs
       - name: Check tour directory, scene loading and distribution help
         env:
           SPARK_PACKAGED: '1'

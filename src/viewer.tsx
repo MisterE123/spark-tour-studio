@@ -1,6 +1,6 @@
 import {ViewerPerformance} from './performance-editor';
 import {sceneThumbnail,listedViewpoints} from '../shared/viewpoints.mjs';
-import {defaultPerformance} from '../shared/performance.mjs';
+import {tourPerformanceSettings} from '../shared/performance.mjs';
 import React,{useState,useEffect} from 'react';
 import {createRoot} from 'react-dom/client';
 import {TourRuntime} from './runtime';import {SceneLoading} from './scene-loading';
@@ -32,7 +32,7 @@ function Viewer(){
   ]).then(([p,h])=>{const parsed=ProjectSchema.parse(p) as Project;const issues=validateProject(parsed);if(issues.length)throw Error(issues.join('\n'));setProject(parsed);setHosting(HostingSchema.parse(h));setSceneId(parsed.startScene);}).catch(e=>setLoadError(String(e)));
  },[]);
  useEffect(()=>{if(!rt)return;rt.onStatus=(s,e)=>{setStatus(s);setError(!!e);};rt.onScene=id=>{setSceneId(id);setRequested(value=>value?.sceneId===id?value:null);};rt.onViewpoint=setViewpointId;rt.onMode=setMode;rt.onPage=setPage;},[rt]);
- useEffect(()=>{if(rt&&project){const library=project.performance||defaultPerformance();rt.applyPerformance(library.presets.find(p=>p.id===library.defaultPresetId)!.settings);}},[rt,project]);
+ useEffect(()=>{if(rt&&project)rt.applyPerformance(tourPerformanceSettings(project.performance));},[rt,project]);
  const current=project?.scenes.find(s=>s.id===sceneId);
  const selectedView=current?.viewpoints.find(v=>v.id===viewpointId);
  const titleImage=project?.cover||(current?sceneThumbnail(current):'');

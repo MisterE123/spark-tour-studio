@@ -1,5 +1,10 @@
 # Manual acceptance
 
+## v1.11.4 shared performance settings
+
+- Save a tour with ExtSplats enabled as a custom adjustment while its named Balanced preset has ExtSplats disabled. Export, launch and share over HTTPS. On Quest 3, open Settings immediately on a cold visit: performance controls should wait for configuration, then show ExtSplats enabled. Change Resolution cap or Detail multiplier and verify precision stays enabled. Repeat after a scene change and reload.
+- In VR, change quality through the controller menu, then inspect browser performance settings after exiting VR. The controls should reflect the current quality without reverting precision. Compare coordinate banding against compact storage on the actual large capture.
+
 ## v1.11.2 live edits and XR polish
 
 - With the collision wireframe enabled, edit scene/collider position, rotation and scale, relink the GLB and undo. Confirm the overlay remains visible, the RAD does not reload, camera stays in place, and Walk physics follows the new geometry.

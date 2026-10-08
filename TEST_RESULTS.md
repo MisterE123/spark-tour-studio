@@ -1,5 +1,17 @@
 # Verification results
 
+## v1.11.4 network performance synchronization (2026-10-08)
+
+- Reproduced a cold-load timing bug: Settings opened before tour configuration retained constructor defaults while the renderer applied the saved ExtSplats profile. Editing an unrelated control then disabled precision. Viewer controls now wait for configuration and subscribe to live runtime changes.
+- Read the supplied WIP tour export without changing its project or assets: its custom profile enables ExtSplats while the named Balanced snapshot disables it. The synthetic network regression uses this same profile relationship without copying private capture or media.
+- All 78 unit/integration tests and the TypeScript production build passed. Existing precision checks passed actual float32 foreground/background streaming, rapid changes, failed/delayed destinations, camera/mode/physics continuity and unchanged renderer/canvas/simulated XR session identity.
+- The real standalone launcher served unchanged configuration over loopback HTTP and HTTPS on a private interface, with Node absent from PATH. Cold desktop and Quest-style touch/UA browser checks passed delayed configuration, unrelated tuning, externally applied runtime changes, preset selection, scene changes and reload. Both streamed splat layers retained their `1024.125` float32 center and shared their precision pool. External requests were blocked, and launcher shutdown exited cleanly.
+- The final packaged editor passed all 17 fields through tabs, autosave recovery, ordinary Save/reload, Save As, named preset import/export/deletion, undo/redo and both folder exports. Cold exported viewers retained precision and settings through scene changes with external requests blocked. The check now waits for preset export completion and handles a not-yet-created Save As file; an earlier run exposed those timing assumptions.
+- Refreshed only the supplied export's viewer entry and hashed runtime bundles. Its original entry page was backed up under the private `.spark-viewer-backups` folder and original hashed assets retained for rollback. Tour/hosting configuration remained byte-identical. A direct HTTPS check of the refreshed six-scene export applied its complete saved profile after delayed loading and retained ExtSplats when another control changed.
+- Final portable EXE cold-started with version 1.11.4 and the final bundled UI, then exited with code 0 on ordinary close. Release ZIP contents and embedded checksums passed verification. The source audit found no private state, credentials, large capture files or generated binaries among 152 source files.
+- Local EXE: 172,783,634 bytes; SHA-256 `FEC13EF1413F3F7D742130A7D0C60441630E2854ABA309722F5D6BD9DC15CE72`. Local Windows ZIP: 270,936,730 bytes; SHA-256 `A2D0E55DC1317A7D9FC50F715EA90030BB416B1BD1396EBA5C6F1F670C3B54B0`.
+- The Quest-style browser check runs on desktop software WebGL. A real Quest 3 browser and physically separate network device remain manual acceptance tests.
+
 ## v1.11.3 saved performance controls (2026-10-08)
 
 - All 78 unit/integration tests and the TypeScript production build passed. Added checks validate custom tour settings, old-project defaults, invalid settings, unmodified named snapshots and both export modes.

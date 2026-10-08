@@ -68,6 +68,8 @@ jobs:
         run: node scripts/bubble-runtime-check.mjs
       - name: Check precision reloads and persistent XR tracking
         run: node scripts/extended-precision-check.mjs
+      - name: Check cold network settings and shared HTTPS precision
+        run: node scripts/network-performance-check.mjs
       - name: Check editor panels, rich content and portable export
         env:
           SPARK_PACKAGED: '1'

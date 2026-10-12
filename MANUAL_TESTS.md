@@ -1,5 +1,12 @@
 # Manual acceptance
 
+## v1.12 optional Git history
+
+- Enable history for a tour with external RAD/chunk, image, collider and custom HTML references. Save a named version and confirm the local copy includes required files while the original assets remain intact. On a machine without Git, ordinary editing/export must remain available; install or choose Git to enable history.
+- Edit annotations, add a scene and save another version. Compare and restore the earlier version with additional unsaved changes. Confirm a checkpoint and restore commit are appended, later history remains recoverable, and historical scene bytes render after restore. Repeat after moving/cloning the project and deleting the original external asset locations.
+- Use an external Git client to stage an unrelated file, then save a tour version in the editor. Confirm that file remains staged and outside the tour commit. Set up GitHub/GitLab remotes, including SSH and subgroup URLs, and push manually with your own client. Existing remotes must not be silently replaced.
+- On a large real tour, inspect the GitHub Pages warning in Export and Hosting & delivery. Compare local portable, CDN-hosted and omitted-splat choices. Confirm missing/remote assets are marked unmeasured, the EXE is excluded from website size, and the warning does not block Windows/offline export.
+
 ## v1.11.4 shared performance settings
 
 - Save a tour with ExtSplats enabled as a custom adjustment while its named Balanced preset has ExtSplats disabled. Export, launch and share over HTTPS. On Quest 3, open Settings immediately on a cold visit: performance controls should wait for configuration, then show ExtSplats enabled. Change Resolution cap or Detail multiplier and verify precision stays enabled. Repeat after a scene change and reload.

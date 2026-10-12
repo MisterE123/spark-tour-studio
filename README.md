@@ -47,6 +47,18 @@ Drag either panel divider to resize it; the dividers also accept arrow keys. Hid
 
 Undo/redo covers tour edits. Autosave recovery is offered when reopening a project. Original assets are not deleted when removing scenes. Relink missing assets in the scene/content inspectors. `.sources.json` records authoring-only external file locations; it is not exported.
 
+## Optional tour Git history (v1.12)
+
+Open **Tools → Tour version history** to enable local Git for a project. The editor detects installed Git 2.30 or newer; use **Choose git.exe…** if necessary. Git is optional and is not required by exported viewers. This release uses your installed Git rather than redistributing a Git runtime.
+
+**Save version** saves current editor changes and creates a named commit. Ordinary Save and autosave remain independent. Local RADs and companion chunks, colliders, media and imported custom-page assets are copied into the project on the first version that uses them. Their project references stay stable; original source files are preserved. Remote assets remain URLs and their remote contents are not backed up. Git ignores machine-specific source mappings, recovery copies, logs, raw PLY/training inputs and executable/archive outputs.
+
+Select a version to compare its tour data with the current working tour. **Restore selected version** saves current edits as a checkpoint, restores the chosen files, and creates a new restore commit without rewriting later history. Unrelated staged files are not included in editor-created tour commits. Refresh the panel after using an external Git client. Disable history to hide the operations while retaining `.git` and existing commits on disk. Save As copies a regular project repository; copies of externally linked Git worktrees omit the `.git` pointer rather than linking the new folder back to the old checkout.
+
+Under **Repository & remote setup**, enter a GitHub/GitLab HTTPS or SSH repository URL. Existing remotes are preserved unless explicitly edited. The helpers open each provider's new-repository page; repository creation, authentication and pushes stay with your browser/Git client. No network Git commands run in the editor. Each tour's repository is separate from the Spark Tour Studio application source repository.
+
+Export, Hosting & delivery, and the history panel's Hosting size section estimate the published website's size, including local RAD companions, media, colliders, generated pages and bundled runtime files. Above 1 GB, the editor warns that GitHub Pages needs an alternative website host or separately hosted splats. Missing/remote assets are identified as unmeasured, so the estimate is a lower bound in those cases. Files above GitHub's 100 MiB ordinary Git limit are noted without preventing local history or export. Git metadata and history preferences are excluded from exported sites and HTTP serving.
+
 ## Navigation
 
 - **Viewpoints:** saved photosphere, orbit or slider views, with smooth camera transitions.

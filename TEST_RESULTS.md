@@ -1,5 +1,16 @@
 # Verification results
 
+## v1.12 optional local tour Git history (2026-10-12)
+
+- All 84 unit/integration tests and the TypeScript production build passed. Real disposable Git repositories verified external RAD/chunk/media capture, reopening a clone after removing original asset locations, annotation changes, added-scene restoration with literal space/bracket filenames, checkpoint/restore commits, disabled history and preservation of unrelated staged changes.
+- GitHub/GitLab HTTPS and SSH remote setup preserves existing remotes unless explicitly updated. Invalid credential-bearing URLs and unsafe manifests are rejected. No remote Git commands or authentication ran in these checks.
+- Website estimates include RAD companions and generated content. Virtual large-chunk sizes exercised the 1 GB Pages warning, 100 MiB ordinary-Git file notice, remote-asset lower-bound reporting and omitted-splat choices without allocating GB files. Git metadata and history preferences were denied by HTTP serving; custom-page capture excluded private Git state.
+- The isolated source editor passed enable/disable, named versions, comparison, unsaved checkpoint/restore, installed-Git selection, provider helper URLs, manual remote setup, Save As with history, original-source removal, portable export and the Pages warning. History and warning screenshots were inspected. The packaged workflow also verified keeping edits made during an active Git save and waiting for restore to finish before closing, without overwriting the restored project. Cloned tours can save versions before a new machine configures its Git author; the fallback is local to that project.
+- The real rebuilt SEA launcher passed cold HTTP/private-interface HTTPS viewing and actual extended-precision foreground/background streaming with external requests blocked. This remains a desktop Quest-style profile, not real headset acceptance.
+- This release uses installed Git 2.30 or newer, with automatic detection and an executable picker. Ordinary editing and exported viewing do not depend on Git. Large real-capture history performance and user-authenticated pushes remain manual acceptance checks.
+- Final packaged editor repeated the full Git workflow, including concurrent edits and closing during restore. Final portable EXE cold-started with version 1.12.0, the expected UI bundle and a Git-helper source hash matching the tested source, then exited with code 0 on ordinary close. The Windows ZIP contents and embedded checksums passed verification. Source audit found no private state, credentials, large assets or generated binaries among 159 source files.
+- Local EXE: 172,793,288 bytes; SHA-256 `39AEDF5187C71B35FAA41F392DD4FD733BD3805261F3541FA047335269B2086B`. Local Windows ZIP: 270,949,577 bytes; SHA-256 `FE3723970E1DBCA76C656B44DC7C112A948413BA317EDC8AC3C253519DBA30BC`.
+
 ## v1.11.4 network performance synchronization (2026-10-08)
 
 - Reproduced a cold-load timing bug: Settings opened before tour configuration retained constructor defaults while the renderer applied the saved ExtSplats profile. Editing an unrelated control then disabled precision. Viewer controls now wait for configuration and subscribe to live runtime changes.

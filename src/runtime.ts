@@ -10,6 +10,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import type { Project,TourScene,Hosting,Mode,Viewpoint,Hotspot,Page,Transform,Vec3,TourDestination } from './model';
 import {flyMovement,nearbyFlyPosition} from '../shared/flying.mjs';
 import { characterMovement,nearbyWalkingFeet } from '../shared/walking.mjs';
+import {collisionVertices} from '../shared/collision-vertices.mjs';
 import { sceneUrl } from '../shared/project.mjs';
 import { assertPagedRad } from '../shared/rad.mjs';
 import {xrMotion,stick} from '../shared/xr-controls.mjs';
@@ -128,7 +129,7 @@ export class TourRuntime {
    if(mesh.paged){const paged=mesh.paged,decode=paged.fetchDecodeChunk.bind(paged);let reported=false;paged.fetchDecodeChunk=async chunk=>{try{return await decode(chunk);}catch(e){if(!reported&&token===this.generation&&!this.dead){reported=true;streamError=e;paged.abortController.abort();mesh.visible=false;this.report(`Streaming failed: ${String(e)}. Retry the scene.`,true);}throw e;}};}
    await mesh.initialized;const rad=await mesh.paged?.getRadMeta();if(token!==this.generation||this.dead)return;if(rad)assertPagedRad(rad.meta);this.content.add(mesh);completed++;progress('Preparing background…');
    await this.setBackground(this.active?.id===s.id?this.active.background:s.background);if(token!==this.generation||this.dead)return;
-   if(s.background?.type&&s.background.type!=='solid')completed++;const latest=this.active!;if(latest.collider){progress('Preparing walking surfaces…');await this.loadCollider(latest,token);completed++;}if(token!==this.generation||this.dead)return;progress('Opening scene…');
+   if(s.background?.type&&s.background.type!=='solid')completed++;const latest=this.active!;if(latest.collider){await this.loadCollider(latest,token,progress);completed++;}if(token!==this.generation||this.dead)return;progress('Opening scene…');
    if(streamError)throw streamError;this.rebuildHotspots();if(!this.editing)this.audio.setScene(s.audio,this.base);this.jump(viewpoint||s.entry,false);this.report('');const available=s.modes.filter(mode=>mode!=='explore'||!!this.world);
    const mode=available.includes(previousMode)?previousMode:available.includes('jumps')?'jumps':available[0];
    if(mode==='jumps'){this.mode=mode;this.onMode(mode);this.refreshHud();}
@@ -147,16 +148,17 @@ export class TourRuntime {
  }
  private clearPhysics(){this.routes.dispose();this.world?.free();this.world=undefined;this.body=undefined;this.character=undefined;this.capsule=undefined;this.lastSafeHead=undefined;this.bubbleOcclusion=new WeakMap();}
  private clearCollider(){++this.colliderGeneration;this.colliderSource='';this.clearPhysics();if(this.collider){release(this.collider);this.collider=undefined;}}
- private async loadCollider(s:TourScene,token:number){
+ private async loadCollider(s:TourScene,token:number,progress:(phase:string)=>void=()=>{}){
   const colliderToken=++this.colliderGeneration;this.colliderSource=s.collider;
   await physicsReady;if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead)return;
-  const gltf=await new GLTFLoader().loadAsync(new URL(s.collider,this.base).href);if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead){release(gltf.scene);return;}
+  progress('Loading collision mesh…');const gltf=await new GLTFLoader().loadAsync(new URL(s.collider,this.base).href,event=>progress(event.lengthComputable?'Loading collision mesh · '+Math.round(event.loaded/event.total*100)+'%':'Loading collision mesh…'));if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead){release(gltf.scene);return;}
+  progress('Preparing collision physics…');await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead){release(gltf.scene);return;}
   const root=gltf.scene;apply(root,this.active!.colliderTransform);this.content.add(root);this.collider=root;
   root.traverse(o=>{if(!(o instanceof THREE.Mesh))return;for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();o.material=new THREE.MeshBasicMaterial({color:0x77efd3,wireframe:true,transparent:true,opacity:.45});});root.visible=this.colliderVisible;this.rebuildPhysics();
  }
  private rebuildPhysics(){
   const position=this.body?.translation()||{x:this.rig.position.x,y:this.rig.position.y-.85,z:this.rig.position.z},root=this.collider;if(!root)return;this.clearPhysics();this.content.updateMatrixWorld(true);this.world=new RAPIER.World({x:0,y:-9.81,z:0});
-  const navigationParts:{positions:Float32Array;indices:Uint32Array}[]=[];root.traverse(o=>{if(!(o instanceof THREE.Mesh))return;const pos=o.geometry.getAttribute('position');if(!pos)return;const verts=new Float32Array(pos.count*3);for(let i=0;i<pos.count;i++){const pt=new THREE.Vector3().fromBufferAttribute(pos,i).applyMatrix4(o.matrixWorld);verts.set(pt.toArray(),i*3);}const indices=o.geometry.index?new Uint32Array(o.geometry.index.array):Uint32Array.from({length:pos.count},(_,i)=>i);this.world!.createCollider(RAPIER.ColliderDesc.trimesh(verts,indices));navigationParts.push({positions:verts,indices});});
+  const navigationParts:{positions:Float32Array;indices:Uint32Array}[]=[];root.traverse(o=>{if(!(o instanceof THREE.Mesh))return;const pos=o.geometry.getAttribute('position');if(!pos)return;const verts=collisionVertices(pos,o.matrixWorld);const indices=o.geometry.index?new Uint32Array(o.geometry.index.array):Uint32Array.from({length:pos.count},(_,i)=>i);this.world!.createCollider(RAPIER.ColliderDesc.trimesh(verts,indices));navigationParts.push({positions:verts,indices});});
   this.body=this.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(position.x,position.y,position.z));this.capsule=this.world.createCollider(RAPIER.ColliderDesc.capsule(this.crouched?.3:.6,.25),this.body);this.character=this.world.createCharacterController(.015);this.character.enableAutostep(.25,.2,false);this.character.enableSnapToGround(.3);this.character.setMaxSlopeClimbAngle(Math.PI/4);this.character.setMinSlopeSlideAngle(Math.PI/4);this.world.step();this.routes.build(navigationParts);
  }
  updateScene(scene:TourScene){

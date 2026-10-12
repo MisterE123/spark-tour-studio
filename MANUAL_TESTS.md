@@ -1,5 +1,13 @@
 # Manual acceptance
 
+## v1.14 publishing destinations and large uploads
+
+- In Tools → Publish tour, test untracked export with Git unavailable; verify the folder includes its launcher and has no `.git`. Test local Git publishing while signed out and offline, then update the same folder. Confirm normal history, removed obsolete runtime files, and preserved unrelated files.
+- Publish that local website to GitHub and confirm its local and remote commits match. Reopen the original project and confirm the destination/asset choices persist. The authoring branch must remain unchanged. Commit or undo manual published-folder edits before another publication.
+- Try a multi-gigabyte first project backup whose individual files are all below 100 MiB. Interrupt after a completed upload batch, retry, and verify the final original commit matches GitHub. The temporary upload branch should disappear after success. Verify historical private files and oversized individual files fail before any upload.
+- Revisit a large collider, including after a browser restart on the same site origin, and compare route readiness with the first visit. Changing geometry/alignment must rebuild routes. Verify normal manual walking and pathfinding when browser storage is unavailable. First physics setup and route generation still require computation.
+- On Quest, repeat scene switching, collision, cached route loading, controller selection and session exit/re-entry. Check the glass sharing header at narrow window widths and when its body is scrolled.
+
 ## v1.13 GitHub connection and Pages publishing
 
 - Use a fresh editor profile and complete browser sign-in with the one-time code. Test copying/reopening the sign-in page, cancellation, expired codes, offline startup, sign-out and an existing GitHub CLI login. Verify that no token enters the project, export, renderer state or diagnostic logs.

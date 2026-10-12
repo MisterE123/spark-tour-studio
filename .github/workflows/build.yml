@@ -80,6 +80,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/github-editor-check.mjs
+      - name: Check cached walking routes and storage fallback
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/navigation-cache-check.mjs
       - name: Check editor panels, rich content and portable export
         env:
           SPARK_PACKAGED: '1'

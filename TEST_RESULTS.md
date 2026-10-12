@@ -1,5 +1,14 @@
 # Verification results
 
+## v1.12.1 Windows Git folder recognition (2026-10-12)
+
+- Inspected the failed v1.12.0 tagged GitHub run (38265761227). Its two new Git integration tests stopped while enabling history, before editor packaging or release publication. Windows short path aliases reproduce the same `Enable Git history for this project first` error locally after a successful repository initialization.
+- Git repository detection now resolves both Git's reported root and the selected project folder to their actual filesystem paths. Short names and junctions recognize the same project; a nested folder still cannot operate on its parent's history.
+- Both new regression tests failed with the old implementation and pass with the fix. They exercise real initialization, named versions, annotations, remote configuration and restoration through Windows short paths and a junction, without contacting a remote server. All 86 unit/integration tests and the TypeScript/Vite production build pass.
+- The final packaged editor passed the full Git authoring/export regression, including checkpoint restoration, unrelated changes, concurrent editing, Save As, Pages warnings and waiting for restore before ordinary window close (`test-output/git editor 1791818021174`). The final portable wrapper cold-started in a hidden isolated profile with version 1.12.1 and a Git-helper hash matching the tested source, then closed with exit code 0 (`test-output/portable-final-cdp-1791818182143`).
+- The Windows ZIP contents and embedded checksums passed verification. The 159-file source audit found no private state, credential patterns, large tour assets or generated binaries for upload.
+- Local EXE: `release/Spark Tour Studio 1.12.1.exe`, 172,803,468 bytes; SHA-256 `8A7EBF3AF4714B3F24E93830DD6710D03672401034AC3A43CCFDF26B05326E0F`. Windows ZIP: `artifacts/Spark-Tour-Studio-1.12.1-windows-x64.zip`, 270,959,758 bytes; SHA-256 `9F13C3D4BD06D690FFF26D30F3A0C5DF49EFC52DEDEF43E0D4C8B02D059977F7`.
+
 ## v1.12 optional local tour Git history (2026-10-12)
 
 - All 84 unit/integration tests and the TypeScript production build passed. Real disposable Git repositories verified external RAD/chunk/media capture, reopening a clone after removing original asset locations, annotation changes, added-scene restoration with literal space/bracket filenames, checkpoint/restore commits, disabled history and preservation of unrelated staged changes.

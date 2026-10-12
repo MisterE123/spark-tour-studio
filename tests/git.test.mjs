@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {createRequire} from 'node:module';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {createRequire} from 'node:module';import {execFileSync} from 'node:child_process';
 import {blankProject,newScene} from '../shared/project.mjs';import {radFixture,floorGlb} from './fixtures.mjs';
 const require=createRequire(import.meta.url),gitTools=require('../desktop/git.cjs'),{collectTourFiles,estimateWebsite}=require('../desktop/tour-files.cjs'),{startServer}=require('../desktop/server.cjs');
 const git=await gitTools.findGit();assert.ok(git,'Git is required for the real repository checks');
@@ -14,6 +14,25 @@ test('optional local history snapshots external RAD companions and media, preser
   const pending=structuredClone(changed);pending.title='Unsaved edits before restore';pending.scenes.push(newScene('b','New scene','imports/new [scene]/source.rad'));await fs.mkdir(path.join(f.root,'imports/new [scene]'));for(const name of ['source.rad','source.radc'])await fs.copyFile(path.join(f.root,'imports/capture',name),path.join(f.root,'imports/new [scene]',name));const restored=await gitTools.restoreVersion({...f,project:pending,sources:first.sources,id:first.id});assert.equal(restored.project.title,f.project.title);assert.equal(restored.project.scenes.length,1);await assert.rejects(fs.access(path.join(f.root,'imports/new [scene]/source.rad')));assert.equal(await fs.readFile(path.join(f.root,'imports/images/photo.jpg'),'utf8'),'original photograph');const history=await gitTools.gitState(f);assert.equal(history.versions.length,4);assert.match(history.versions[0].message,/Restore tour/);assert.match(history.versions[1].message,/Before restoring/);assert.equal(history.changes.find(p=>p.path==='notes.txt').status,'A ');
   const head=(await gitTools.runGit(git.executable,f.root,['rev-parse','HEAD'])).output;await assert.rejects(gitTools.restoreVersion({...f,project:pending,sources:{},id:'f'.repeat(40)}));assert.equal((await gitTools.runGit(git.executable,f.root,['rev-parse','HEAD'])).output,head);
   await gitTools.disableHistory(f);assert.equal((await gitTools.gitState(f)).enabled,false);await assert.rejects(gitTools.saveVersion({...f,sources:{},message:'Disabled'}),/disabled/);await fs.access(path.join(f.root,'.git'));await gitTools.enableHistory(f);assert.equal((await gitTools.gitState(f)).versions.length,4);
+ }finally{await fs.rm(f.base,{recursive:true,force:true});}
+});
+async function checkAlias(f,root){
+ const options={...f,root};assert.equal((await gitTools.gitState(options)).repository,false);await gitTools.enableHistory(options);
+ const first=await gitTools.saveVersion({...options,message:'Version through alias'});assert.ok(first.id);
+ const changed=structuredClone(f.project);changed.title='Alias annotation';const second=await gitTools.saveVersion({...options,project:changed,sources:first.sources,message:'Changed through alias'});
+ for(const folder of [root,f.root]){const state=await gitTools.gitState({root:folder,git});assert.equal(state.repository,true);assert.equal(state.versions[0].id,second.id);}
+ await gitTools.setupRemote({...options,name:'origin',url:'https://github.com/owner/tour.git'});
+ const restored=await gitTools.restoreVersion({...options,project:changed,sources:first.sources,id:first.id});assert.equal(restored.project.title,f.project.title);assert.equal(JSON.parse(await fs.readFile(path.join(f.root,'config/tour.json'),'utf8')).title,f.project.title);
+ const child=path.join(root,'config');assert.equal((await gitTools.gitState({root:child,git})).repository,false);await assert.rejects(gitTools.saveVersion({...options,root:child,message:'Wrong root'}),/Enable Git history/);
+}
+test('tour history recognizes a junction or symbolic-link root without treating nested folders as the repository',async()=>{
+ const f=await fixture();try{const alias=path.join(f.base,'project alias');await fs.symlink(f.root,alias,process.platform==='win32'?'junction':'dir');await checkAlias(f,alias);}finally{await fs.rm(f.base,{recursive:true,force:true});}
+});
+test('tour history recognizes Windows short paths used by hosted build runners', {skip:process.platform!=='win32'},async t=>{
+ const f=await fixture();try{
+  const root=execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command','(New-Object -ComObject Scripting.FileSystemObject).GetFolder($env:SPARK_GIT_ALIAS_ROOT).ShortPath'],{encoding:'utf8',windowsHide:true,env:{...process.env,SPARK_GIT_ALIAS_ROOT:f.root}}).trim();
+  if(path.resolve(root).toLowerCase()===path.resolve(await fs.realpath(root)).toLowerCase())return t.skip('This volume does not create short path aliases.');
+  await checkAlias(f,root);
  }finally{await fs.rm(f.base,{recursive:true,force:true});}
 });
 test('remote helpers support GitHub and GitLab without replacing existing remotes or contacting them',async()=>{const f=await fixture();try{await gitTools.enableHistory(f);await gitTools.setupRemote({...f,name:'origin',url:'https://github.com/owner/tour.git'});await gitTools.setupRemote({...f,name:'gitlab',url:'git@gitlab.com:group/subgroup/tour.git'});await assert.rejects(gitTools.setupRemote({...f,name:'origin',url:'https://gitlab.com/group/tour.git'}),/already exists/);let state=await gitTools.gitState(f);assert.equal(state.remotes.find(r=>r.name==='origin').url,'https://github.com/owner/tour.git');await gitTools.setupRemote({...f,name:'gitlab',url:'https://gitlab.com/group/other.git',replace:true});state=await gitTools.gitState(f);assert.equal(state.remotes.length,2);for(const url of ['https://token@github.com/a/b','https://github.com/a/b?token=secret','file:///data','ext::bad','git@github.com:../bad'])assert.throws(()=>gitTools.remoteUrl(url));}finally{await fs.rm(f.base,{recursive:true,force:true});}});

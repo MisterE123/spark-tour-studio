@@ -10,7 +10,9 @@ await fs.copyFile('launcher/Launch Tour.exe','artifacts/Launch-Tour.exe');
 const archive=path.resolve(`artifacts/Spark-Tour-Web-Runtime-${version}.zip`);
 const entries={};
 async function collect(dir){for(const item of await fs.readdir(dir,{withFileTypes:true})){const file=path.join(dir,item.name);if(item.isDirectory())await collect(file);else if(item.isFile())entries[path.relative('dist',file).replaceAll('\\','/')]=new Uint8Array(await fs.readFile(file));}}
-await collect('dist');await fs.writeFile(archive,zipSync(entries,{level:6}));
+const manifest=JSON.parse(await fs.readFile('dist/.vite/manifest.json','utf8')),seen=new Set(),visitorFiles=new Set(['index.html']);
+function visit(key){if(seen.has(key))return;seen.add(key);const entry=manifest[key];if(!entry)throw Error('Missing viewer build entry: '+key);for(const file of [entry.file,...entry.css||[],...entry.assets||[]])visitorFiles.add(file);for(const dependency of [...entry.imports||[],...entry.dynamicImports||[]])visit(dependency);}
+visit('index.html');for(const file of visitorFiles)entries[file]=new Uint8Array(await fs.readFile(path.join('dist',file)));await collect('dist/licenses');await collect('dist/performance-spec');await fs.writeFile(archive,zipSync(entries,{level:6}));
 const names=[`Spark-Tour-Studio-${version}.exe`,'Launch-Tour.exe',path.basename(archive)];
 let checksums='';for(const name of names){const bytes=await fs.readFile(path.join('artifacts',name));checksums+=createHash('sha256').update(bytes).digest('hex')+'  '+name+'\n';}
 await fs.writeFile('artifacts/SHA256SUMS.txt',checksums);

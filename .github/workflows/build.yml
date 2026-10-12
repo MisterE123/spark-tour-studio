@@ -56,14 +56,18 @@ jobs:
         run: npm run build
       - name: Bundle verified GitHub sign-in tool
         run: npm run bundle:github
-      - name: Bundle collision tools
-        run: npm run bundle:collision
+      - name: Check offline collision selection and enclosure meshing
+        run: node scripts/collision-engine-check.mjs
       - name: Build Windows tour launcher
         run: npm run launcher
       - name: Package editor for native checks
         run: npx electron-builder --win --x64 --dir
       - name: Check packaged authoring and exported viewer
         run: node scripts/scene-navigation-check.mjs
+      - name: Check collision selection authoring and saved GLBs
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/collision-editor-check.mjs
       - name: Check bubble settings and captured movement
         run: node scripts/bubble-settings-check.mjs
       - name: Check bubble ray picking and streamed occlusion

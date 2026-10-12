@@ -9,6 +9,10 @@ launcher/bundle.cjs
 .build/
 converter/*.exe
 
+github-tools/*.exe
+.spark-tour-history.json
+.spark-tour-publish.json
+
 collision-tools/node.exe
 collision-tools/node_modules/
 

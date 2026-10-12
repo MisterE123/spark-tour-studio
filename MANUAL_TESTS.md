@@ -1,5 +1,14 @@
 # Manual acceptance
 
+## v1.13 GitHub connection and Pages publishing
+
+- Use a fresh editor profile and complete browser sign-in with the one-time code. Test copying/reopening the sign-in page, cancellation, expired codes, offline startup, sign-out and an existing GitHub CLI login. Verify that no token enters the project, export, renderer state or diagnostic logs.
+- Create a public or private test repository. Push saved tour versions, make an annotation change, save another version and push again. Verify the remote branch matches the saved commit. Test missing permissions, SSH/GitLab credentials, a newer remote branch, historical private files and large initial uploads.
+- Prepare and review a small multi-scene website, publish to Pages and check its status and HTTPS URL. Test desktop, mobile and Quest WebXR on the real site, including RAD companion requests and ranges. Update content and republish; earlier website commits and unrelated branch files must remain.
+- Publish without enabling local history. Check the ordinary project files are unchanged, preferences are ignored/private, staging is cleaned up, and no launcher/editor/recovery/authentication files are uploaded. Verify Save As and project reopening retain the chosen destination.
+- Reject another website already on the destination branch or Pages configured for another source. Simulate a change between review and publication and confirm no forced overwrite. Check a successful upload followed by a Pages plan/permission error is reported as setup-needed.
+- Test the 1 GB Pages and 100 MiB Git limits, missing assets and omitted splats without remote URLs. Publish a small viewer with separately hosted HTTPS splats, including backgrounds; verify CORS, range streaming and URLs. Keep CDN uploading manual for this release.
+
 ## v1.12 optional Git history
 
 - Enable history for a tour with external RAD/chunk, image, collider and custom HTML references. Save a named version and confirm the local copy includes required files while the original assets remain intact. On a machine without Git, ordinary editing/export must remain available; install or choose Git to enable history.

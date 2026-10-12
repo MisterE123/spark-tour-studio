@@ -1,0 +1,35 @@
+const {spawn}=require('node:child_process'),fs=require('node:fs/promises'),path=require('node:path');
+const {StringDecoder}=require('node:string_decoder');
+const redact=value=>String(value).replace(/\b(?:gh[opusr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g,'[redacted]').replace(/(https?:\/\/)[^\s/@]+@/g,'$1[redacted]@');
+function githubRepository(value){if(typeof value!=='string')throw Error('Enter a GitHub repository as owner/name.');let name=value.trim();if(/^https:\/\/github\.com\//i.test(name)){const url=new URL(name);if(url.username||url.password||url.search||url.hash)throw Error('Use a repository URL without credentials or query parameters.');name=url.pathname.slice(1).replace(/\/$/,'');}else if(/^git@github\.com:/i.test(name))name=name.slice(name.indexOf(':')+1);name=name.replace(/\.git$/,'');if(!/^[A-Za-z0-9][A-Za-z0-9-]{0,38}\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}$/.test(name)||name.split('/').some(p=>p==='.'||p==='..'))throw Error('Enter a GitHub repository as owner/name.');return name;}
+function runGh(executable,args,{input,allowFailure=false,timeout=30000,onText,signal,prefix=[]}={}){return new Promise((resolve,reject)=>{
+ const env={...process.env,GH_PROMPT_DISABLED:'1',GH_NO_UPDATE_NOTIFIER:'1',GH_NO_EXTENSION_UPDATE_NOTIFIER:'1',NO_COLOR:'1',CLICOLOR:'0'};
+ // Use the signed-in desktop account, not an inherited automation token or host.
+ for(const key of ['GH_TOKEN','GITHUB_TOKEN','GH_ENTERPRISE_TOKEN','GITHUB_ENTERPRISE_TOKEN','GH_HOST','GH_REPO','GH_DEBUG'])delete env[key];
+ const child=spawn(executable,[...prefix,...args],{windowsHide:true,shell:false,env,stdio:['pipe','pipe','pipe']});const outDecoder=new StringDecoder('utf8'),errDecoder=new StringDecoder('utf8');let output='',error='',bytes=0,expired=false;
+ const abort=()=>child.kill(),timer=setTimeout(()=>{expired=true;child.kill();},timeout);signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
+ const collect=(decoder,which)=>chunk=>{bytes+=chunk.length;if(bytes>2097152){expired=true;child.kill();return;}const text=decoder.write(chunk);if(which==='out')output+=text;else error+=text;onText?.(redact(text));};
+ child.stdout.on('data',collect(outDecoder,'out'));child.stderr.on('data',collect(errDecoder,'err'));child.stdin.on('error',()=>{});child.stdin.end(input);
+ const cleanup=()=>{clearTimeout(timer);signal?.removeEventListener('abort',abort);};child.once('error',cause=>{cleanup();reject(cause);});child.once('close',code=>{cleanup();output+=outDecoder.end();error+=errDecoder.end();if(signal?.aborted)return reject(Error('GitHub sign-in cancelled.'));if(expired)return reject(Error('GitHub did not respond in time. Try again.'));if(code!==0&&!allowFailure){const cause=Error(redact(error||output||'GitHub operation failed.').trim().slice(-3000));cause.status=Number((error+output).match(/HTTP (\d{3})/)?.[1]||0);return reject(cause);}resolve({code,output,error});});
+});}
+async function findGh(executable){try{await fs.access(executable);const result=await runGh(executable,['--version']);return {executable,version:result.output.split('\n')[0].trim()};}catch{return null;}}
+function client(gh,{run=runGh}={}){
+ if(!gh)throw Error('GitHub support is missing from this build.');
+ const api=async(endpoint,{method='GET',body}={})=>{const args=['api','--hostname','github.com','--method',method,'-H','Accept: application/vnd.github+json','-H','X-GitHub-Api-Version: 2026-03-10',endpoint];if(body!==undefined)args.push('--input','-');const result=await run(gh.executable,args,{input:body===undefined?undefined:JSON.stringify(body)});return result.output.trim()?JSON.parse(result.output):null;};
+ const authState=async()=>{try{const user=await api('user');return {available:true,authenticated:true,login:user.login,version:gh.version};}catch(error){return {available:true,authenticated:false,login:'',version:gh.version,error:redact(error.message)};}};
+ const repository=async value=>{const name=githubRepository(value),info=await api('repos/'+name);return {name:info.full_name,url:info.html_url,cloneUrl:info.clone_url,private:info.private,canPush:info.permissions?.push===true,canManagePages:info.permissions?.admin===true||info.permissions?.maintain===true,defaultBranch:info.default_branch};};
+ const pages=async value=>{try{return await api('repos/'+githubRepository(value)+'/pages');}catch(error){if(error.status===404)return null;throw error;}};
+ return {api,authState,repository,pages,
+  createRepository:async({owner,name,visibility})=>{const auth=await authState();if(!auth.authenticated)throw Error('Sign in to GitHub first.');const full=githubRepository(owner+'/'+name);if(!['public','private'].includes(visibility))throw Error('Choose public or private visibility.');const endpoint=owner.toLowerCase()===auth.login.toLowerCase()?'user/repos':'orgs/'+full.split('/')[0]+'/repos';const info=await api(endpoint,{method:'POST',body:{name:full.split('/')[1],private:visibility==='private',auto_init:false,description:'A Gaussian splat virtual tour',has_issues:false,has_wiki:false}});return repository(info.full_name);},
+  enablePages:async(value,branch)=>{const name=githubRepository(value),existing=await pages(name);if(existing&&(existing.build_type==='workflow'||existing.source?.branch!==branch||existing.source?.path!=='/'))throw Error('This repository already publishes Pages from a different source. Choose another repository or change its Pages source in GitHub settings.');if(!existing)await api('repos/'+name+'/pages',{method:'POST',body:{build_type:'legacy',source:{branch,path:'/'}}});return await pages(name);},
+  publicationStatus:async value=>{const name=githubRepository(value),site=await pages(name);if(!site)return {status:'not-enabled',url:''};let build;try{build=await api('repos/'+name+'/pages/builds/latest');}catch(error){if(error.status!==404)throw error;}return {status:build?.status||site.status||'queued',url:site.html_url,commit:build?.commit,error:redact(build?.error?.message||'')};},
+ };
+}
+function login(gh,{onDevice=()=>{},openExternal=()=>{},run=runGh}={}){
+ if(!gh)throw Error('GitHub support is missing from this build.');const controller=new AbortController();let transcript='',sent=false;
+ const promise=run(gh.executable,['auth','login','--hostname','github.com','--git-protocol','https','--web'],{timeout:900000,signal:controller.signal,onText:text=>{transcript=(transcript+text).slice(-12000);const code=transcript.match(/\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/)?.[0];if(code&&!sent){sent=true;const url='https://github.com/login/device';onDevice({code,url});Promise.resolve(openExternal(url)).catch(()=>{});}}}).then(()=>client(gh,{run}).authState());
+ return {promise,cancel:()=>controller.abort()};
+}
+// Per-command credential helper: never change a user's global Git configuration.
+function credentialArgs(gh){const executable=gh.executable.replaceAll('\\','/').replaceAll("'","'\\''");return ['-c','credential.https://github.com.helper=','-c',"credential.https://github.com.helper=!'"+executable+"' auth git-credential"];}
+module.exports={runGh,findGh,client,login,githubRepository,credentialArgs,redact};

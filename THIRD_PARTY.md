@@ -18,6 +18,10 @@ relicensed by this project.
   notices in `collision-tools/Node-LICENSE.txt`.
 - Spark's Rust converter and its crates retain the notices in `converter/`;
   Rust's library notices are included separately.
+- The editor bundles the official GitHub CLI 2.102.0 Windows x64 distribution
+  under MIT. Its original notice is in `github-tools/LICENSE.txt`.
+  The download is pinned and checksum-verified. Source and license:
+  https://github.com/cli/cli/tree/v2.102.0 . It is not included in tour websites.
 
 The build writes dependency license texts and version identifiers into
 `dist/licenses/`. Exported tours preserve that directory. The Windows editor

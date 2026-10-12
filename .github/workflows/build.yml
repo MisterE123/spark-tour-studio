@@ -54,6 +54,8 @@ jobs:
         run: npm test
       - name: Build local web runtime and license notices
         run: npm run build
+      - name: Bundle verified GitHub sign-in tool
+        run: npm run bundle:github
       - name: Bundle collision tools
         run: npm run bundle:collision
       - name: Build Windows tour launcher
@@ -74,6 +76,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/git-editor-check.mjs
+      - name: Check GitHub connection, pushes and Pages publishing
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/github-editor-check.mjs
       - name: Check editor panels, rich content and portable export
         env:
           SPARK_PACKAGED: '1'

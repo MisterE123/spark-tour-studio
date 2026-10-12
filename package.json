@@ -1,6 +1,6 @@
 {
   "name": "spark-tour-studio",
-  "version": "1.12.1",
+  "version": "1.13.0",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
@@ -10,9 +10,10 @@
     "test": "node --test tests/*.test.mjs",
     "editor": "electron .",
     "launcher": "node scripts/build-launcher.mjs",
-    "package": "npm run build && npm run bundle:collision && npm run launcher && electron-builder --win portable --x64",
+    "package": "npm run build && npm run bundle:github && npm run bundle:collision && npm run launcher && electron-builder --win portable --x64",
     "build:converter": "node scripts/build-converter.mjs",
-    "bundle:collision": "node scripts/bundle-collision.mjs"
+    "bundle:collision": "node scripts/bundle-collision.mjs",
+    "bundle:github": "node scripts/bundle-github.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",
@@ -89,6 +90,15 @@
         "to": "collision-tools/node_modules",
         "filter": [
           "**/*"
+        ]
+      },
+      {
+        "from": "github-tools",
+        "to": "github-tools",
+        "filter": [
+          "gh.exe",
+          "*.json",
+          "*.txt"
         ]
       }
     ],

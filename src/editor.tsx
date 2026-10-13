@@ -60,7 +60,7 @@ function Editor(){const mobile=useMobileControls(),panels=useEditorLayout();
  useEffect(()=>{if(rt&&scene&&path){rt.setEditing(!preview);void rt.load(project,hosting,base,scene.id);}else rt?.unload();},[rt,sceneKey,path]);
  useEffect(()=>{if(rt&&scene&&path)void rt.setBackground(scene.background).catch(error=>setStatus('Background: '+String(error)));},[rt,path,scene?.id,base,hosting.assetBaseUrl,JSON.stringify(scene?.background)]);
  useEffect(()=>{if(!rt)return;rt.project=project;rt.hosting=hosting;if(scene)rt.updateScene(scene);rt.setViewHeight(scene?.walkHeight??1.7);rt.setEditing(!preview);rt.syncHotspots();},[project,rt]);
- useEffect(()=>{rt?.setEditing(!preview);if(!preview&&tab==='bubble')rt?.selectHotspot(hotspotId);else if(tab!=='collision')rt?.selectHotspot('');},[rt,preview,hotspotId,tab]);
+ useEffect(()=>{rt?.setEditing(!preview);if(!preview&&tab==='bubble')rt?.selectHotspot(hotspotId);else if(tab!=='collision'&&tab!=='views')rt?.selectHotspot('');},[rt,preview,hotspotId,tab]);
  useEffect(()=>{rt?.showCollider(showWire);},[rt,showWire]);
  useEffect(()=>{rt?.showViewGeometry(!preview&&tab==='views'?scene?.viewpoints.find(v=>v.id===(viewpointId||scene.entry)):undefined);},[rt,preview,tab,scene,viewpointId]);
  const addScene=(source:string)=>{const id=uid();change(p=>{p.scenes.push(newScene(id,`Scene ${p.scenes.length+1}`,source) as unknown as TourScene);if(!p.startScene)p.startScene=id;});setSceneId(id);setTab('scene');};

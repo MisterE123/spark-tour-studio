@@ -1,14 +1,16 @@
-const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto'),os=require('node:os');
+const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
 const gitTools=require('./git.cjs'),github=require('./github.cjs'),{networkRunner,auditUpload,privatePath}=require('./git-network.cjs'),{pushCommit}=require('./git-batches.cjs'),{exportTour,atomicJson}=require('./export.cjs'),{estimateWebsite}=require('./tour-files.cjs'),{contained}=require('./server.cjs');
 const marker='config/site-publication.json',preference='.spark-tour-publish.json';
 function preferences(value){
- const next={mode:'folder',destination:'',repository:'',branch:'gh-pages',portable:false,omitSplats:false};if(!value||typeof value!=='object')return next;
+ const next={mode:'folder',destination:'',repository:'',branch:'gh-pages',pushToGithub:false,portable:false,omitSplats:false};if(!value||typeof value!=='object')return next;
  try{if(typeof value.repository==='string')next.repository=github.githubRepository(value.repository);}catch{}
  next.mode=['folder','local','github'].includes(value.mode)?value.mode:next.repository?'github':'folder';
+ next.pushToGithub=next.mode==='github'||next.mode==='local'&&value.pushToGithub===true;
  if(typeof value.destination==='string'&&path.isAbsolute(value.destination)&&!value.destination.includes('\0'))next.destination=path.normalize(value.destination);
  if(typeof value.branch==='string'&&/^[A-Za-z0-9][A-Za-z0-9_./-]{0,99}$/.test(value.branch))next.branch=value.branch;
  next.portable=value.portable===true;next.omitSplats=value.omitSplats===true;
  if(value.last&&typeof value.last.status==='string'){const last=value.last;next.last={mode:next.mode,destination:next.destination,repository:next.repository,branch:next.branch,url:'',status:last.status.slice(0,80),commit:typeof last.commit==='string'&&/^[a-f0-9]{40,64}$/i.test(last.commit)?last.commit:undefined,error:github.redact(typeof last.error==='string'?last.error:'').slice(0,3000)};try{const url=new URL(last.url);if(url.protocol==='https:'&&!url.username&&!url.password)next.last.url=url.href;}catch{}if(next.mode==='github'&&(!next.repository||!next.last.url))delete next.last;}
+ if(next.last&&Number.isSafeInteger(value.last?.batches)&&value.last.batches>=0)next.last.batches=value.last.batches;
  if(next.last&&(next.mode==='folder'&&(!next.destination||next.last.status!=='exported')||next.mode==='local'&&!next.destination))delete next.last;
  return next;
 }
@@ -23,12 +25,25 @@ async function destinationState({root,destination,git,branch,run=gitTools.runGit
  if(!entries.length){if(!top.code)throw Error('Choose a publishing folder outside an existing parent Git repository.');return {path:target,head:'',files:[]};}
  if(top.code||(await fs.realpath(top.output.trim())).toLowerCase()!==target.toLowerCase())throw Error('Choose an empty folder or a Git-tracked tour website.');
  const metadata=await fs.lstat(path.join(target,'.git'));if(metadata.isSymbolicLink()||!metadata.isDirectory())throw Error('Choose a regular website repository, rather than a linked worktree.');
- const current=(await run(git.executable,target,['symbolic-ref','--short','HEAD'],{allowFailure:true})).output.trim();if(current!==branch)throw Error('This website folder uses branch '+current+'. Select that website branch or choose another folder.');
- const headResult=await run(git.executable,target,['rev-parse','--verify','HEAD'],{allowFailure:true});if(headResult.code&&entries.every(name=>name==='.git'))return {path:target,head:'',files:[],initialized:true};
- const head=headResult.output.trim(),data=await run(git.executable,target,['show',head+':'+marker],{allowFailure:true});if(data.code)throw Error('This repository is not a published tour website. Choose an empty folder.');
- const files=siteManifest(JSON.parse(data.output));if((await run(git.executable,target,['status','--porcelain','--untracked-files=no'])).output.trim())throw Error('The published folder has local edits. Commit or undo them with your Git client before publishing again.');
- return {path:target,head,files,initialized:true};
+ const currentBranch=(await run(git.executable,target,['symbolic-ref','--short','HEAD'],{allowFailure:true})).output.trim(),currentResult=await run(git.executable,target,['rev-parse','--verify','HEAD'],{allowFailure:true}),currentHead=currentResult.code?'':currentResult.output.trim();
+ if(!currentHead&&entries.every(name=>name==='.git'))return {path:target,head:'',seedHead:'',currentBranch,currentHead,files:[],initialized:true};
+ if((await run(git.executable,target,['status','--porcelain','--untracked-files=no'])).output.trim())throw Error('The published folder has local edits. Commit or undo them with your Git client before publishing again.');
+ const selected=await run(git.executable,target,['rev-parse','--verify','refs/heads/'+branch],{allowFailure:true}),head=selected.code?'':selected.output.trim(),seedHead=head||currentHead;
+ const data=await run(git.executable,target,['show',seedHead+':'+marker],{allowFailure:true});if(data.code)throw Error('The selected branch is not a published tour website. Choose an empty folder or a website branch.');
+ const files=siteManifest(JSON.parse(data.output)),tracked=(await run(git.executable,target,['ls-files','-z'])).output.split('\0').filter(Boolean);
+ return {path:target,head,seedHead,currentBranch,currentHead,files,tracked,reference:head?'refs/heads/'+branch:currentHead,initialized:true};
 }
+// Reading a selected folder does not check out a branch or change any remotes.
+async function folderState({root,destination,git,run=gitTools.runGit}){
+ if(!git)throw Error('Install or select Git first.');
+ const current=(await run(git.executable,destination,['symbolic-ref','--short','HEAD'],{allowFailure:true})).output.trim()||'main';
+ const target=await destinationState({root,destination,git,branch:current,run});
+ if(!target.initialized)return {branch:'main',branches:[],repository:''};
+ const branches=(await run(git.executable,target.path,['for-each-ref','--format=%(refname:short)','refs/heads/'])).output.trim().split('\n').filter(Boolean);let repository='';
+ for(const name of (await run(git.executable,target.path,['remote'])).output.trim().split('\n').filter(Boolean)){const url=(await run(git.executable,target.path,['remote','get-url','--push',name])).output.trim();try{repository=github.githubRepository(url);break;}catch{}}
+ return {branch:current,branches,repository};
+}
+const overlapFiles=(target,branch)=>target.currentBranch&&target.currentBranch!==branch?[...target.files,...(target.tracked||[])]:target.files;
 async function safeTarget(root,name){const parts=name.split('/');let file=root;for(let i=0;i<parts.length;i++){file=path.join(file,parts[i]);try{const stat=await fs.lstat(file);if(stat.isSymbolicLink()||i<parts.length-1&&!stat.isDirectory()||i===parts.length-1&&!stat.isFile())throw Error('A publication path conflicts with an existing file: '+name);}catch(error){if(error.code!=='ENOENT')throw error;}}return file;}
 async function checkOverlaps(destination,oldFiles,newFiles){const managed=new Set(oldFiles);for(const name of new Set([...oldFiles,...newFiles])){const file=await safeTarget(destination,name);if(!managed.has(name)){try{await fs.access(file);throw Error('Publishing would overwrite an unrelated file: '+name);}catch(error){if(error.code!=='ENOENT')throw error;}}}await safeTarget(destination,'Launch Tour.exe');}
 async function sourceVersion(root,project,hosting,git,run){
@@ -37,18 +52,20 @@ async function sourceVersion(root,project,hosting,git,run){
  try{const {ProjectSchema,HostingSchema}=await import('../shared/project.mjs'),p=ProjectSchema.parse(JSON.parse((await run(git.executable,root,['show',commit+':config/tour.json'])).output)),h=HostingSchema.parse(JSON.parse((await run(git.executable,root,['show',commit+':config/hosting.json'])).output));modified=JSON.stringify({project:p,hosting:h})!==JSON.stringify({project,hosting})||state.changes.some(change=>change.managed);}catch{}
  return {commit:/^[a-f0-9]{40,64}$/.test(commit)?commit:null,modified,snapshot};
 }
-function publisher({git,gh,cache,dist,launcher,client=github.client(gh),run=gitTools.runGit,exporter=exportTour,estimate=estimateWebsite,appVersion=''}){
+function publisher({git,gh,cache,dist,launcher,client=github.client(gh),run=gitTools.runGit,exporter=exportTour,estimate=estimateWebsite,appVersion='',upload=pushCommit}){
  const prepared=new Map(),net=networkRunner(git,{gh,run});
  const sourceCompatible=(site,branch)=>{if(site&&(site.build_type==='workflow'||site.source?.branch!==branch||site.source?.path!=='/'))throw Error('This repository already publishes Pages from a different source. Choose another repository or change its Pages source in GitHub settings.');};
  const discard=async id=>{const stage=prepared.get(id);if(stage){prepared.delete(id);await removeStage(cache,stage.path);}};
- const savePreferences=async(root,review,last)=>{if((await gitTools.gitState({root,git})).repository)await gitTools.ensureIgnore(root);await atomicJson(path.join(root,preference),{mode:review.mode,destination:review.destination,repository:review.repository,branch:review.branch,portable:review.portable,omitSplats:review.omitSplats,last});};
+ const savePreferences=async(root,review,last)=>{if((await gitTools.gitState({root,git})).repository)await gitTools.ensureIgnore(root);await atomicJson(path.join(root,preference),{mode:review.mode,destination:review.destination,repository:review.repository,branch:review.branch,pushToGithub:review.pushToGithub,portable:review.portable,omitSplats:review.omitSplats,last});};
  return {discard,dispose:async()=>{for(const id of [...prepared.keys()])await discard(id);},
-  prepare:async({root,project,hosting,sources,destination,mode='github',repository='',branch='gh-pages',portable=false,omitSplats=false,progress=()=>{}})=>{
-   if(!git)throw Error('Install or select Git first.');if(!['local','github'].includes(mode))throw Error('Choose a tracked publishing option.');if(typeof branch!=='string'||!branch||branch.length>100||['main','master'].includes(branch))throw Error('Choose a dedicated website branch, such as gh-pages.');await run(git.executable,null,['check-ref-format','--branch',branch]);
+  prepare:async({root,project,hosting,sources,destination,mode='github',repository='',branch=mode==='local'?'main':'gh-pages',pushToGithub=false,portable=false,omitSplats=false,progress=()=>{}})=>{
+   if(!git)throw Error('Install or select Git first.');if(!['local','github'].includes(mode))throw Error('Choose a tracked publishing option.');if(typeof branch!=='string'||!branch||branch.length>100)throw Error('Choose a valid website branch.');if(mode==='github'&&['main','master'].includes(branch))throw Error('Choose a dedicated website branch, such as gh-pages.');await run(git.executable,null,['check-ref-format','--branch',branch]);
+   pushToGithub=mode==='github'||pushToGithub===true;
    const target=await destinationState({root,destination,git,branch,run});let info={name:'',url:'',private:false};
-   if(mode==='github'){
-    repository=github.githubRepository(repository);if(repository.toLowerCase()===repository.split('/')[0].toLowerCase()+'/'+repository.split('/')[0].toLowerCase()+'.github.io')throw Error('Use a project repository rather than an account homepage repository.');
-    if(!(await client.authState()).authenticated)throw Error('Sign in to GitHub first.');info=await client.repository(repository);if(!info.canPush||!info.canManagePages)throw Error('You need permission to push and manage GitHub Pages in this repository.');repository=github.githubRepository(info.name);sourceCompatible(await client.pages(repository),branch);
+   if(pushToGithub){
+    repository=github.githubRepository(repository);if(mode==='github'&&repository.toLowerCase()===repository.split('/')[0].toLowerCase()+'/'+repository.split('/')[0].toLowerCase()+'.github.io')throw Error('Use a project repository rather than an account homepage repository.');
+    if(!(await client.authState()).authenticated)throw Error('Sign in to GitHub first.');info=await client.repository(repository);if(!info.canPush)throw Error('You need permission to push to this GitHub repository.');repository=github.githubRepository(info.name);
+    if(mode==='github'){if(!info.canManagePages)throw Error('You need permission to manage GitHub Pages in this repository.');sourceCompatible(await client.pages(repository),branch);}
    }
    const estimateResult=await estimate({projectRoot:root,project,hosting,sources,dist,omitSplats:!portable&&omitSplats});if(estimateResult.missing.length)throw Error('Relink missing assets before publishing:\n'+estimateResult.missing.slice(0,8).join('\n'));if(mode==='github'&&estimateResult.overPagesLimit)throw Error('This tour is too large for GitHub Pages (1 GB). Choose local publishing or use a separate asset host.');
    if(!portable&&omitSplats){const {splatReference}=await import('../shared/project.mjs');for(const scene of project.scenes){const refs=[splatReference(hosting.sceneUrls?.[scene.id]||scene.source,hosting,!!hosting.sceneUrls?.[scene.id]),scene.background?.type==='splat'?splatReference(scene.background.source,hosting):''];if(refs.some(ref=>ref&&!/^https:\/\//i.test(ref)))throw Error('Set HTTPS asset-host URLs for every splat before leaving local splats out.');}}
@@ -59,42 +76,50 @@ function publisher({git,gh,cache,dist,launcher,client=github.client(gh),run=gitT
     const exported=JSON.parse(await fs.readFile(path.join(site,'config/tour.json'),'utf8')),exportedHosting=JSON.parse(await fs.readFile(path.join(site,'config/hosting.json'),'utf8')),inventory=await require('./tour-files.cjs').collectTourFiles({projectRoot:site,project:exported,hosting:exportedHosting,sources:{},resolveHosting:true});if(inventory.missing.length)throw Error('Exported website has missing assets:\n'+inventory.missing.slice(0,8).join('\n'));
     await fs.writeFile(path.join(site,'.nojekyll'),'');await fs.writeFile(path.join(site,'.gitignore'),'# Local launcher and editor state\n*.exe\n*.zip\n.sources.json*\nautosave.json*\n.spark-tour-*.json*\ncollision-logs/\nconversion-logs/\n*.log\n.env*\n*.pem\n*.key\n');
     progress('Indexing website files…');
-    const files=await enumerate(site),bytes=files.reduce((total,file)=>total+file.bytes,0);if(mode==='github'){if(bytes>1000000000)throw Error('The exported website exceeds GitHub Pages’ 1 GB limit.');for(const file of files)if(file.bytes>104857600)throw Error('GitHub cannot accept this website file above 100 MiB: '+file.path);}
-    await run(git.executable,site,['init','-b',branch]);let base=target.head,oldFiles=target.files,remoteBase='';
-    if(base)await run(git.executable,site,['fetch','--no-tags',target.path,'refs/heads/'+branch]);
-    if(mode==='github'){
+    const files=await enumerate(site),bytes=files.reduce((total,file)=>total+file.bytes,0);if(mode==='github'&&bytes>1000000000)throw Error('The exported website exceeds GitHub Pages’ 1 GB limit.');if(pushToGithub)for(const file of files)if(file.bytes>104857600)throw Error('GitHub cannot accept this website file above 100 MiB: '+file.path);
+    await run(git.executable,site,['init','-b',branch]);let base=target.seedHead||target.head,oldFiles=target.files,remoteBase='';
+    if(base)await run(git.executable,site,['fetch','--no-tags',target.path,target.reference||'refs/heads/'+branch]);
+    if(pushToGithub){
      await run(git.executable,site,['remote','add','origin','https://github.com/'+repository+'.git']);remoteBase=(await net(site,['ls-remote','--heads','origin','refs/heads/'+branch])).output.trim().split(/\s/)[0];
      if(remoteBase){progress('Checking existing website history…');await net(site,['fetch','--no-tags','origin','refs/heads/'+branch]);remoteBase=(await run(git.executable,site,['rev-parse','FETCH_HEAD'])).output.trim();const previous=await run(git.executable,site,['show',remoteBase+':'+marker],{allowFailure:true});if(previous.code)throw Error('This branch contains another site. Choose a different website branch.');const remoteFiles=siteManifest(JSON.parse(previous.output));if(base&&(await run(git.executable,site,['merge-base','--is-ancestor',remoteBase,base],{allowFailure:true})).code)throw Error('The website has newer remote versions. Fetch and merge them in the published folder before publishing.');if(!base){base=remoteBase;oldFiles=remoteFiles;}}
     }
     if(base){await run(git.executable,site,['read-tree',base]);if(oldFiles.length)await run(git.executable,site,['update-index','--force-remove','-z','--stdin'],{input:Buffer.from(oldFiles.join('\0')+'\0')});}
-    const managed=[...new Set([...files.map(file=>file.path),marker])].sort();await checkOverlaps(target.path,target.files,managed);
+    const managed=[...new Set([...files.map(file=>file.path),marker])].sort();await checkOverlaps(target.path,overlapFiles(target,branch),managed);
     if(base){const tracked=(await run(git.executable,site,['ls-tree','-r','--name-only','-z',base])).output.split('\0').filter(Boolean),prior=new Set(oldFiles);for(const name of managed)if(tracked.includes(name)&&!prior.has(name))throw Error('Publishing would overwrite an unrelated tracked file: '+name);}
     const source=await sourceVersion(root,project,hosting,git,run);await atomicJson(path.join(site,marker),{format:'spark-tour-site',version:1,files:managed,source,appVersion});for(let offset=0;offset<managed.length;offset+=128){progress('Saving website files to history · '+offset+' / '+managed.length);await run(git.executable,site,['add','--pathspec-from-file=-','--pathspec-file-nul'],{input:Buffer.from(managed.slice(offset,offset+128).join('\0')+'\0')});}progress('Recording website version…');
     const author=(await gitTools.gitState({root,git})).author;await gitTools.setAuthor(git.executable,site,{name:author.name||'Tour author',email:author.email||'Tour author'+'@local.invalid'});const tree=(await run(git.executable,site,['write-tree'])).output.trim(),commit=base&&tree===(await run(git.executable,site,['rev-parse',base+'^{tree}'])).output.trim()?base:(await run(git.executable,site,['commit-tree',tree,...base?['-p',base]:[],'-m','Publish '+project.title])).output.trim();await run(git.executable,site,['update-ref','refs/heads/'+branch,commit]);
-    if(mode==='github')await auditUpload({git,root:site,base:remoteBase,revision:commit,run,progress,allowBatches:true});
-    const review={id:crypto.randomUUID(),mode,destination:target.path,repository:mode==='github'?repository:'',repositoryUrl:info.url,branch,private:info.private,url:mode==='github'?'https://'+repository.split('/')[0]+'.github.io/'+repository.split('/')[1]+'/':'',bytes,files:managed.length,remoteAssets:inventory.remoteCount,title:project.title,commit,portable,omitSplats:!portable&&omitSplats,sourceCommit:source.commit,sourceModified:source.modified};prepared.set(review.id,{path:directory,site,root,target,review});return review;
+    if(pushToGithub)await auditUpload({git,root:site,base:remoteBase,revision:commit,run,progress,allowBatches:true});
+    const review={id:crypto.randomUUID(),mode,destination:target.path,repository:pushToGithub?repository:'',repositoryUrl:info.url,branch,pushToGithub,private:info.private,url:mode==='github'?'https://'+repository.split('/')[0]+'.github.io/'+repository.split('/')[1]+'/':'',bytes,files:managed.length,remoteAssets:inventory.remoteCount,title:project.title,commit,portable,omitSplats:!portable&&omitSplats,sourceCommit:source.commit,sourceModified:source.modified,currentBranch:target.currentBranch||'',createsBranch:!target.head};prepared.set(review.id,{path:directory,site,root,target,review});return review;
    }catch(error){await removeStage(cache,directory);throw Error(github.redact(error.message));}
   },
   publish:async(id,{root,progress=()=>{}}={})=>{
-   const stage=prepared.get(id);if(!stage)throw Error('Prepare and review the website again.');if(root&&path.resolve(root)!==path.resolve(stage.root))throw Error('The open project changed. Prepare the website again.');const {review}=stage,target=await destinationState({root:stage.root,destination:review.destination,git,branch:review.branch,run});if(target.head!==stage.target.head)throw Error('The local website changed. Prepare it again.');
-   const data=JSON.parse(await fs.readFile(path.join(stage.site,marker),'utf8'));await checkOverlaps(target.path,target.files,siteManifest(data));
+   const stage=prepared.get(id);if(!stage)throw Error('Prepare and review the website again.');if(root&&path.resolve(root)!==path.resolve(stage.root))throw Error('The open project changed. Prepare the website again.');const {review}=stage,target=await destinationState({root:stage.root,destination:review.destination,git,branch:review.branch,run});if(['head','currentHead','currentBranch','seedHead'].some(key=>(target[key]||'')!==(stage.target[key]||''))||!!target.initialized!==!!stage.target.initialized)throw Error('The local website changed. Prepare it again.');
+   const data=JSON.parse(await fs.readFile(path.join(stage.site,marker),'utf8'));await checkOverlaps(target.path,overlapFiles(target,review.branch),siteManifest(data));
    if(review.mode==='github')sourceCompatible(await client.pages(review.repository),review.branch);
    progress('Saving published website locally…');if(!target.initialized)await run(git.executable,target.path,['init','-b',review.branch]);
    await run(git.executable,target.path,['fetch','--no-tags',stage.site,'refs/heads/'+review.branch]);if(!target.head)await gitTools.setAuthor(git.executable,target.path,(await gitTools.gitState({root:stage.site,git})).author);
-   await run(git.executable,target.path,target.head?['read-tree','-m','-u',target.head,review.commit]:['read-tree','--reset','-u',review.commit]);await run(git.executable,target.path,['update-ref','refs/heads/'+review.branch,review.commit,target.head||'0'.repeat(review.commit.length)]);
+   if(target.initialized&&target.currentBranch!==review.branch){
+    progress('Selecting website branch '+review.branch+'…');
+    if(target.head)await run(git.executable,target.path,['switch','--no-guess','--no-overwrite-ignore',review.branch]);
+    else if(target.seedHead)await run(git.executable,target.path,['switch','--no-overwrite-ignore','-c',review.branch,target.seedHead]);
+    else await run(git.executable,target.path,['symbolic-ref','HEAD','refs/heads/'+review.branch]);
+   }
+   await checkOverlaps(target.path,target.files,siteManifest(data));
+   const previous=target.head||target.seedHead;
+   await run(git.executable,target.path,previous?['read-tree','-m','-u',previous,review.commit]:['read-tree','--reset','-u',review.commit]);await run(git.executable,target.path,['update-ref','refs/heads/'+review.branch,review.commit,previous||'0'.repeat(review.commit.length)]);
    try{await fs.access(path.join(stage.site,'Launch Tour.exe'));await fs.copyFile(path.join(stage.site,'Launch Tour.exe'),path.join(target.path,'Launch Tour.exe'));}catch(error){if(error.code!=='ENOENT')throw error;}
    let result={mode:review.mode,destination:target.path,repository:review.repository,branch:review.branch,url:review.url,commit:review.commit,status:'local',error:''};
-   if(review.mode==='github'){
+   if(review.pushToGithub){
     try{const names=(await run(git.executable,target.path,['remote'])).output.trim().split('\n').filter(Boolean),url='https://github.com/'+review.repository+'.git';let remote='';for(const name of names){const pushUrl=(await run(git.executable,target.path,['remote','get-url','--push',name])).output.trim();try{if(github.githubRepository(pushUrl).toLowerCase()===review.repository.toLowerCase())remote=name;}catch{}}
      if(!remote){remote=names.includes('origin')?'github':'origin';let i=2;while(names.includes(remote))remote='github-'+i++;await run(git.executable,target.path,['remote','add',remote,url]);}
      const remoteHead=(await net(target.path,['ls-remote','--heads',remote,'refs/heads/'+review.branch])).output.trim().split(/\s/)[0];if(remoteHead&&((await run(git.executable,target.path,['cat-file','-e',remoteHead+'^{commit}'],{allowFailure:true})).code||(await run(git.executable,target.path,['merge-base','--is-ancestor',remoteHead,review.commit],{allowFailure:true})).code))throw Error('The remote website changed. Fetch and merge it before trying again.');
-     const audit=await auditUpload({git,root:target.path,base:remoteHead,revision:review.commit,run,progress,allowBatches:true});const upload=await pushCommit({git,root:target.path,remote,reference:'refs/heads/'+review.branch,revision:review.commit,audit,run,net,progress});result.status='queued';result.error=upload.warning;
+     const audit=await auditUpload({git,root:target.path,base:remoteHead,revision:review.commit,run,progress,allowBatches:true});const pushed=await upload({git,root:target.path,remote,reference:'refs/heads/'+review.branch,revision:review.commit,audit,run,net,progress});result.status=review.mode==='github'?'queued':'uploaded';result.error=pushed.warning;result.batches=pushed.batches;
      await run(git.executable,target.path,['config','--local','branch.'+review.branch+'.remote',remote]);await run(git.executable,target.path,['config','--local','branch.'+review.branch+'.merge','refs/heads/'+review.branch]);
-     try{progress('Enabling GitHub Pages…');const site=await client.enablePages(review.repository,review.branch);result.url=site?.html_url||result.url;}catch(error){result.status='setup-needed';result.error=github.redact(error.message);}
+     if(review.mode==='github')try{progress('Enabling GitHub Pages…');const site=await client.enablePages(review.repository,review.branch);result.url=site?.html_url||result.url;}catch(error){result.status='setup-needed';result.error=github.redact(error.message);}
     }catch(error){result.status='upload-failed';result.error=github.redact(error.message)+'\nThe website version is saved locally. Prepare and publish again to resume the upload.';}
    }
    await savePreferences(stage.root,review,result);await discard(id);return result;
   },
  };
 }
-module.exports={publisher,siteManifest,sitePath,removeStage,enumerate,preference,preferences,destinationState};
+module.exports={publisher,siteManifest,sitePath,removeStage,enumerate,preference,preferences,destinationState,folderState};

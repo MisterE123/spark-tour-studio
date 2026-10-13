@@ -1,4 +1,4 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import {createRequire} from 'node:module';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import os from 'node:os';import crypto from 'node:crypto';import {createRequire} from 'node:module';
 import {blankProject,newScene} from '../shared/project.mjs';import {radFixture} from './fixtures.mjs';
 const require=createRequire(import.meta.url),gitTools=require('../desktop/git.cjs'),github=require('../desktop/github.cjs'),network=require('../desktop/git-network.cjs'),{publisher,removeStage}=require('../desktop/site-publish.cjs'),{startServer}=require('../desktop/server.cjs');
 const git=await gitTools.findGit();assert.ok(git);
@@ -65,4 +65,74 @@ test('local publishing keeps a persistent website history without GitHub, remove
 test('tracked publishing protects the source, foreign folders, local changes and edits made after review',async()=>{
  const f=await fixture(),service=publisher(f),settings={...f,mode:'local'};try{await assert.rejects(service.prepare({...settings,destination:f.root}),/separate/);await fs.writeFile(path.join(f.destination,'precious.txt'),'keep');await assert.rejects(service.prepare(settings),/empty folder/);await fs.unlink(path.join(f.destination,'precious.txt'));const review=await service.prepare(settings);await fs.writeFile(path.join(f.destination,'index.html'),'unrelated edit after review');await assert.rejects(service.publish(review.id),/empty folder/);assert.equal(await fs.readFile(path.join(f.destination,'index.html'),'utf8'),'unrelated edit after review');await fs.unlink(path.join(f.destination,'index.html'));await service.publish(review.id);await fs.appendFile(path.join(f.destination,'config/tour.json'),' ');await assert.rejects(service.prepare(settings),/local edits/);await gitTools.runGit(git.executable,f.destination,['restore','config/tour.json']);const next=await service.prepare(settings);await fs.writeFile(path.join(f.destination,'keep.txt'),'after review');await gitTools.runGit(git.executable,f.destination,['add','keep.txt']);await gitTools.runGit(git.executable,f.destination,['commit','-m','Another edit']);await assert.rejects(service.publish(next.id),/local website changed/);
  }finally{await service.dispose();await fs.rm(f.base,{recursive:true,force:true});}
+});
+
+
+test('local publication follows renamed, selected and new branches without changing other histories or drafts',async()=>{
+ const f=await fixture(),service=publisher(f),{folderState}=require('../desktop/site-publish.cjs');
+ const value=async args=>(await gitTools.runGit(git.executable,f.destination,args)).output.trim();
+ try{
+  const first=await service.prepare({...f,mode:'local',branch:'gh-pages'});await service.publish(first.id);
+  await gitTools.runGit(git.executable,f.destination,['branch','-m','main']);
+  const info=await folderState(f);assert.equal(info.branch,'main');assert.deepEqual(info.branches,['main']);
+  await fs.writeFile(path.join(f.destination,'notes.txt'),'Preserved in main');await gitTools.runGit(git.executable,f.destination,['add','notes.txt']);await gitTools.runGit(git.executable,f.destination,['commit','-m','Local notes']);
+  const main=await value(['rev-parse','main']);await fs.writeFile(path.join(f.destination,'draft.txt'),'untracked draft');
+  const next=await service.prepare({...f,mode:'local',branch:'main',project:{...f.project,title:'Renamed branch'}});await service.publish(next.id);assert.equal(await value(['rev-parse','HEAD^']),main);
+  const savedMain=await value(['rev-parse','main']);await gitTools.runGit(git.executable,f.destination,['switch','-c','alternate']);
+  await fs.writeFile(path.join(f.destination,'notes.txt'),'Only on alternate');await gitTools.runGit(git.executable,f.destination,['add','notes.txt']);await gitTools.runGit(git.executable,f.destination,['commit','-m','Alternate notes']);const alternate=await value(['rev-parse','HEAD']);
+  const selected=await service.prepare({...f,mode:'local',branch:'main',project:{...f.project,title:'Selected main'}});assert.equal(await value(['symbolic-ref','--short','HEAD']),'alternate');assert.equal(selected.currentBranch,'alternate');assert.equal(selected.createsBranch,false);
+  await service.publish(selected.id);assert.equal(await value(['symbolic-ref','--short','HEAD']),'main');assert.equal(await value(['rev-parse','alternate']),alternate);assert.equal(await value(['rev-parse','HEAD^']),savedMain);assert.equal(await fs.readFile(path.join(f.destination,'notes.txt'),'utf8'),'Preserved in main');assert.equal(await fs.readFile(path.join(f.destination,'draft.txt'),'utf8'),'untracked draft');
+  const beforeFork=await value(['rev-parse','main']),fork=await service.prepare({...f,mode:'local',branch:'server/updates',project:{...f.project,title:'Server release'}});assert.equal(fork.createsBranch,true);await service.publish(fork.id);assert.equal(await value(['symbolic-ref','--short','HEAD']),'server/updates');assert.equal(await value(['rev-parse','HEAD^']),beforeFork);assert.equal(await value(['rev-parse','main']),beforeFork);assert.equal(await value(['status','--porcelain','--untracked-files=no']),'');assert.ok(f.calls.every(args=>!args.includes('--force')));
+ }finally{await service.dispose();await fs.rm(f.base,{recursive:true,force:true});}
+});
+
+test('selected publication branches reject foreign history, dirty worktrees and branch changes after review',async()=>{
+ const f=await fixture(),service=publisher(f);try{
+  let review=await service.prepare({...f,mode:'local',branch:'main'});await service.publish(review.id);
+  const main=(await gitTools.runGit(git.executable,f.destination,['rev-parse','HEAD'])).output.trim();
+  await gitTools.runGit(git.executable,f.destination,['switch','--orphan','foreign']);await fs.writeFile(path.join(f.destination,'index.html'),'Different website');await gitTools.runGit(git.executable,f.destination,['add','index.html']);await gitTools.runGit(git.executable,f.destination,['commit','-m','Foreign website']);const foreign=(await gitTools.runGit(git.executable,f.destination,['rev-parse','HEAD'])).output.trim();
+  await gitTools.runGit(git.executable,f.destination,['switch','main']);await assert.rejects(service.prepare({...f,mode:'local',branch:'foreign'}),/not a published tour website/);assert.equal((await gitTools.runGit(git.executable,f.destination,['rev-parse','foreign'])).output.trim(),foreign);
+  await fs.appendFile(path.join(f.destination,'config/tour.json'),' ');await assert.rejects(service.prepare({...f,mode:'local',branch:'server'}),/local edits/);await gitTools.runGit(git.executable,f.destination,['restore','config/tour.json']);
+  review=await service.prepare({...f,mode:'local',branch:'main'});await gitTools.runGit(git.executable,f.destination,['switch','-c','other']);await assert.rejects(service.publish(review.id),/local website changed/);assert.equal((await gitTools.runGit(git.executable,f.destination,['rev-parse','main'])).output.trim(),main);
+ }finally{await service.dispose();await fs.rm(f.base,{recursive:true,force:true});}
+});
+
+test('Git-only publication bypasses Pages limits and permissions, sets up a remote, and retains settings',async()=>{
+ const f=await fixture(),{preferences}=require('../desktop/site-publish.cjs');let pagesCalls=0;
+ f.client.pages=f.client.enablePages=async()=>{pagesCalls++;throw Error('Git-only publishing must not use Pages');};const repository=f.client.repository;f.client.repository=async name=>({...await repository(name),canManagePages:false,private:true});
+ const service=publisher({...f,estimate:async()=>({overPagesLimit:true,bytes:1500000000,missing:[]})});
+ try{
+  const source=await fs.readFile(path.join(f.root,'config/tour.json')),settings={...f,mode:'local',branch:'main',pushToGithub:true,repository:'tour-author/my-tour'};
+  const review=await service.prepare(settings);assert.equal(review.url,'');assert.equal(review.pushToGithub,true);assert.equal(review.private,true);const published=await service.publish(review.id);assert.equal(published.status,'uploaded');assert.equal(published.url,'');assert.equal(pagesCalls,0);assert.equal((await gitTools.runGit(git.executable,f.bare,['rev-parse','main'])).output.trim(),review.commit);assert.equal((await gitTools.runGit(git.executable,f.destination,['config','branch.main.remote'])).output.trim(),'origin');
+  const saved=preferences(JSON.parse(await fs.readFile(path.join(f.root,'.spark-tour-publish.json'),'utf8')));assert.equal(saved.mode,'local');assert.equal(saved.branch,'main');assert.equal(saved.pushToGithub,true);assert.equal(saved.repository,settings.repository);assert.equal(saved.last.status,'uploaded');assert.equal(saved.last.commit,review.commit);assert.deepEqual(await fs.readFile(path.join(f.root,'config/tour.json')),source);await assert.rejects(fs.access(path.join(f.root,'.git')));
+  const next=await service.prepare({...settings,project:{...f.project,title:'Next server update'}});await service.publish(next.id);assert.equal((await gitTools.runGit(git.executable,f.bare,['rev-list','--count','main'])).output.trim(),'2');assert.equal((await gitTools.runGit(git.executable,f.destination,['remote'])).output.trim(),'origin');assert.equal(pagesCalls,0);
+ }finally{await service.dispose();await fs.rm(f.base,{recursive:true,force:true});}
+});
+
+test('Git-only initial publication resumes bounded uploads after interruption and preserves existing remotes',async()=>{
+ const f=await fixture(),{pushCommit}=require('../desktop/git-batches.cjs'),settings={...f,mode:'local',branch:'main',pushToGithub:true,repository:'tour-author/my-tour'};let uploading=0,interrupted=false;
+ const run=async(exe,folder,args,options)=>{
+  if(args[0]==='remote'&&args[1]==='get-url'&&args.at(-1)==='origin')return {code:0,output:'https://github.com/other/keep.git',error:''};
+  if(args.includes('push')&&args.at(-1).includes(':refs/heads/spark-tour-upload-')&&++uploading===3&&!interrupted){interrupted=true;throw Error('Simulated upload interruption');}
+  return f.run(exe,folder,args,options);
+ };
+ const service=publisher({...f,run,upload:options=>pushCommit({...options,limit:8000})});
+ try{
+  await fs.mkdir(path.join(f.root,'media'));f.project.pages=[{id:'photos',title:'Photos',html:'',blocks:[]}];f.project.scenes[0].hotspots=[{id:'bubble',label:'Photos',kind:'page',target:'photos',position:[0,1,0]}];
+  for(let i=0;i<8;i++){const name='media/asset-'+i+'.jpg';await fs.writeFile(path.join(f.root,name),crypto.randomBytes(7000));f.project.pages[0].blocks.push({type:'image',text:'Photo '+i,url:name});}
+  const local=await service.prepare({...settings,pushToGithub:false});await service.publish(local.id);await gitTools.runGit(git.executable,f.destination,['remote','add','origin','https://github.com/other/keep.git']);await gitTools.runGit(git.executable,f.bare,['config','receive.maxInputSize','25000']);
+  const review=await service.prepare(settings),failed=await service.publish(review.id);assert.equal(failed.status,'upload-failed');assert.match(failed.error,/resume/);assert.equal((await gitTools.runGit(git.executable,f.destination,['rev-parse','main'])).output.trim(),review.commit);await assert.rejects(gitTools.runGit(git.executable,f.bare,['rev-parse','main']));assert.equal((await gitTools.runGit(git.executable,f.destination,['remote','get-url','origin'])).output.trim(),'https://github.com/other/keep.git');
+  const progress=[],retry=await service.prepare(settings);assert.equal(retry.commit,review.commit);const result=await service.publish(retry.id,{progress:message=>progress.push(message)});assert.equal(result.status,'uploaded');assert.ok(result.batches>=8);assert.equal(progress.filter(message=>message.startsWith('Uploading batch')).length,result.batches-2);assert.equal((await gitTools.runGit(git.executable,f.bare,['rev-parse','main'])).output.trim(),review.commit);assert.equal((await gitTools.runGit(git.executable,f.bare,['rev-list','--count','main'])).output.trim(),'1');assert.equal((await gitTools.runGit(git.executable,f.bare,['for-each-ref','--format=%(refname)','refs/heads/spark-tour-upload-*'])).output.trim(),'');assert.equal((await gitTools.runGit(git.executable,f.destination,['config','branch.main.remote'])).output.trim(),'github');assert.deepEqual((await gitTools.runGit(git.executable,f.destination,['remote'])).output.trim().split('\n'),['github','origin']);assert.ok(f.calls.every(args=>!args.includes('--force')));
+ }finally{await service.dispose();await fs.rm(f.base,{recursive:true,force:true});}
+});
+
+
+test('Git-only publishing still blocks oversized historical blobs and deleted secrets before uploading',async()=>{
+ const f=await fixture(),service=publisher(f);let oversized;
+ try{
+  const local=await service.prepare({...f,mode:'local',branch:'main'});await service.publish(local.id);
+  const settings={...f,mode:'local',branch:'main',pushToGithub:true,repository:'tour-author/my-tour'},before=(await gitTools.runGit(git.executable,f.destination,['rev-parse','HEAD'])).output.trim();
+  const run=async(exe,root,args,options)=>{const result=await f.run(exe,root,args,options);if(args[0]==='cat-file'&&args[1].startsWith('--batch-check'))result.output=result.output.replace(/blob \d+/g,'blob 104857601');return result;};oversized=publisher({...f,run});await assert.rejects(oversized.prepare(settings),/cannot accept/);assert.equal((await gitTools.runGit(git.executable,f.destination,['rev-parse','HEAD'])).output.trim(),before);
+  await fs.writeFile(path.join(f.destination,'.env'),'SECRET=value');await gitTools.runGit(git.executable,f.destination,['add','-f','.env']);await gitTools.runGit(git.executable,f.destination,['commit','-m','Accidental private file']);await gitTools.runGit(git.executable,f.destination,['rm','.env']);await gitTools.runGit(git.executable,f.destination,['commit','-m','Remove from working tree']);const saved=(await gitTools.runGit(git.executable,f.destination,['rev-parse','HEAD'])).output.trim();await assert.rejects(service.prepare(settings),/already in Git history/);assert.equal((await gitTools.runGit(git.executable,f.destination,['rev-parse','HEAD'])).output.trim(),saved);await assert.rejects(gitTools.runGit(git.executable,f.bare,['rev-parse','main']));assert.equal((await fs.readdir(f.cache)).length,0);
+ }finally{await service.dispose();await oversized?.dispose();await fs.rm(f.base,{recursive:true,force:true});}
 });

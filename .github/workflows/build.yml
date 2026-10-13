@@ -71,7 +71,7 @@ jobs:
       - name: Check view geometry, camera updates, box walls and walking acceleration
         env:
           SPARK_PACKAGED: '1'
-        run: node scripts/authoring-movement-check.mjs
+        run: node scripts/authoring-movement-check.mjs --compact
       - name: Check offline click-to-walk through narrow passages
         env:
           SPARK_PACKAGED: '1'

@@ -1,5 +1,20 @@
 # Manual acceptance
 
+## Paged collision upgrade
+
+- Open an older tour with a GLB collider. Confirm ordinary viewing, Walk/Drone, alignment, wireframe, save/reopen and export still work. Generate another collider with **Legacy GLB mesh**, checking smooth/blocky output and cancellation independently of the paged path.
+- In **Selected areas**, author overlapping add/remove balls and rotated boxes around intended navigable volume. Include enough height for a visitor. Check ordered overrides, one-wall box resizing, live selection response, undo/redo and retained shapes after switching to **Entire scene** and back.
+- In **Entire scene**, confirm generation waits for an estimated box. Estimate a representative capture containing distant outliers; review and adjust the box in 3D and numerically before generation. Test re-estimation, scene scale/rotation, and retained bounds after save/reopen, undo/redo and portable export.
+- Compare exact domains with **Extend areas upward** off/on. Check the additional headroom slider/field, model solidity inside the region, blocked removed regions and blocked space outside the domain. Try low ceilings, thin regions and disjoint volumes; a standing visitor must still fit.
+- Adjust Page edge length at several detail levels. Check the displayed cell dimensions, 4-cell alignment, 256-cell limit and automatic clamping when detail changes. Save/reopen and export a non-default size, then throttle downloads to compare time until nearby space becomes available and the number of requests.
+- Generate a large real RAD at several detail levels, including companion files and a transformed scene. Record authoring duration, peak memory and temporary disk use. Cancel while reading pages, writing collision tiles and preparing walking tiles; the original collider must remain usable, partial outputs must not replace it, and another generation must succeed.
+- Cold-load a generated tour and verify nearby collision/walking tiles arrive without rasterizing the whole scene. Walk/Drone across tile seams, slopes, stairs, doors and narrow passages. Click paths across multiple tiles and toward disconnected destinations. Check continuous sliding, jump/crouch, capsule clearance and safe starting positions.
+- Throttle tile downloads and physics preparation; remove or corrupt one collision tile and one walking tile separately. Movement must wait until full-detail data is verified and its physics is installed. Try a large right-drag pan across an evicted page while adjacent seams are rebuilding; it must not skip blocked space. Check retry, rapid scene changes, cancellation, bounded residency and eventual resource cleanup.
+- Change scene and collider alignment with the wireframe enabled. Check preserved camera/streaming and matching paged movement, wireframe, bubble picking/occlusion and click-to-walk coordinates. Scene changes must retain movement mode when usable.
+- Save a local Git tour version containing paged collision, reopen it, restore an earlier version and export. Verify every reachable manifest, collision tile and navigation tile is included; missing, malformed, unsafe-path or checksum-invalid companions must block a complete export.
+- Export a portable folder, block external networking and cold-start it. Host another export under a subdirectory. Move the collision folder to another CORS-enabled origin using only `collisionBaseUrl`; leave `assetBaseUrl` unchanged and check application resources still load locally.
+- On Quest 3/3S, test smooth movement, trigger teleport, physical head collision, routes and scene switching around streamed boundaries. Check frame rate and memory on a representative capture, safe behavior during failures, and unchanged XR session identity. Desktop/phone fixture checks do not replace physical headset acceptance.
+
 ## v1.18 web viewer polish
 
 - On a cold desktop visit, try the optional guided introduction, skip it, replay it from Help, and revisit the site. Test each mode and touch override. Check that the invitation is noticeable without blocking entry or the scene directory and that guidance can be dismissed. Ask a visitor unfamiliar with 3D controls to navigate between views and open content.
@@ -7,7 +22,7 @@
 - In Drone, compare Space with E and Shift with Q, including pitched camera movement. In Walk compare Space/E jumps and Shift/Q crouches, low ceilings, landing, arrow/WASD equivalence and held keys. Test keyboard focus on inputs and menus.
 - Adjust Glass shade, save/reopen/export, and compare light and dark captures, title/search surfaces and numerical inputs. Check local theme settings also reach Quest popup panels.
 - On Quest 3/3S, read a long multi-block popup. Scroll continuously with the left stick and held Up/Down buttons, select wide/tall photos to enlarge, return to the same position, and close. Check clipping, both eyes, captions, missing/slow images, content replacement, repeated scene switches and stable XR session identity. Inspect text size and panel distance on hardware.
-- Move/rotate/resize many add/remove collision shapes on a large streamed capture. Compare dragging responsiveness and check tint accuracy after selecting, reordering, removing, undoing and switching scenes. Mesh generation must still obey the authored regions. Sparse/octree collision is an investigated follow-up; existing exports retain GLB physics.
+- Move/rotate/resize many add/remove collision shapes on a large streamed capture. Compare dragging responsiveness and check tint accuracy after selecting, reordering, removing, undoing and switching scenes. Mesh generation must still obey the authored regions. Legacy exports retain GLB physics; test the optional streamed collision format separately using the checks above.
 
 ## v1.14 publishing destinations and large uploads
 
@@ -85,7 +100,7 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 
 ## Collision
 
-- Use Generate collision mesh with a matching source PLY. Try all three resolutions, cancellation, and a large scan; check the wireframe and memory use.
+- Use Tools → Generate collider with an imported RAD, or import an existing GLB. Test paged and legacy formats independently, several detail levels, cancellation and a large capture; check wireframe alignment and memory use.
 - Import and align it; confirm wireframe positions and capture a walking start above the floor.
 - Walk against walls, through doors, up/down stairs and slopes. Check narrow passages, holes and weak scan geometry.
 - Verify invalid starts report an error. Walk is unavailable until a collider loads; the other two modes still function.

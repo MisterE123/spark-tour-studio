@@ -58,6 +58,8 @@ jobs:
         run: npm run bundle:github
       - name: Check offline collision selection and enclosure meshing
         run: node scripts/collision-engine-check.mjs
+      - name: Check streamed navigable collision generation
+        run: node scripts/paged-collision-engine-check.mjs
       - name: Build Windows tour launcher
         run: npm run launcher
       - name: Package editor for native checks
@@ -68,6 +70,14 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/collision-editor-check.mjs
+      - name: Check paged collision authoring, navigation bake and portable export
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/paged-collision-editor-check.mjs
+      - name: Check full-detail collision readiness and streamed walking seams
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/paged-collision-runtime-check.mjs
       - name: Check view geometry, camera updates, box walls and walking acceleration
         env:
           SPARK_PACKAGED: '1'

@@ -35,8 +35,8 @@ def tour_surface(raw, nx, ny, nz, sigma, spacing):
 }
 export async function generateCollision(request:CollisionRequest){
  const authoring=CollisionAuthoringSchema.parse(request.authoring);
- if(!authoring.volumes.some((v:any)=>v.operation==='add'))throw Error('Add a ball or box selection first.');
- const selected=compileSelection(authoring.volumes),transform=sceneMatrix(request.transform),grid=new CollisionGrid(authoring.options),point=new Vector3();
+ if((authoring as any).scope!=='entire'&&!authoring.volumes.some((v:any)=>v.operation==='add'))throw Error('Add a ball or box selection first.');
+ const selected=(authoring as any).scope==='entire'?compileSelection((authoring as any).bounds?[(authoring as any).bounds]:[]):compileSelection(authoring.volumes),transform=sceneMatrix(request.transform),grid=new CollisionGrid(authoring.options),point=new Vector3();
  // Decode one RAD page at a time, always at extended precision. Leaf-only
  // extraction prevents camera-dependent LoD ancestors becoming extra solids.
  const paged=new PagedSplats({rootUrl:request.url,pager:{extSplats:true} as SplatPager,maxSh:0});let scanned=0,leaves=0;

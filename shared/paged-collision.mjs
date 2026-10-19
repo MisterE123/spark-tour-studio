@@ -4,7 +4,7 @@
 export const PAGED_COLLISION_FORMAT='spark-tour-collision';
 export const COLLISION_TILE_HEADER_BYTES=48;
 export const MAX_COLLISION_TILE_BYTES=16*1024*1024;
-const MAGIC=0x31564353,MAX_TILES=100000,MAX_CELL_COORD=100000000;
+const MAGIC=0x31564353,MAX_TILES=100000,MAX_CELL_COORD=100000000,MAX_AIR_LEVEL=20;
 const finite=value=>typeof value==='number'&&Number.isFinite(value);
 const vec=value=>Array.isArray(value)&&value.length===3&&value.every(finite);
 const integer=value=>Number.isSafeInteger(value);
@@ -14,15 +14,50 @@ export function parseCollisionTileKey(key){if(typeof key!=='string'||!/^(-?\d+),
 export function collisionTileBounds(coord,tileSize){return {min:coord.map(v=>v*tileSize),max:coord.map(v=>(v+1)*tileSize)};}
 function safeRef(value){return typeof value==='string'&&value.length>0&&value.length<1024&&!/[\\%?#\u0000-\u001f]/.test(value)&&!value.startsWith('/')&&!/^[a-z][a-z\d+.-]*:/i.test(value)&&value.split('/').every(p=>p&&p!=='.'&&p!=='..');}
 function checkBounds(value){return value&&vec(value.min)&&vec(value.max)&&value.min.every((v,i)=>v<=value.max[i]);}
+const airCoord=value=>Array.isArray(value)&&value.length===3&&value.every(v=>integer(v)&&Math.abs(v)<=MAX_CELL_COORD);
+/** Certified air is indexed by dyadic cube; no represented leaf is expanded. */
+export function collisionAirIndex(manifest={}){
+ const nodes=manifest.airNodes===undefined?[]:manifest.airNodes;if(!Array.isArray(nodes)||nodes.length>MAX_TILES)fail('air node count.');
+ const levels=new Map();
+ for(const node of nodes){
+  if(!node||!airCoord(node.coord)||!integer(node.level)||node.level<0||node.level>MAX_AIR_LEVEL)fail('air node coordinates or level.');
+  const size=2**node.level;if(node.coord.some(v=>v%size!==0||v+size-1>MAX_CELL_COORD))fail('air node alignment or extent.');
+  let entries=levels.get(node.level);if(!entries){entries=new Map();levels.set(node.level,entries);}const key=node.coord.join(',');if(entries.has(key))fail('duplicate air node.');entries.set(key,node);
+ }
+ // Aligned dyadic cubes can only be disjoint or nested. Parent lookups reject
+ // overlap in O(nodes * levels), even when one node certifies trillions of tiles.
+ const sortedLevels=[...levels.keys()].sort((a,b)=>a-b);
+ for(const node of nodes)for(const level of sortedLevels)if(level>node.level){const size=2**level,parent=node.coord.map(v=>Math.floor(v/size)*size);if(levels.get(level).has(parent.join(',')))fail('overlapping air nodes.');}
+ const nodeAt=coord=>{if(!airCoord(coord))return undefined;for(const level of sortedLevels){const size=2**level,node=levels.get(level).get(coord.map(v=>Math.floor(v/size)*size).join(','));if(node)return node;}return undefined;};
+ const containingNode=(low,high)=>{if(!airCoord(low)||!airCoord(high)||low.some((v,i)=>v>high[i]))return undefined;const node=nodeAt(low);return node&&high.every((v,i)=>v<node.coord[i]+2**node.level)?node:undefined;};
+ const interiorTile=coord=>{if(!airCoord(coord))return false;if(containingNode(coord.map(v=>v-1),coord.map(v=>v+1)))return true;if(!nodeAt(coord))return false;for(let axis=0;axis<3;axis++)for(const sign of [-1,1]){const neighbor=[...coord];neighbor[axis]+=sign;if(!nodeAt(neighbor))return false;}return true;};
+ return {nodes,nodeAt,hasTile:coord=>!!nodeAt(coord),containingNode,interiorTile};
+}
+/** Merge only eight proven full-air siblings. A missing or mixed leaf stays a hole. */
+export function compactCollisionAirNodes(coords){
+ const levels=Array.from({length:MAX_AIR_LEVEL+1},()=>new Map());let count=0;
+ for(const coord of coords){collisionTileKey(coord);const key=coord.join(',');if(!levels[0].has(key)){if(++count>MAX_TILES)fail('air tile count.');levels[0].set(key,{coord:[...coord],level:0});}}
+ for(let level=0;level<MAX_AIR_LEVEL;level++){
+  const size=2**level,parentSize=size*2,groups=new Map();
+  for(const node of levels[level].values()){const coord=node.coord.map(v=>Math.floor(v/parentSize)*parentSize),key=coord.join(',');let group=groups.get(key);if(!group){group={coord,mask:0,children:[]};groups.set(key,group);}const bit=node.coord.reduce((value,v,i)=>value+(v-coord[i])/size*2**(2-i),0);group.mask|=1<<bit;group.children.push(node.coord.join(','));}
+  for(const group of groups.values())if(group.mask===255){for(const key of group.children)levels[level].delete(key);levels[level+1].set(group.coord.join(','),{coord:group.coord,level:level+1});}
+ }
+ return levels.flatMap(entries=>[...entries.values()]).sort((a,b)=>b.level-a.level||a.coord[0]-b.coord[0]||a.coord[1]-b.coord[1]||a.coord[2]-b.coord[2]);
+}
+/** A certified air leaf has no payload to download or dense cells to allocate. */
+export function collisionAirTile(coord,tileCells){return decodeCollisionTile(encodeCollisionTile({coord,tileCells,full:true}),{coord,tileCells,expand:false});}
 export function validatePagedCollisionManifest(value){
  if(!value||value.format!==PAGED_COLLISION_FORMAT||value.version!==1||value.representation!=='allowed-space')fail('unsupported format, version or representation.');
  const {detail,tileCells,tileSize,sourceTransform}=value;
  if(!finite(detail)||detail<.01||detail>2||!integer(tileCells)||tileCells<4||tileCells>256||tileCells%4||!finite(tileSize)||Math.abs(tileSize-detail*tileCells)>1e-6)fail('tile resolution.');
  if(value.coordinateSystem!=='generation'||!sourceTransform||!vec(sourceTransform.position)||!vec(sourceTransform.rotation)||!finite(sourceTransform.scale)||sourceTransform.scale<=0)fail('source transform.');
- if(!checkBounds(value.bounds)||!Array.isArray(value.tiles)||value.tiles.length===0||value.tiles.length>MAX_TILES)fail('bounds or tile count.');
+ const air=collisionAirIndex(value);
+ if(!checkBounds(value.bounds)||!Array.isArray(value.tiles)||value.tiles.length+air.nodes.length===0||value.tiles.length+air.nodes.length>MAX_TILES)fail('bounds or tile count.');
+ for(const node of air.nodes){const size=2**node.level;if(node.coord.some((v,i)=>v*tileSize<value.bounds.min[i]-1e-5||(v+size)*tileSize>value.bounds.max[i]+1e-5))fail('air node bounds.');}
  const keys=new Set(),urls=new Set();let totalBytes=0;
  for(const entry of value.tiles){
   if(!entry||collisionTileKey(entry.coord)!==entry.key||keys.has(entry.key)||!safeRef(entry.url)||urls.has(entry.url))fail('duplicate tile or unsafe URL.');
+  if(air.hasTile(entry.coord))fail('tile overlaps certified air.');
   keys.add(entry.key);urls.add(entry.url);
   if(!integer(entry.bytes)||entry.bytes<COLLISION_TILE_HEADER_BYTES||entry.bytes>MAX_COLLISION_TILE_BYTES||typeof entry.sha256!=='string'||!/^[a-f\d]{64}$/.test(entry.sha256)||!integer(entry.voxels)||entry.voxels<1||entry.voxels>tileCells**3)fail('tile size, hash or occupancy.');
   const expected=collisionTileBounds(entry.coord,tileSize);

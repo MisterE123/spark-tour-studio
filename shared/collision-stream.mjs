@@ -1,4 +1,4 @@
-import {validatePagedCollisionManifest,verifyCollisionTile,containsCollisionCell,collisionTileKey,COLLISION_TILE_HEADER_BYTES} from './paged-collision.mjs';
+import {validatePagedCollisionManifest,verifyCollisionTile,containsCollisionCell,collisionTileKey,collisionTileBounds,collisionAirIndex,collisionAirTile,COLLISION_TILE_HEADER_BYTES} from './paged-collision.mjs';
 
 const axes=['x','y','z'];
 const array=p=>Array.isArray(p)?p:axes.map(a=>p[a]);
@@ -27,13 +27,13 @@ export function segmentBoxDistanceSquared(a,b,min,max){
 /** The manifest lists allowed-space tiles; absent, failed or unloaded data is solid. */
 export class CollisionStream {
  constructor(manifest,url,{fetch:fetcher=(...args)=>globalThis.fetch(...args),maxBytes=48*1024*1024,maxTiles=64,concurrency=3,onChange=(keys)=>{}}={}){
-  this.manifest=validatePagedCollisionManifest(manifest);this.url=url;this.fetcher=fetcher;this.maxBytes=maxBytes;this.maxTiles=maxTiles;this.concurrency=concurrency;this.onChange=onChange;
+  this.manifest=validatePagedCollisionManifest(manifest);this.air=collisionAirIndex(manifest);this.url=url;this.fetcher=fetcher;this.maxBytes=maxBytes;this.maxTiles=maxTiles;this.concurrency=concurrency;this.onChange=onChange;
   this.entries=new Map(manifest.tiles.map(entry=>[entry.key,entry]));this.resident=new Map();this.pending=new Map();this.failures=new Map();this.abort=new AbortController();this.queue=[];this.running=0;this.bytes=0;this.clock=0;this.dead=false;this.pinned=new Set();this.available=(key)=>true;
  }
  near(point,radius){
   const p=array(point),size=this.manifest.tileSize,min=p.map(v=>Math.floor((v-radius)/size)),max=p.map(v=>Math.floor((v+radius)/size)),result=[];
   if(min.some((v,i)=>max[i]-v>16))throw Error('Collision neighborhood is too large.');
-  for(let x=min[0];x<=max[0];x++)for(let y=min[1];y<=max[1];y++)for(let z=min[2];z<=max[2];z++){const entry=this.entries.get(collisionTileKey([x,y,z]));if(entry)result.push(entry);}
+  for(let x=min[0];x<=max[0];x++)for(let y=min[1];y<=max[1];y++)for(let z=min[2];z<=max[2];z++){const coord=[x,y,z],key=collisionTileKey(coord),entry=this.entries.get(key);if(entry)result.push(entry);else if(this.air.hasTile(coord))result.push({key,coord,bytes:COLLISION_TILE_HEADER_BYTES,voxels:this.manifest.tileCells**3,bounds:collisionTileBounds(coord,size),uniformAir:true});}
   return result.sort((a,b)=>a.coord.reduce((d,v,i)=>d+((v+.5)*size-p[i])**2,0)-b.coord.reduce((d,v,i)=>d+((v+.5)*size-p[i])**2,0));
  }
  async ensureNear(point,radius=this.manifest.tileSize*.8){const entries=this.near(point,radius);if(entries.length>this.maxTiles||entries.reduce((sum,entry)=>sum+entry.bytes,0)>this.maxBytes)throw Error('Required collision neighborhood exceeds its memory budget.');this.pinned=new Set(entries.map(entry=>entry.key));await Promise.all(entries.map(entry=>this.load(entry)));return entries.map(entry=>entry.key);}
@@ -46,12 +46,16 @@ export class CollisionStream {
  drain(){while(!this.dead&&this.running<this.concurrency&&this.queue.length){const task=this.queue.shift();this.running++;this.fetchTile(task.entry).then(task.resolve,task.reject).finally(()=>{this.running--;this.pending.delete(task.entry.key);this.drain();});}}
  async fetchTile(entry){
   try{
+   let tile,bytes;
+   if(this.air.hasTile(entry.coord)){tile=collisionAirTile(entry.coord,this.manifest.tileCells);bytes=tile.bytes;}
+   else{
+   const expected=this.entries.get(entry.key);if(!expected)throw Error('Collision page is not listed in the manifest.');entry=expected;
    const response=await this.fetcher(new URL(entry.url,this.url).href,{signal:this.abort.signal});if(!response.ok)throw Error(`Collision tile request failed (${response.status}).`);
    const declared=Number(response.headers?.get('content-length'));if(declared>entry.bytes)throw Error('Collision tile response is oversized.');
-   let bytes;
    if(response.body?.getReader){const reader=response.body.getReader(),parts=[];let length=0;try{for(;;){const {value,done}=await reader.read();if(done)break;length+=value.byteLength;if(length>entry.bytes)throw Error('Collision tile response is oversized.');parts.push(value);}}catch(error){await reader.cancel().catch(()=>{});throw error;}bytes=new Uint8Array(length);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}}
    else bytes=new Uint8Array(await response.arrayBuffer());
-   const tile=await verifyCollisionTile(bytes,entry,this.manifest.tileCells,{expand:false});if(this.dead)throw new DOMException('Collision stream disposed.','AbortError');
+   tile=await verifyCollisionTile(bytes,entry,this.manifest.tileCells,{expand:false});
+   }if(this.dead)throw new DOMException('Collision stream disposed.','AbortError');
    if(bytes.byteLength>this.maxBytes)throw Error('Collision tile exceeds the residency budget.');
    const removed=[];for(const [key,value] of [...this.resident].sort((a,b)=>a[1].used-b[1].used)){if(this.bytes+bytes.byteLength<=this.maxBytes&&this.resident.size<this.maxTiles)break;if(this.pinned.has(key))continue;this.resident.delete(key);this.bytes-=value.bytes.byteLength;removed.push(key);}if(removed.length)this.onChange(removed);if(this.bytes+bytes.byteLength>this.maxBytes||this.resident.size>=this.maxTiles)throw Error('Collision residency budget is exhausted.');
    this.resident.set(entry.key,{entry,tile,bytes,used:++this.clock});this.bytes+=bytes.byteLength;this.failures.delete(entry.key);this.onChange([entry.key]);return tile;
@@ -67,7 +71,7 @@ export class CollisionStream {
   if(this.bytes>this.maxBytes||this.resident.size>this.maxTiles)throw Error('The required collision neighborhood exceeds its memory budget. Use coarser collision detail.');
  }
  hasCell(cell){
-  const n=this.manifest.tileCells,coord=cell.map(v=>Math.floor(v/n)),key=collisionTileKey(coord),tile=this.resident.get(key)?.tile;if(!tile||!this.available(key))return false;
+  const n=this.manifest.tileCells,coord=cell.map(v=>Math.floor(v/n)),key=collisionTileKey(coord);if(this.air.hasTile(coord))return true;const tile=this.resident.get(key)?.tile;if(!tile||!this.available(key))return false;
   return containsCollisionCell(tile,...cell.map((v,i)=>v-coord[i]*n));
  }
  allowsPoint(point){const p=array(point);return p.every(Number.isFinite)&&this.hasCell(p.map(v=>Math.floor(v/this.manifest.detail)));}
@@ -76,12 +80,15 @@ export class CollisionStream {
   if(radius===0)return this.allowsPoint(a)&&this.allowsPoint(b);
   const low=a.map((v,i)=>Math.floor((Math.min(v,b[i])-radius)/detail)),high=a.map((v,i)=>Math.floor((Math.max(v,b[i])+radius)/detail)),tileLow=low.map(v=>Math.floor(v/n)),tileHigh=high.map(v=>Math.floor(v/n)),squared=radius*radius,threshold=squared-Math.min(1e-10,squared*1e-6);
   if(!Number.isFinite(threshold)||threshold<=0)return false;
+  // A certified parent proves every finest voxel in this cube is free. It is
+  // complete collision data, so neither payload requests nor leaf scans help.
+  if(this.air.containingNode(tileLow,tileHigh)){stats.tiles=1;return true;}
   if(tileLow.reduce((count,v,i)=>count*(tileHigh[i]-v+1),1)>4096)return false;
   // One 1 cm walking capsule encloses hundreds of thousands of cells. Accept
   // compact full tiles and full 4³ bricks without expanding or scanning them;
   // exact capsule/box tests are needed only around blocked or mixed boundaries.
   for(let tx=tileLow[0];tx<=tileHigh[0];tx++)for(let ty=tileLow[1];ty<=tileHigh[1];ty++)for(let tz=tileLow[2];tz<=tileHigh[2];tz++){
-   stats.tiles++;const coord=[tx,ty,tz],key=coord.join(','),tile=this.resident.get(key)?.tile,tileMin=coord.map(v=>v*n*detail),tileMax=tileMin.map(v=>v+n*detail);
+   stats.tiles++;const coord=[tx,ty,tz];if(this.air.hasTile(coord))continue;const key=coord.join(','),tile=this.resident.get(key)?.tile,tileMin=coord.map(v=>v*n*detail),tileMax=tileMin.map(v=>v+n*detail);
    if(!tile||!this.available(key)){if(segmentBoxDistanceSquared(a,b,tileMin,tileMax)<threshold)return false;continue;}
    if(tile.full)continue;
    const bytes=tile.bytes,view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),axis=n/4,brickLow=low.map((v,i)=>Math.max(0,Math.floor((v-coord[i]*n)/4))),brickHigh=high.map((v,i)=>Math.min(axis-1,Math.floor((v-coord[i]*n)/4)));

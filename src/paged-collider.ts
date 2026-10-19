@@ -18,6 +18,7 @@ export class PagedCollider {
  constructor(readonly manifest:any,readonly url:string,readonly world:RAPIER.World){
   this.group.name='paged-collision';this.group.matrixAutoUpdate=false;this.group.matrix.copy(sceneMatrix(manifest.sourceTransform).invert());
   this.stream=new CollisionStream(manifest,url,{onChange:(keys:string[])=>this.invalidate(keys)});
+  this.worker.postMessage({type:'init',airNodes:manifest.airNodes||[]});
   this.stream.available=(key:string)=>this.prepared.has(key);
   this.worker.onmessage=({data})=>{const request=this.requests.get(data.id);this.requests.delete(data.id);if(!request)return;if(data.error)request.reject(Error(data.error));else request.resolve(data.results);};
   this.worker.onerror=event=>{for(const request of this.requests.values())request.reject(Error(event.message||'Collision surface worker failed.'));this.requests.clear();};

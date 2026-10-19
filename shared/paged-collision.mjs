@@ -81,6 +81,7 @@ export function encodeCollisionTile({coord,tileCells,occupied,full:knownFull=fal
  keys.forEach((key,i)=>{const offset=COLLISION_TILE_HEADER_BYTES+i*12;view.setUint32(offset,key,true);view.setUint32(offset+4,bricks.get(key)[0],true);view.setUint32(offset+8,bricks.get(key)[1],true);});
  return bytes;
 }
+function collisionPopcount32(value){value-=value>>>1&0x55555555;value=(value&0x33333333)+(value>>>2&0x33333333);return ((value+(value>>>4)&0x0f0f0f0f)*0x01010101)>>>24;}
 export function decodeCollisionTile(input,expected={}){
  const bytes=input instanceof Uint8Array?input:new Uint8Array(input);if(bytes.byteLength<COLLISION_TILE_HEADER_BYTES||bytes.byteLength>MAX_COLLISION_TILE_BYTES)fail('truncated or oversized tile.');const view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);
  if(view.getUint32(0,true)!==MAGIC||view.getUint16(4,true)!==1||view.getUint16(6,true)!==COLLISION_TILE_HEADER_BYTES||view.getUint16(10,true)!==4)fail('tile header.');
@@ -90,6 +91,7 @@ export function decodeCollisionTile(input,expected={}){
  if(mode===1)return {coord,tileCells,occupied:expected.expand===false?undefined:Uint32Array.from({length:voxels},(_,i)=>i),voxels,bytes,full:true};
  const occupied=expected.expand===false?undefined:new Uint32Array(voxels),brickAxis=tileCells/4;let count=0,previous=-1;
  for(let index=0;index<brickCount;index++){const offset=COLLISION_TILE_HEADER_BYTES+index*12,key=view.getUint32(offset,true),low=view.getUint32(offset+4,true),high=view.getUint32(offset+8,true);if(key<=previous||key>=brickAxis**3||!(low||high))fail('brick index.');previous=key;const bx=Math.floor(key/(brickAxis*brickAxis))*4,by=Math.floor(key/brickAxis)%brickAxis*4,bz=key%brickAxis*4;
+  if(!occupied){count+=collisionPopcount32(low)+collisionPopcount32(high);if(count>voxels)fail('occupancy count.');continue;}
   for(let bit=0;bit<64;bit++)if((bit<32?low:high)&(1<<(bit&31))){if(count>=voxels)fail('occupancy count.');if(occupied)occupied[count]=collisionCellId(bx+Math.floor(bit/16),by+Math.floor(bit/4)%4,bz+bit%4,tileCells);count++;}
  }
  if(count!==voxels)fail('occupancy count.');return {coord,tileCells,occupied,voxels,bytes};

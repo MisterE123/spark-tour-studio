@@ -44,7 +44,7 @@ try{
  assert.deepEqual(payloads,[],'a certified-air start needs no leaf payload downloads');
 
  await page.evaluate(async()=>{const r=window.tourRuntime;r.setMode('explore');await r.modeTransition;r.rig.rotation.y=0;});
- const tick=async(count)=>page.evaluate(count=>{const r=window.tourRuntime;for(let i=0;i<count;i++)r.frame(r.last+20);return {mode:r.mode,position:r.rig.position.toArray()};},count);
+ const tick=async(count)=>page.evaluate(async count=>{const r=window.tourRuntime;for(let i=0;i<count;i++){r.frame(r.last+20);if(i%10===9)await r.pagedCollider.ensure(r.camera.getWorldPosition(r.rig.position.clone()),4);}return {mode:r.mode,position:r.rig.position.toArray()};},count);
  let walking=await tick(20);assert.equal(walking.mode,'explore');assert.ok(Math.abs(walking.position[1]-1.7)<.12,'certified air retains its domain floor');
  await page.evaluate(()=>window.tourRuntime.setTouch(1,0));walking=await tick(200);
  assert.ok(walking.position[0]>8,'walking crosses the internal air-page seam');
@@ -69,34 +69,35 @@ try{
  assert.deepEqual({inside:proof.inside,outside:proof.outside,missing:proof.missing,mixed:proof.mixed},{inside:true,outside:false,missing:false,mixed:false});
 
  const residency=await page.evaluate(async()=>{
-  const p=window.tourRuntime.pagedCollider,started=performance.now();let peakTiles=p.residentTiles,peakBytes=p.residentBytes,peakTriangles=0;
+  const p=window.tourRuntime.pagedCollider,started=performance.now();let peakTiles=p.residentTiles,peakBytes=p.residentBytes,peakChunks=p.residentChunks,peakTriangles=0;
   for(let i=0;i<24;i++){
    await p.ensure({x:32+i*64,y:16,z:32+i*32},4);
-   peakTiles=Math.max(peakTiles,p.residentTiles);peakBytes=Math.max(peakBytes,p.residentBytes);
+   peakTiles=Math.max(peakTiles,p.residentTiles);peakBytes=Math.max(peakBytes,p.residentBytes);peakChunks=Math.max(peakChunks,p.residentChunks);
    peakTriangles=Math.max(peakTriangles,[...p.surfaces.values()].reduce((sum,surface)=>sum+surface.triangles,0));
   }
-  return {peakTiles,peakBytes,peakTriangles,ms:performance.now()-started};
+  return {peakTiles,peakBytes,peakChunks,peakTriangles,ms:performance.now()-started};
  });
  assert.deepEqual(payloads,[],'moving within certified air never requests its omitted leaves');
  assert.ok(residency.peakTiles<=64,'virtual physics neighborhoods retain the tile budget');
  assert.ok(residency.peakBytes<=64*48,'air leaves stay in their compact representation');
+ assert.ok(residency.peakChunks<=2048,'local physics chunks remain bounded independently of raw pages');
  assert.ok(residency.peakTriangles<=128,'interior certified neighbors do not produce artificial wall geometry');
  assert.ok(residency.ms<8000,`high-resolution empty physics should skip per-cell surface work (${residency.ms} ms)`);
 
  let markRequested;const mixedRequested=new Promise(resolve=>markRequested=resolve),mixedHold=new Promise(resolve=>releaseMixed=resolve);
  await page.route('**/tiles/256_0_0.scv',async route=>{markRequested();await mixedHold;await route.continue();});
  await page.evaluate(()=>{
-  const p=window.tourRuntime.pagedCollider,w=p.worker;
+  const r=window.tourRuntime,p=r.pagedCollider,w=p.worker;p.focus(r.camera.getWorldPosition(r.rig.position.clone()));
   window.surfaceDelay={jobs:[],send:w.postMessage.bind(w)};w.postMessage=(...args)=>window.surfaceDelay.jobs.push(args);
-  window.mixedLoad=p.stream.load(p.stream.entries.get('256,0,0'));
+  window.mixedPrepare=p.prepare({x:2050,y:1.7,z:4},4);
  });
  await Promise.race([mixedRequested,page.waitForTimeout(30000).then(()=>{throw Error('The mixed collision page was not requested.');})]);
  assert.equal(await page.evaluate(()=>window.tourRuntime.pagedCollider.allows({x:2050,y:1,z:4},.6,.24)),false,'unloaded mixed space remains blocked beside certified air');
- releaseMixed();await page.evaluate(()=>window.mixedLoad);await page.waitForFunction(()=>window.surfaceDelay.jobs.length>0);
+ releaseMixed();await page.waitForFunction(()=>window.tourRuntime.pagedCollider.stream.resident.has('256,0,0')&&window.surfaceDelay.jobs.length>0);
  assert.equal(await page.evaluate(()=>window.tourRuntime.pagedCollider.allows({x:2050,y:1,z:4},.6,.24)),false,'receiving mixed bytes cannot bypass physics installation');
  await page.evaluate(async()=>{
   const p=window.tourRuntime.pagedCollider,s=window.surfaceDelay;p.worker.postMessage=s.send;for(const job of s.jobs)s.send(...job);
-  await p.ensure({x:2050,y:1.7,z:4},4);
+  window.mixedLease=await window.mixedPrepare;
  });
  const mixed=await page.evaluate(()=>{
   const p=window.tourRuntime.pagedCollider;return {
@@ -106,10 +107,11 @@ try{
   };
  });
  assert.deepEqual(mixed,{inside:true,wall:false,across:false,missing:false},'only fully prepared holes open; the mixed wall and absent page stay solid');
+ await page.evaluate(()=>{const r=window.tourRuntime;r.pagedCollider.focus(r.camera.getWorldPosition(r.rig.position.clone()));window.mixedLease.release();});
  assert.equal(new Set(payloads).size,1,'the only payload fetched belongs to the real mixed tile');
  assert.deepEqual(external,[]);assert.deepEqual(errors,[]);
  await page.screenshot({path:path.join(root,'runtime.png')});
- console.log(JSON.stringify({airQueriesMs:proof.ms,query:proof.stats,highResolutionEnsuresMs:residency.ms,peakAirTiles:residency.peakTiles,peakAirBytes:residency.peakBytes,peakAirTriangles:residency.peakTriangles,walkingPosition:walking.position,payloadRequests:payloads.length}));
+ console.log(JSON.stringify({airQueriesMs:proof.ms,query:proof.stats,highResolutionEnsuresMs:residency.ms,peakAirTiles:residency.peakTiles,peakAirBytes:residency.peakBytes,peakPhysicsChunks:residency.peakChunks,peakAirTriangles:residency.peakTriangles,walkingPosition:walking.position,payloadRequests:payloads.length}));
  console.log('PASS: one exact air certificate skips 16 million leaves, zero air requests, high-resolution bounded physics, walking floor/seam, blocked unknowns and delayed mixed-wall preparation. '+root);
 }catch(error){
  console.error(error);

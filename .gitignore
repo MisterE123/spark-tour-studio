@@ -12,6 +12,7 @@ converter/*.exe
 github-tools/*.exe
 .spark-tour-history.json
 .spark-tour-publish.json
+.spark-tour-diagnostics/
 
 collision-tools/node.exe
 collision-tools/node_modules/

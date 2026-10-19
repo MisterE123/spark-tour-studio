@@ -3,7 +3,7 @@ const {spawn}=require('node:child_process');
 const {StringDecoder}=require('node:string_decoder');
 const {atomicJson}=require('./export.cjs');const {collectTourFiles,assetPath,safeParents,ignored}=require('./tour-files.cjs');
 const marker='config/version-control.json',localState='.spark-tour-history.json';
-const ignoreBlock='\n# Spark Tour local/generated files\n.sources.json\n.sources.json.tmp\nautosave.json\nautosave.json.tmp\n.spark-tour-history.json\n.spark-tour-history.json.tmp\n.spark-tour-publish.json\n.spark-tour-publish.json.tmp\n.spark-viewer-backups/\n.conversion-*/\n.collision-*/\ncolliders/.*.staging/\ncollision-logs/\nconversion-logs/\n*.exe\n*.zip\n*.ply\n*.ckpt\n*.safetensors\n*.log\n*.pem\n*.key\n*.pfx\n*.p12\n.env\n.env.*\n';
+const ignoreBlock='\n# Spark Tour local/generated files\n.sources.json\n.sources.json.tmp\nautosave.json\nautosave.json.tmp\n.spark-tour-history.json\n.spark-tour-history.json.tmp\n.spark-tour-publish.json\n.spark-tour-publish.json.tmp\n.spark-viewer-backups/\n.spark-tour-diagnostics/\n.conversion-*/\n.collision-*/\ncolliders/.*.staging/\ncollision-logs/\nconversion-logs/\n*.exe\n*.zip\n*.ply\n*.ckpt\n*.safetensors\n*.log\n*.pem\n*.key\n*.pfx\n*.p12\n.env\n.env.*\n';
 const same=(a,b)=>path.resolve(a).toLowerCase()===path.resolve(b).toLowerCase();
 function userName(){try{return os.userInfo().username;}catch{return process.env.USERNAME||'Tour author';}}
 async function readJson(file,fallback){try{return JSON.parse(await fs.readFile(file,'utf8'));}catch(error){if(error.code==='ENOENT')return fallback;throw error;}}

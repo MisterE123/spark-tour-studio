@@ -1,51 +1,35 @@
-import React,{useEffect,useRef,useState} from 'react';
+import React,{useEffect,useRef,useState,useSyncExternalStore} from 'react';
 import type {CollisionAuthoring,CollisionOptions,CollisionVolume,Hosting,TourScene,Vec3} from './model';
 import {uid} from './model';
 import {CollisionAuthoringSchema,collisionPageConfig} from '../shared/collision-selection.mjs';
-import {sceneUrl} from '../shared/project.mjs';
 import {TourRuntime} from './runtime';
-import {buildCollision,type CollisionProgress} from './collision-builder';
-import {buildPagedCollision,detectCollisionBounds} from './paged-collision-builder';
+import {CollisionJob} from './collision-job';
 import {Button,Field,Vector} from './ui';
 import {IconButton,InspectorSection} from './icons';
 import './collision-editor.css';
 
-interface Props {scene:TourScene;runtime:TourRuntime|null;hosting:Hosting;base:string;disabled:boolean;onChange:(authoring:CollisionAuthoring)=>void;onBusy:(busy:boolean)=>void;onComplete:(ref:string)=>void|Promise<void>;onStatus:(text:string)=>void;showWire:boolean;onWire:(show:boolean)=>void}
-export function CollisionEditor({scene,runtime,hosting,base,disabled,onChange,onBusy,onComplete,onStatus,showWire,onWire}:Props){
+interface Props {scene:TourScene;runtime:TourRuntime|null;hosting:Hosting;base:string;disabled:boolean;onChange:(authoring:CollisionAuthoring)=>void;job:CollisionJob;onStatus:(text:string)=>void;showWire:boolean;onWire:(show:boolean)=>void}
+export function CollisionEditor({scene,runtime,hosting,base,disabled,onChange,job,onStatus,showWire,onWire}:Props){
  const authoring=CollisionAuthoringSchema.parse(scene.collisionAuthoring||{}) as CollisionAuthoring;
- const [selected,setSelected]=useState(authoring.volumes[0]?.id||''),[operation,setOperation]=useState<'add'|'remove'>('add'),[shape,setShape]=useState<'ball'|'box'>('ball'),[gizmo,setGizmo]=useState<'translate'|'rotate'|'scale'>('translate'),[placing,setPlacing]=useState(false),[working,setWorking]=useState(false),[progress,setProgress]=useState<CollisionProgress|null>(null),[result,setResult]=useState('');
- const job=useRef<{cancel():void}|null>(null),progressLog=useRef<(p:CollisionProgress)=>void>(()=>{}),mounted=useRef(true),live=useRef({scene,hosting,base,onChange,onComplete,onStatus,onBusy});live.current={scene,hosting,base,onChange,onComplete,onStatus,onBusy};
+ const [selected,setSelected]=useState(authoring.volumes[0]?.id||''),[operation,setOperation]=useState<'add'|'remove'>('add'),[shape,setShape]=useState<'ball'|'box'>('ball'),[gizmo,setGizmo]=useState<'translate'|'rotate'|'scale'>('translate'),[placing,setPlacing]=useState(false);
+ const state=useSyncExternalStore(job.subscribe,job.getSnapshot),working=state.working,progress=state.progress,result=state.sceneId===scene.id?state.result:'';
+ const live=useRef({scene,onChange,onStatus});live.current={scene,onChange,onStatus};
  const volume=authoring.scope==='entire'?authoring.bounds:authoring.volumes.find(v=>v.id===selected);
  const pageConfig=collisionPageConfig(authoring.options.detail,authoring.options.pageSize);
  const edit=(fn:(a:CollisionAuthoring)=>void)=>{const next=CollisionAuthoringSchema.parse(live.current.scene.collisionAuthoring||{}) as CollisionAuthoring;fn(next);live.current.onChange(next);};
  const patch=(changes:Partial<CollisionVolume>)=>edit(a=>{const v=a.scope==='entire'?a.bounds:a.volumes.find(v=>v.id===selected);if(v)Object.assign(v,changes);});
  const add=(point:Vec3,type:CollisionVolume['type']=shape,action:CollisionVolume['operation']=operation)=>{if((live.current.scene.collisionAuthoring?.volumes.length||0)>=128){live.current.onStatus('Selection has 128 shapes. Adjust or remove a shape before adding another.');return;}const id=uid(),scale=live.current.scene.transform.scale;edit(a=>a.volumes.push({id,type,operation:action,position:point,rotation:[0,0,0],size:type==='ball'?[2/scale,2/scale,2/scale]:[4/scale,3/scale,4/scale]}));setSelected(id);setPlacing(false);};
- useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;job.current?.cancel();live.current.onBusy(false);runtime?.clearCollisionSelection();};},[runtime]);
- useEffect(()=>{if(!working||!window.studio)return;return window.studio.onProgress(text=>{if(mounted.current&&text.startsWith('Preparing walking tiles')){setProgress({phase:text});progressLog.current({phase:text});}});},[working]);
+ useEffect(()=>()=>{runtime?.cancelCollisionShapePick();runtime?.clearCollisionSelection();},[runtime]);
+ useEffect(()=>{if(working){runtime?.cancelCollisionShapePick();setPlacing(false);}},[runtime,working]);
  useEffect(()=>{if(!runtime)return;runtime.onCollisionSelect=id=>{if(live.current.scene.collisionAuthoring?.scope!=='entire')setSelected(id);};runtime.onCollisionPickCancel=()=>setPlacing(false);runtime.onCollisionVolume=volume=>edit(a=>{if(a.scope==='entire'&&a.bounds?.id===volume.id){a.bounds=volume;return;}const index=a.volumes.findIndex(v=>v.id===volume.id);if(index!==-1)a.volumes[index]=volume;});runtime.onCollisionPlace=(point,type,action)=>add(point,type,action);return()=>{runtime.onCollisionSelect=()=>{};runtime.onCollisionVolume=()=>{};runtime.onCollisionPlace=()=>{};runtime.onCollisionPickCancel=()=>{};};},[runtime]);
  useEffect(()=>{if(placing)runtime?.pickCollisionShape(shape,operation);},[runtime,placing,shape,operation]);
  useEffect(()=>{const volumes=authoring.scope==='entire'?(authoring.bounds?[authoring.bounds]:[]):authoring.volumes;runtime?.setCollisionSelection(scene.id,working?[]:volumes,working?'':authoring.scope==='entire'?authoring.bounds?.id||'':selected,gizmo);return()=>{};},[runtime,scene.id,JSON.stringify(authoring.volumes),JSON.stringify(authoring.bounds),authoring.scope,selected,gizmo,working]);
  useEffect(()=>{if(!authoring.volumes.some(v=>v.id===selected))setSelected(authoring.volumes[0]?.id||'');},[JSON.stringify(authoring.volumes),selected]);
  const choose=(type:'ball'|'box')=>{setShape(type);if(!runtime)return;runtime.pickCollisionShape(type,operation);setPlacing(true);};
  const options=(changes:Partial<CollisionOptions>)=>edit(a=>{Object.assign(a.options,changes);});
- const estimate=async()=>{if(working||!runtime)return;const current=live.current,request={url:sceneUrl(current.scene,current.hosting,current.base),transform:structuredClone(current.scene.transform),authoring:CollisionAuthoringSchema.parse(current.scene.collisionAuthoring||{}) as CollisionAuthoring,engineUrl:new URL('editor-engine/',document.baseURI).href},sceneId=current.scene.id;setWorking(true);setResult('');current.onBusy(true);const active=detectCollisionBounds(request,p=>{if(mounted.current){setProgress(p);live.current.onStatus(p.phase);}});job.current=active;try{const bounds=await active.promise;if(!mounted.current||live.current.scene.id!==sceneId)return;edit(a=>{a.bounds=bounds;});setGizmo('scale');live.current.onStatus('Scene bounds estimated. Review the box before generating collision.');}catch(error){if(mounted.current){const text=error instanceof Error?error.message:String(error);setResult(text);live.current.onStatus(text);}}finally{if(job.current===active){job.current=null;live.current.onBusy(false);if(mounted.current){setWorking(false);setProgress(null);}}}};
- const generate=async()=>{
-  if(!window.studio||!runtime||working)return;const current=live.current,request={url:sceneUrl(current.scene,current.hosting,current.base),transform:structuredClone(current.scene.transform),authoring:CollisionAuthoringSchema.parse(current.scene.collisionAuthoring||{}) as CollisionAuthoring,engineUrl:new URL('editor-engine/',document.baseURI).href},signature=JSON.stringify([current.scene.id,request.url,request.transform,request.authoring]);
-  const studio=window.studio;let session:string|undefined,active:{cancel():void}|undefined,diagnostics:{id:string;path:string}|undefined,savedRef='',lastLog=-Infinity;
-  const recordProgress=(p:CollisionProgress)=>{if(!diagnostics||performance.now()-lastLog<1000)return;lastLog=performance.now();void studio.appendCollisionDiagnostics(diagnostics.id,{type:'phase',phase:p.phase,completed:p.completed,total:p.total}).catch(()=>{});};progressLog.current=recordProgress;
-  const report=(p:CollisionProgress)=>{recordProgress(p);if(!mounted.current)return;setProgress(p);live.current.onStatus(p.total?`${p.phase} · ${p.completed} / ${p.total}`:p.phase);};
-  setWorking(true);setResult('');current.onBusy(true);
-  try{
-   try{diagnostics=await studio.beginCollisionDiagnostics({sceneId:current.scene.id,source:request.url,format:request.authoring.format||'paged',scope:request.authoring.scope||'selected',volumeCount:request.authoring.volumes.length,hasBounds:!!request.authoring.bounds,options:request.authoring.options});}catch{}
-   if(!mounted.current)throw Object.assign(Error('Collision generation cancelled.'),{name:'AbortError'});
-   let ref:string,stats:{selected:number;voxels:number;triangles:number};if(request.authoring.format==='glb'){const worker=buildCollision(request,report);active=worker;job.current=active;const result=await worker.promise;setProgress({phase:'Saving collision mesh…'});ref=await studio.saveCollisionGlb(result.bytes);stats=result.stats;}else{session=await studio.beginPagedCollision();const id=session,worker=buildPagedCollision(request,report,{append:(key,cells)=>studio.appendPagedCollision(id,key,cells),keys:()=>studio.pagedCollisionKeys(id),read:(key,offset,maxCells)=>studio.readPagedCollision(id,key,offset,maxCells),writeTile:(entry,bytes)=>studio.writePagedCollisionTile(id,entry,bytes),finalize:manifest=>studio.finalizePagedCollision(id,manifest)});active={cancel(){worker.cancel();void studio.abortPagedCollision(id);}};job.current=active;const result=await worker.promise;ref=result.ref;stats=result.stats;}
-   savedRef=ref;if(!mounted.current)throw Object.assign(Error('Collision generation cancelled after saving.'),{name:'AbortError'});const now=live.current;if(signature!==JSON.stringify([now.scene.id,sceneUrl(now.scene,now.hosting,now.base),now.scene.transform,CollisionAuthoringSchema.parse(now.scene.collisionAuthoring||{})]))throw Error('Scene changed during generation. Generate again from the current settings.');
-   setProgress({phase:'Activating generated collision…'});await now.onComplete(ref);if(diagnostics)await studio.appendCollisionDiagnostics(diagnostics.id,{type:'success',ref,stats}).catch(()=>{});
-   if(mounted.current){const text=request.authoring.format==='glb'?`${stats.selected.toLocaleString()} splats · ${stats.triangles.toLocaleString()} triangles`:`${stats.selected.toLocaleString()} splats · ${stats.voxels.toLocaleString()} cells`;setResult(text);live.current.onStatus('Collision ready · '+text);}
-  }
-  catch(error){const message=error instanceof Error?error.message:String(error),cancelled=error instanceof Error&&error.name==='AbortError'||/cancelled/i.test(message);let logged=false;if(diagnostics)try{await studio.appendCollisionDiagnostics(diagnostics.id,{type:cancelled?'cancelled':'error',message,ref:savedRef||undefined});logged=true;}catch{}if(!mounted.current)return;const text=message+(diagnostics?(logged?' Diagnostic log: ':' Diagnostic log could not be updated: ')+diagnostics.path:'');setResult(text);live.current.onStatus(text);}
-  finally{progressLog.current=()=>{};if(session)await studio.abortPagedCollision(session).catch(()=>{});if(!active||job.current===active){job.current=null;live.current.onBusy(false);if(mounted.current){setWorking(false);setProgress(null);}}}
- };
+ const estimate=()=>{if(!working&&runtime)job.start(scene.id,'estimate');};
+ const generate=()=>{if(!working&&runtime)job.start(scene.id);};
+ useEffect(()=>{if(!working&&state.kind==='estimate'&&state.sceneId===scene.id&&state.result.startsWith('Scene bounds estimated.'))setGizmo('scale');},[working,state.revision,scene.id]);
  const locked=disabled||working;
  return <div className="collision-editor"><div className="eyebrow">COLLISION BUILDER</div><h3>Collision coverage</h3>
   <fieldset disabled={locked}><Field label="Coverage"><select aria-label="Collision coverage" value={authoring.scope} onChange={e=>{runtime?.cancelCollisionShapePick();setPlacing(false);edit(a=>{a.scope=e.target.value as CollisionAuthoring['scope'];});}}><option value="selected">Selected areas</option><option value="entire">Entire scene</option></select></Field><p className="muted">{authoring.scope==='entire'?'Estimate a scene box, then adjust it to include the areas visitors may enter. Your other selection shapes are kept.':authoring.format==='glb'?'Green shapes select splat surfaces; coral shapes remove them.':'Green shapes define space visitors may enter; coral shapes remove it. The model inside remains solid. Space outside the shapes is blocked.'}</p>
@@ -73,7 +57,7 @@ export function CollisionEditor({scene,runtime,hosting,base,disabled,onChange,on
    </InspectorSection>
   </fieldset>
   <label className="check"><input type="checkbox" checked={showWire} onChange={e=>onWire(e.target.checked)}/>Show collision wireframe</label>
-  {progress&&<div role="status" className="collision-progress"><span>{progress.phase}{progress.total?` · ${progress.completed} / ${progress.total}`:''}</span><progress {...(progress.total?{max:progress.total,value:progress.completed}:{})}/></div>}{result&&<p className="collision-result break" role="status">{result}</p>}
-  <div className="actions"><Button primary disabled={locked||(authoring.scope==='entire'?!authoring.bounds:!authoring.volumes.some(v=>v.operation==='add'))} onClick={()=>void generate()}>{authoring.format==='glb'?'Generate collision GLB':'Generate paged collision'}</Button>{working&&<Button onClick={()=>job.current?.cancel()}>Cancel</Button>}</div>
+  {working&&state.sceneId!==scene.id&&<p className="muted">Generating collision for {state.sceneName}</p>}{progress&&<div role="status" className="collision-progress"><span>{progress.phase}{progress.total?` · ${progress.completed} / ${progress.total}`:''}</span><progress {...(progress.total?{max:progress.total,value:progress.completed}:{})}/></div>}{result&&<p className="collision-result break" role="status">{result}</p>}
+  <div className="actions"><Button primary disabled={locked||(authoring.scope==='entire'?!authoring.bounds:!authoring.volumes.some(v=>v.operation==='add'))} onClick={()=>void generate()}>{authoring.format==='glb'?'Generate collision GLB':'Generate paged collision'}</Button>{working&&<Button disabled={!state.cancellable} onClick={job.cancel}>{state.cancelling?'Cancelling…':'Cancel'}</Button>}</div>
  </div>;
 }

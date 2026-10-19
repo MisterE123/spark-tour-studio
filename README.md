@@ -48,6 +48,10 @@ Undo/redo covers tour edits. Autosave recovery is offered when reopening a proje
 
 ## Paged collision
 
+**Scene → Navigation & starts → Walking step height** sets the maximum climb in world meters, independent of the scene's scale. The default is **0.5334 m** (1.75 ft); choose **0** to disable automatic steps. Coarse voxel steps use checked rise-then-forward capsule motion while keeping the requested walking speed. Ceilings, obstructed landings and unprepared collision remain blocked.
+
+Click-to-walk stays on the clicked floor level and follows the navigation surface without spline dips beneath the ground. Navigation is cached separately for each step height. Existing paged routes remain available when their baked step limit is safe for the current setting, with a bounded local fallback for newly climbable nearby steps. Reducing the limit uses nearby collision instead of unsafe baked routes. Regenerate paged collision to bake the updated limit across the whole scene.
+
 **Tools → Generate collider → Collision format** offers **Paged collision · recommended** and **Legacy GLB mesh**. Existing GLB colliders keep working. Changing authoring settings never replaces a scene's collider until generation and saving finish successfully.
 
 Completed generation activates the saved collider immediately, including when a previous walking start failed. Replacement keeps the camera and streamed splat scene in place, releases the old collider, and pauses visitor movement until the replacement is available. A failed replacement remains blocked until retried. Generation diagnostics are saved in the project's private `.spark-tour-diagnostics/` folder, including progress and failures; this folder is excluded from website exports, tour history and local hosting.

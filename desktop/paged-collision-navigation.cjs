@@ -4,7 +4,7 @@ const {workerData,parentPort}=require('node:worker_threads');
 const fs=require('node:fs/promises'),path=require('node:path'),crypto=require('node:crypto');
 async function run(){
  const {root,manifest}=workerData,{decodeCollisionTile,containsCollisionCell,collisionTileSurface,collisionAirTile,collisionAirIndex,validatePagedCollisionManifest}=await import('../shared/paged-collision.mjs'),{bakeNavigationSector,PAGED_NAVIGATION_FORMAT}=await import('../shared/paged-navigation.mjs');
- validatePagedCollisionManifest(manifest);const air=collisionAirIndex(manifest);
+ validatePagedCollisionManifest(manifest);const {DEFAULT_STEP_HEIGHT}=await import('../shared/walking.mjs'),stepHeight=workerData.stepHeight??DEFAULT_STEP_HEIGHT;if(!Number.isFinite(stepHeight)||stepHeight<0||stepHeight>1000000)throw Error('Invalid walking step height.');const air=collisionAirIndex(manifest);
  // Only authoring expands air certificates. The viewer reads the hierarchy
  // directly. Bound the expansion to the generator's original leaf budget and
  // synthesize full tiles without requesting deleted leaf files.
@@ -12,7 +12,7 @@ async function run(){
  const sectors=new Map(),add=tile=>{const key=`${tile.coord[0]},${tile.coord[2]}`;if(!sectors.has(key))sectors.set(key,[]);sectors.get(key).push(tile);};
  for(const tile of manifest.tiles)add(tile);
  for(const node of manifest.airNodes||[]){const side=2**node.level;for(let x=0;x<side;x++)for(let y=0;y<side;y++)for(let z=0;z<side;z++){const coord=[node.coord[0]+x,node.coord[1]+y,node.coord[2]+z];add({key:coord.join(','),coord,bytes:48,air:true});}}
- const navigation={format:PAGED_NAVIGATION_FORMAT,tileSize:manifest.tileSize,origin:[0,manifest.bounds.min[1]-.5,0],tiles:[]},cache=new Map();let completed=0;
+ const navigation={format:PAGED_NAVIGATION_FORMAT,stepHeight,tileSize:manifest.tileSize,origin:[0,manifest.bounds.min[1]-.5,0],tiles:[]},cache=new Map();let completed=0;
  await fs.mkdir(path.join(root,'nav'),{recursive:true});
  for(const key of sectors.keys()){
   const [x,z]=key.split(',').map(Number),neighbors=new Map(),wanted=[];
@@ -22,7 +22,7 @@ async function run(){
   cache.clear();for(const [tileKey,tile]of neighbors)cache.set(tileKey,tile);
   const n=manifest.tileCells,neighbor=global=>{const coord=global.map(value=>Math.floor(value/n)),tile=neighbors.get(coord.join(','));return !!tile&&containsCollisionCell(tile,...global.map((value,axis)=>value-coord[axis]*n));},parts=[];let vertices=0,indices=0;
   for(const tile of neighbors.values()){if(tile.full&&air.interiorTile(tile.coord))continue;const part=collisionTileSurface(tile,manifest.detail,{allowedSpace:manifest.representation==='allowed-space',neighbor});vertices+=part.positions.length;indices+=part.indices.length;if(vertices>12_000_000||indices>18_000_000)throw Error('A walking sector is too detailed. Choose coarser collision voxels.');parts.push(part);}
-  const data=await bakeNavigationSector(parts,{coord:[x,z],tileSize:manifest.tileSize,bounds:manifest.bounds,cellSize:Math.min(.1,manifest.detail)});
+  const data=await bakeNavigationSector(parts,{coord:[x,z],tileSize:manifest.tileSize,bounds:manifest.bounds,cellSize:Math.min(.1,manifest.detail),stepHeight});
   if(data?.byteLength){const url=`nav/${x}_${z}.bin`;await fs.writeFile(path.join(root,url),data,{flag:'wx'});navigation.tiles.push({key,coord:[x,z],url,bytes:data.byteLength,sha256:crypto.createHash('sha256').update(data).digest('hex'),bounds:{min:[x*manifest.tileSize,manifest.bounds.min[1],z*manifest.tileSize],max:[(x+1)*manifest.tileSize,manifest.bounds.max[1],(z+1)*manifest.tileSize]}});}
   parentPort.postMessage({type:'progress',completed:++completed,total:sectors.size});
  }

@@ -29,7 +29,7 @@ function fixture(t,{format='glb',bridge={}}={}){
   async beginPagedCollision(){calls.begin.push(true);return 'session-1';},
   async abortPagedCollision(id){calls.abort.push(id);},
   async appendPagedCollision(){},async pagedCollisionKeys(){return [];},async readPagedCollision(){return {cells:new Uint32Array(),done:true};},async writePagedCollisionTile(){},
-  async finalizePagedCollision(id,manifest){calls.finalize.push({id,manifest});return 'colliders/generated/scene.collision.json';},
+  async finalizePagedCollision(id,manifest,stepHeight){calls.finalize.push({id,manifest,stepHeight});return 'colliders/generated/scene.collision.json';},
   async saveCollisionGlb(bytes){calls.save.push(bytes);return 'colliders/generated.collision.glb';},
   ...bridge
  };
@@ -69,11 +69,12 @@ test('cancelling during session creation waits for its native cleanup before bec
  abort.resolve();await until(()=>!f.job.getSnapshot().working);assert.equal(f.calls.logs.at(-1).type,'cancelled');assert.equal(f.progressListeners.size,0);
 });
 
-for(const change of ['source','transform','authoring','deleted','project'])test(`a ${change} change to the original job target prevents stale application`,async t=>{
+for(const change of ['source','transform','authoring','step-height','deleted','project'])test(`a ${change} change to the original job target prevents stale application`,async t=>{
  const f=fixture(t);f.job.start('north');await until(()=>f.workers.length===1);
  if(change==='source')f.scenes.get('north').source='replacement.rad';
  else if(change==='transform')f.scenes.get('north').transform.scale=2;
  else if(change==='authoring')f.scenes.get('north').collisionAuthoring.volumes[0].size[0]=10;
+ else if(change==='step-height')f.scenes.get('north').walkStepHeight=.2;
  else if(change==='deleted')f.scenes.delete('north');
  else f.state.root='D:/different-tour';
  f.workers[0].emit({type:'complete',bytes:new Uint8Array([1,2,3]),stats});await until(()=>!f.job.getSnapshot().working);
@@ -108,4 +109,10 @@ test('bounds estimation survives inspector remount and selection changes',async 
  const f=fixture(t);f.job.start('north','estimate');assert.equal(f.workers.length,1);const off=f.job.subscribe(()=>{});off();f.state.selected='south';
  const bounds={id:'scene-bounds',type:'box',operation:'add',position:[0,2,0],rotation:[0,0,0],size:[20,8,12]};f.workers[0].emit({type:'bounds',bounds});await until(()=>!f.job.getSnapshot().working);
  assert.deepEqual(f.calls.bounds,[{id:'north',bounds}]);assert.equal(f.calls.complete.length,0);assert.match(f.job.getSnapshot().result,/Scene bounds estimated/);assert.equal(f.progressListeners.size,0);
+});
+
+
+test('paged generation captures the scene step height in meters for native walking tiles',async t=>{
+ const f=fixture(t,{format:'paged'});f.scenes.get('north').walkStepHeight=.42;f.scenes.get('north').transform.scale=3;
+ f.job.start('north');await until(()=>f.workers.length===1);const worker=f.workers[0];await worker.emit({type:'sink',id:8,method:'finalize',args:[{fixture:true}]});assert.equal(f.calls.finalize[0].stepHeight,.42,'generation geometry is already in authored world meters; scene scale must not scale the setting again');worker.emit({type:'complete',ref:'colliders/generated/scene.collision.json',stats});await until(()=>!f.job.getSnapshot().working);assert.equal(f.calls.complete.length,1);
 });

@@ -1,10 +1,12 @@
 import {init,NavMesh,NavMeshParams,NavMeshQuery,UnsignedCharArray,VerticesArray,TrianglesArray,RecastChunkyTriMesh,RecastBuildContext,Raw,Detour,statusFailed,freeHeightfield,freeCompactHeightfield,freeContourSet,freePolyMesh,freePolyMeshDetail} from 'recast-navigation';
 import {buildTiledNavMeshRcConfig,generateTileNavMeshData,tiledNavMeshGeneratorConfigDefaults} from 'recast-navigation/generators';
+import {navigationClimb,surfaceNavigationPath} from './navigation.mjs';
+import {DEFAULT_STEP_HEIGHT} from './walking.mjs';
 
 export const PAGED_NAVIGATION_FORMAT='recast-0.43.1';
 // Bake one x/z sector with its neighbour geometry as a halo. Every sector uses
 // the same grid and vertical origin, so Detour can connect their border edges.
-export async function bakeNavigationSector(parts,{coord,tileSize,bounds,cellSize=.1}){
+export async function bakeNavigationSector(parts,{coord,tileSize,bounds,cellSize=.1,stepHeight=DEFAULT_STEP_HEIGHT}){
  await init();
  if(!Number.isFinite(tileSize)||!Number.isFinite(cellSize)||tileSize<=0||tileSize>64)throw Error('Invalid walking tile size.');const size=Math.min(1024,Math.round(tileSize/Math.max(.05,Math.min(.1,cellSize))));if(size<8)throw Error('Invalid walking tile size.');cellSize=tileSize/size;
  const vertices=new VerticesArray(),triangles=new TrianglesArray(),chunky=new RecastChunkyTriMesh(),context=new RecastBuildContext();let config,data,intermediates;
@@ -18,7 +20,7 @@ export async function bakeNavigationSector(parts,{coord,tileSize,bounds,cellSize
   // the common height grid so border heights still join between sectors.
   const baseY=bounds.min[1]-.5,ch=.05,minY=baseY+Math.floor((lowY-.5-baseY)/ch)*ch,maxY=baseY+Math.ceil((highY+3-baseY)/ch)*ch;
   if(!Number.isFinite(minY)||!Number.isFinite(maxY)||maxY-minY>3000)throw Error('This walking sector spans too many vertical levels. Limit collision coverage to a smaller vertical range.');
-  ({config}=buildTiledNavMeshRcConfig({recastConfig:{...tiledNavMeshGeneratorConfigDefaults,cs:cellSize,ch:.05,tileSize:size,walkableSlopeAngle:45,walkableHeight:34,walkableClimb:5,walkableRadius:Math.ceil(.25/cellSize),minRegionArea:2,mergeRegionArea:4},navMeshBounds:[[0,minY,0],[tileSize,maxY,tileSize]]}));
+  ({config}=buildTiledNavMeshRcConfig({recastConfig:{...tiledNavMeshGeneratorConfigDefaults,cs:cellSize,ch:.05,tileSize:size,walkableSlopeAngle:45,walkableHeight:34,walkableClimb:navigationClimb(stepHeight),walkableRadius:Math.ceil(.25/cellSize),minRegionArea:2,mergeRegionArea:4},navMeshBounds:[[0,minY,0],[tileSize,maxY,tileSize]]}));
   const [x,z]=coord,result=generateTileNavMeshData(vertices,triangles,config,chunky,{x,y:z,bmin:[x*tileSize,minY,z*tileSize],bmax:[(x+1)*tileSize,maxY,(z+1)*tileSize]},{buildBvTree:true},true,context);intermediates=result.intermediates;
   // Recast 0.43 reports an empty polymesh as a Detour-data failure. Keep its
   // intermediates long enough to distinguish no walking surface from a genuine
@@ -33,7 +35,7 @@ export async function createPagedNavigation({tileSize,origin=[0,0,0]}){
  const query=new NavMeshQuery(mesh,{maxNodes:16384}),resident=new Map();query.defaultQueryHalfExtents={x:.8,y:2,z:.8};let disposed=false;
  return {
   sync(tiles){if(disposed)throw Error('Walking tiles have closed.');for(const tile of tiles)validateNavigationData(tile.data,tile.key);const keep=new Set(tiles.map(tile=>tile.key));for(const [key,ref] of resident)if(!keep.has(key)){const removed=mesh.removeTile(ref);Raw.destroy(removed.raw);resident.delete(key);}for(const tile of tiles){if(resident.has(tile.key))continue;const data=new UnsignedCharArray();data.copy(tile.data);const result=mesh.addTile(data,Detour.DT_TILE_FREE_DATA,0);if(statusFailed(result.status)){data.destroy();throw Error('A walking tile could not be loaded.');}resident.set(tile.key,result.tileRef);}},
-  path(start,end){if(disposed)throw Error('Walking tiles have closed.');const a=query.findClosestPoint(start),b=query.findClosestPoint(end,{halfExtents:{x:1,y:2,z:1}});if(!a.success||!b.success||!a.polyRef||!b.polyRef)throw Error('No walkable surface at that point.');const result=query.computePath(a.point,b.point,{maxPathPolys:4096,maxStraightPathPoints:2048}),last=result.path.at(-1);if(!result.success||!last||Math.hypot(last.x-b.point.x,last.y-b.point.y,last.z-b.point.z)>.12)throw Error('No walkable route to that point.');return result.path;},
+  path(start,end){if(disposed)throw Error('Walking tiles have closed.');return surfaceNavigationPath(query,start,end,{maxPathPolys:4096,maxStraightPathPoints:2048});},
   get residentCount(){return resident.size;},
   dispose(){if(disposed)return;disposed=true;resident.clear();query.destroy();mesh.destroy();}
  };

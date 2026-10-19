@@ -86,6 +86,14 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/local-collision-runtime-check.mjs
+      - name: Check configurable coarse steps, scene scale and correct-floor walking
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/walking-step-runtime-check.mjs
+      - name: Check saved paged routes and local stepping fallback with a real worker
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/legacy-step-runtime-check.mjs
       - name: Check certified empty collision branches without loading their leaves
         env:
           SPARK_PACKAGED: '1'

@@ -1,4 +1,5 @@
 import type {CollisionAuthoring,CollisionVolume,EditorBridge,Hosting,TourScene} from './model';
+import {normalizeStepHeight} from '../shared/walking.mjs';
 import {CollisionAuthoringSchema} from '../shared/collision-selection.mjs';
 import {sceneUrl} from '../shared/project.mjs';
 import {buildCollision,type CollisionProgress} from './collision-builder';
@@ -9,7 +10,7 @@ type Environment={context:(id:string)=>Context|undefined;complete:(id:string,ref
 export interface CollisionJobState {working:boolean;cancelling:boolean;cancellable:boolean;sceneId:string;sceneName:string;kind:'generate'|'estimate';progress:CollisionProgress|null;result:string;revision:number}
 type Running={cancelled:boolean;worker?:{cancel():void};session?:string;pending:Set<Promise<unknown>>};
 const cancelled=()=>Object.assign(Error('Collision generation cancelled.'),{name:'AbortError'});
-const signature=(context:Context)=>JSON.stringify([context.root,context.scene.id,sceneUrl(context.scene,context.hosting,context.base),context.scene.transform,CollisionAuthoringSchema.parse(context.scene.collisionAuthoring||{})]);
+const signature=(context:Context)=>JSON.stringify([context.root,context.scene.id,sceneUrl(context.scene,context.hosting,context.base),context.scene.transform,normalizeStepHeight(context.scene.walkStepHeight),CollisionAuthoringSchema.parse(context.scene.collisionAuthoring||{})]);
 
 // Owned by the editor, rather than an inspector panel that can be closed or replaced.
 export class CollisionJob {
@@ -36,7 +37,7 @@ export class CollisionJob {
     try{diagnostics=await studio.beginCollisionDiagnostics({sceneId:context.scene.id,source:request.url,format:authoring.format||'paged',scope:authoring.scope||'selected',volumeCount:authoring.volumes.length,hasBounds:!!authoring.bounds,options:authoring.options});}catch{}
     check();let ref:string,stats:{selected:number;voxels:number;triangles:number};
     if(authoring.format==='glb'){const worker=buildCollision(request,report);running.worker=worker;const generated=await worker.promise;check();report({phase:'Saving collision mesh…'});ref=await studio.saveCollisionGlb(generated.bytes);stats=generated.stats;}
-    else{const id=running.session=await studio.beginPagedCollision();check();const worker=buildPagedCollision(request,report,{append:(key,cells)=>persist(()=>studio.appendPagedCollision(id,key,cells)),keys:()=>persist(()=>studio.pagedCollisionKeys(id)),read:(key,offset,maxCells)=>persist(()=>studio.readPagedCollision(id,key,offset,maxCells)),writeTile:(entry,bytes)=>persist(()=>studio.writePagedCollisionTile(id,entry,bytes)),finalize:manifest=>persist(()=>studio.finalizePagedCollision(id,manifest))});running.worker=worker;const generated=await worker.promise;ref=generated.ref;stats=generated.stats;}
+    else{const id=running.session=await studio.beginPagedCollision();check();const worker=buildPagedCollision(request,report,{append:(key,cells)=>persist(()=>studio.appendPagedCollision(id,key,cells)),keys:()=>persist(()=>studio.pagedCollisionKeys(id)),read:(key,offset,maxCells)=>persist(()=>studio.readPagedCollision(id,key,offset,maxCells)),writeTile:(entry,bytes)=>persist(()=>studio.writePagedCollisionTile(id,entry,bytes)),finalize:manifest=>persist(()=>studio.finalizePagedCollision(id,manifest,normalizeStepHeight(context.scene.walkStepHeight)))});running.worker=worker;const generated=await worker.promise;ref=generated.ref;stats=generated.stats;}
     savedRef=ref;check();this.update({cancellable:false});report({phase:'Activating generated collision…'});await this.environment!.complete(context.scene.id,ref);terminal={type:'success',ref,stats};result=authoring.format==='glb'?`${stats.selected.toLocaleString()} splats · ${stats.triangles.toLocaleString()} triangles`:`${stats.selected.toLocaleString()} splats · ${stats.voxels.toLocaleString()} cells`;
    }
   }catch(error){const message=error instanceof Error?error.message:String(error);terminal={type:running.cancelled||error instanceof Error&&error.name==='AbortError'?'cancelled':'error',message,ref:savedRef||undefined};result=message;}

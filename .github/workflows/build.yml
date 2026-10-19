@@ -78,6 +78,14 @@ jobs:
         run: node scripts/narrow-walk-check.mjs
       - name: Check bubble settings and captured movement
         run: node scripts/bubble-settings-check.mjs
+      - name: Check deliberate mouse capture and consistent navigation keys
+        run: node scripts/navigation-controls-check.mjs
+      - name: Check walking keyboard aliases and mobile controls
+        run: node scripts/walk-controls-check.mjs
+      - name: Check visitor onboarding and saved glass appearance
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/viewer-onboarding-check.mjs
       - name: Check bubble ray picking and streamed occlusion
         run: node scripts/bubble-runtime-check.mjs
       - name: Check precision reloads and persistent XR tracking

@@ -375,3 +375,21 @@ Actual portable wrapper cold start verifies version 1.11.1, the final bundled ed
 
 Local build: `release/Spark Tour Studio 1.11.1.exe`, 158,897,271 bytes; SHA-256 `CE5B1E6B162D38B695E96B06788B395FC70BFC2F23EC8F9B786D1FC089043A2A`.
 Local build: `artifacts/Spark-Tour-Studio-1.11.1-windows-x64.zip`, 257,048,954 bytes; SHA-256 `93E88B12925F1A136ED560A8764164817D229F725C60059C0CF95DAA5912C2F0`.
+
+
+## v1.18.0 web viewer polish (2026-10-19)
+
+- Cursor capture is deliberate through Mouse look; scene clicks remain free. Free dragging grabs the scene, captured movement aims conventionally, right-drag pans, and Escape releases. Drone uses Space/E up and Shift/Q down; Walk uses Space/E jump and Shift/Q crouch. WASD and arrows remain equivalent.
+- A skippable, replayable seven-step introduction adapts to saved views, Drone, Walk and touch. It includes headset controls; compact movement help uses bundled Google symbols. Phone toolbar buttons remain labeled for assistive technology without wrapping over the guide. Neutral glass shade is saved, reopened and exported as appearance.glassShade.
+- XR bubble content scrolls continuously with the left thumbstick or held controls. Images open in a larger inspection surface and return to the retained scroll position. Actual landscape/portrait pixels, viewport clipping, clipped click rejection, final content access and missing images are checked. Content image uploads cap at 1536 pixels, inspection/cover at 2048, with far image maps evicted. Menus stay compact; the document, renderer and simulated XR session remain unchanged.
+- Collision selections retain meshes/handles and update a 10 KiB GPU data texture instead of compiling new shaders while dragging. Native generation, cancellation, alignment, saving/reopening and visitor-preview cleanup pass. COLLISION_RESEARCH.md records current generator limits and a proposed paged sparse-tile architecture retaining authored regions; streamed physics is not included in this release.
+- The existing 119 unit/integration checks passed; the two added onboarding/appearance checks also pass (121 total). Final controls tests cover aliases, free/captured direction, intentional capture, Escape and mobile controls. Existing compact authoring movement/box-wall/history checks pass, as do bubble/export/capture checks and extended-precision reload/session preservation.
+- Evidence: test-output/collision editor 1792416150062; test-output/authoring movement 1792416094601; test-output/bubble-settings-1792416328122; test-output/xr-polish-1792416310816; test-output/walk-controls-1792416249629; test-output/extended-precision-1792416476402; test-output/viewer-onboarding-1792416584211; test-output/viewer-onboarding-1792416836194 and final packaged test-output/viewer-onboarding-1792416926195 (settings/content/scene guide-step retention). Packaged XR checks include offline export and browser requests blocked outside the local server.
+
+Quest 3/3S readability, comfort, controller behavior and real large-scene selection performance remain hardware/manual acceptance. Synthetic browser/XR checks do not replace those tests. GitHub release results are left for the user to check.
+
+Final packaged onboarding check: test-output/viewer-onboarding-1792416926195. Actual portable EXE cold start/version/About/normal close passes with exit code 0 (test-output/portable smoke 1792417066694). Windows ZIP contents and nested checksums are verified.
+
+Local build: `release/Spark Tour Studio 1.18.0.exe`, 184,942,500 bytes; SHA-256 `f45e0b53d944d19c453bc076592393395fbcc2b376c9ec754ae60a949f3afc0c`.
+
+Local build: `artifacts/Spark-Tour-Studio-1.18.0-windows-x64.zip`, 282,966,293 bytes; SHA-256 `a3b17cae3148f5c2c7a11a7a1364e1c10e1bba62a62cc8b14679dbb055c4f9cb`.

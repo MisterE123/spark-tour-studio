@@ -1,5 +1,6 @@
 import {normalizeBubbleContent,usedContent} from './authoring.mjs';
 import {BubbleSettingsSchema} from './bubbles.mjs';
+import {AppearanceSchema} from './appearance.mjs';
 import { z } from 'zod';
 import {ViewControlsSchema} from './viewpoints.mjs';
 import {CollisionAuthoringSchema} from './collision-selection.mjs';
@@ -20,7 +21,7 @@ const hotspot = z.object({ createdAt:finite.int().min(0).optional(), size:finite
 const backgroundColor=z.string().regex(/^#[0-9a-f]{6}$/i);
 export const BackgroundSchema=z.discriminatedUnion('type',[z.object({type:z.literal('solid'),color:backgroundColor,topColor:backgroundColor.optional(),bottomColor:backgroundColor.optional()}),z.object({type:z.literal('panorama'),source:ref,yawDegrees:finite.min(-360).max(360).default(0)}),z.object({type:z.literal('splat'),source:ref,transform})]);
 const scene = z.object({ collisionAuthoring:CollisionAuthoringSchema.optional(), background:BackgroundSchema.optional(), walkHeight:finite.min(1).max(2.4).optional(), audio:audio.optional(), id, name:z.string(), source:ref, thumbnail:ref, thumbnailMode:z.enum(['starting-view','custom']).optional(), transform, collider:ref, colliderTransform:transform, modes:z.array(mode), entry:z.string(), walkStart:z.string(), viewpoints:z.array(typedViewpoint), hotspots:z.array(hotspot) });
-export const ProjectSchema = z.object({ bubbles:BubbleSettingsSchema.optional(), performance:PerformanceLibrarySchema.optional(), version:z.literal(1), title:z.string().min(1), description:z.string(), cover:ref, startScene:z.string(), scenes:z.array(scene), pages:z.array(page) }).transform(normalizeBubbleContent);
+export const ProjectSchema = z.object({ appearance:AppearanceSchema.optional(), bubbles:BubbleSettingsSchema.optional(), performance:PerformanceLibrarySchema.optional(), version:z.literal(1), title:z.string().min(1), description:z.string(), cover:ref, startScene:z.string(), scenes:z.array(scene), pages:z.array(page) }).transform(normalizeBubbleContent);
 export const HostingSchema = z.object({ assetBaseUrl:ref.default('./'), sceneUrls:z.record(z.string(),ref).default({}) });
 export function identity(){return {position:[0,0,0],rotation:[0,0,0],scale:1};}
 export function blankProject(){return {version:1,title:'Untitled tour',description:'A new perspective. A place to explore.',cover:'',startScene:'',scenes:[],pages:[]};}

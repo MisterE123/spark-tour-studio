@@ -4,6 +4,9 @@ import {bubbleIcons} from './bubble-icons';
 export const materialSymbols={
   chevron_left:'M560-240 320-480l240-240 56 56-184 184 184 184-56 56Z',
   chevron_right:'m400-240-56-56 184-184-184-184 56-56 240 240-240 240Z',
+  // Rotations of the bundled Google chevrons, for vertical scroll controls.
+  expand_less:'m240-400 240-240 240 240-56 56-184-184-184 184-56-56Z',
+  expand_more:'m240-560 56-56 184 184 184-184 56 56-240 240-240-240Z',
   chat_info:bubbleIcons.info,
   photo:bubbleIcons.viewpoint,
   image_arrow_up:bubbleIcons.scene,

@@ -1,5 +1,14 @@
 # Manual acceptance
 
+## v1.18 web viewer polish
+
+- On a cold desktop visit, try the optional guided introduction, skip it, replay it from Help, and revisit the site. Test each mode and touch override. Check that the invitation is noticeable without blocking entry or the scene directory and that guidance can be dismissed. Ask a visitor unfamiliar with 3D controls to navigate between views and open content.
+- Click scenery and bubbles with the cursor free: ordinary clicks must never capture it. Free drag should grab the scene, right drag should pan. Choose Mouse look deliberately, check its indicator and center dot, then Escape. Open settings/content or switch scenes/modes while captured; the cursor must release.
+- In Drone, compare Space with E and Shift with Q, including pitched camera movement. In Walk compare Space/E jumps and Shift/Q crouches, low ceilings, landing, arrow/WASD equivalence and held keys. Test keyboard focus on inputs and menus.
+- Adjust Glass shade, save/reopen/export, and compare light and dark captures, title/search surfaces and numerical inputs. Check local theme settings also reach Quest popup panels.
+- On Quest 3/3S, read a long multi-block popup. Scroll continuously with the left stick and held Up/Down buttons, select wide/tall photos to enlarge, return to the same position, and close. Check clipping, both eyes, captions, missing/slow images, content replacement, repeated scene switches and stable XR session identity. Inspect text size and panel distance on hardware.
+- Move/rotate/resize many add/remove collision shapes on a large streamed capture. Compare dragging responsiveness and check tint accuracy after selecting, reordering, removing, undoing and switching scenes. Mesh generation must still obey the authored regions. Sparse/octree collision is an investigated follow-up; existing exports retain GLB physics.
+
 ## v1.14 publishing destinations and large uploads
 
 - In Tools → Publish tour, test untracked export with Git unavailable; verify the folder includes its launcher and has no `.git`. Test local Git publishing while signed out and offline, then update the same folder. Confirm normal history, removed obsolete runtime files, and preserved unrelated files.
@@ -33,7 +42,7 @@
 
 - With the collision wireframe enabled, edit scene/collider position, rotation and scale, relink the GLB and undo. Confirm the overlay remains visible, the RAD does not reload, camera stays in place, and Walk physics follows the new geometry.
 - On Quest, enter directly into the tour, open the compact menu with grip/wrist, and confirm ray targets and text are comfortable. Select viewpoints across walls in Drone and Walk; a temporary transition fade must clear. Deliberately lean through geometry and confirm the physical-head fade still works.
-- Open a bubble containing text, wide and tall images, rich-text images and several blocks. Check every page via triggers and left stick, correct aspect ratios/captions, disabled boundary buttons, and usable controls after a failed image request. Rapidly close/page while images load.
+- Open a bubble containing text, wide and tall images, rich-text images and several blocks. Scroll through every block with the left stick or held scroll controls, check correct aspect ratios/captions and photo enlargement, and verify usable controls after a failed image request. Rapidly close or scroll while images load.
 - Search-jump to information bubbles in another scene on desktop, phone and Quest. Confirm a nearby valid position facing the bubble, with physical headset pitch/roll unchanged. Check the full-screen cover behind the glass title/search panels on short/tall windows and mobile. The directory should initially show Scenes in tour order; select Views/Bubbles/All to search other content.
 
 ## v1.11.1 hemisphere backgrounds
@@ -62,7 +71,7 @@
 - Verify 0% bubble translucency over bright and dark surfaces. Increase distance fade, check the displayed cutoff distance, and confirm faded bubbles let walking clicks and XR rays through.
 - Toggle Hide obscured bubbles on/off. Test inside/outside walls, surface-attached bubbles, transformed scenes, sparse captures and newly streamed details. Check that the selected editor bubble remains visible and that disabled culling restores ordinary distance visibility.
 - Type formatted content with headings, lists, quotes, links and local images. Undo, reopen and export; confirm formatting/media survive in the popup and individual page. Check long content, image width, scrolling and links on mobile/Quest.
-- On Quest 3/3S inspect the new dark glass menu, icon faces, navigation controls, distance/occlusion picking and rich-content panel pagination on a representative capture.
+- On Quest 3/3S inspect the new dark glass menu, icon faces, navigation controls, distance/occlusion picking and rich-content panel scrolling on a representative capture.
 
 The user's LichtFeld export will be tested manually. No matching collision GLB was available during implementation. The following checks remain necessary before production use.
 
@@ -90,7 +99,7 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 - Confirm Viewpoints preserve tracking, trigger-hold/release teleports, and Drone maps left stick to translation and right stick to lift/turn. Test snap turns and Walk.
 - Check that menu buttons are opaque and readable, grip closes/reopens the menu, and Exit VR requires confirmation.
 - Click-to-walk should detour around walls. Unreachable clicks stay silent; movement or Escape cancels a route.
-- Check physical head movement near collider surfaces, panel readability, long-text pagination and image rendering.
+- Check physical head movement near collider surfaces, panel readability, long-text scrolling and image rendering.
 - Confirm custom HTML and external embeds show the expected browser fallback.
 - Exit/re-enter XR, try reference-space recentering, and assess frame rate with a representative large scene. Reduce quality as needed.
 

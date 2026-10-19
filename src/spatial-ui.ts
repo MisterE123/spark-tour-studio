@@ -17,13 +17,16 @@ export function badgeVisibility(root:THREE.Object3D,visibility:number){root.visi
 export function panel(text:string,width:number,height:number,bg='rgba(0,0,0,.22)',icon?:IconName){const mesh=new THREE.Mesh(new THREE.PlaneGeometry(width,height),new THREE.MeshBasicMaterial({map:textTexture(text,768,Math.max(32,Math.round(768*height/width)),bg,Math.round(34*1.65/width),icon),side:THREE.FrontSide,transparent:true,depthTest:false,depthWrite:false,toneMapped:false}));mesh.renderOrder=100;return mesh;}
 // Fit the image plane itself. Assigning a photograph to a fixed menu rectangle
 // stretches it, and leaves its caption inaccessible when replacing a text map.
-export function imagePanel(url:string,width:number,height:number,valid:()=>boolean=()=>true){
- const mesh=panel('Loading image…',width,height,'rgba(0,0,0,.12)','image_arrow_up');mesh.userData.imageState='loading';
+export function imagePanel(url:string,width:number,height:number,valid:()=>boolean=()=>true,onReady?:(mesh:THREE.Mesh<THREE.PlaneGeometry,THREE.MeshBasicMaterial>)=>void,defer=false,maxTextureSize=2048){
+ const mesh=panel('Loading image…',width,height,'rgba(0,0,0,.12)','image_arrow_up');mesh.userData.imageState='idle';
  const fail=()=>{if(!valid()||!mesh.parent)return;const material=mesh.material;material.map?.dispose();material.map=textTexture('Image unavailable',768,Math.round(768*height/width),'rgba(0,0,0,.12)',34,'error');material.needsUpdate=true;mesh.userData.imageState='error';};
- if(!url){queueMicrotask(fail);return mesh;}
- new THREE.TextureLoader().load(url,texture=>{
+ const load=()=>{if(mesh.userData.imageState!=='idle')return;mesh.userData.imageState='loading';if(!url){queueMicrotask(fail);return;}new THREE.TextureLoader().load(url,texture=>{
   if(!valid()||!mesh.parent){texture.dispose();return;}
   const image=texture.image as HTMLImageElement,w=image.naturalWidth||image.width,h=image.naturalHeight||image.height;if(!w||!h){texture.dispose();fail();return;}
-  const fit=Math.min(width/w,height/h);mesh.geometry.dispose();mesh.geometry=new THREE.PlaneGeometry(w*fit,h*fit);texture.colorSpace=THREE.SRGBColorSpace;mesh.material.map?.dispose();mesh.material.map=texture;mesh.material.needsUpdate=true;mesh.userData.imageState='ready';mesh.userData.imageAspect=w/h;
- },undefined,fail);return mesh;
+  // Tour photographs can be many megapixels. Keep panel uploads bounded on
+  // standalone headsets; image inspection gets its own larger surface.
+  if(Math.max(w,h)>maxTextureSize){const canvas=document.createElement('canvas'),scale=maxTextureSize/Math.max(w,h);canvas.width=Math.max(1,Math.round(w*scale));canvas.height=Math.max(1,Math.round(h*scale));canvas.getContext('2d')!.drawImage(image,0,0,canvas.width,canvas.height);(texture as THREE.Texture).image=canvas;texture.needsUpdate=true;}
+  const fit=Math.min(width/w,height/h);mesh.geometry.dispose();mesh.geometry=new THREE.PlaneGeometry(w*fit,h*fit);texture.colorSpace=THREE.SRGBColorSpace;mesh.material.map?.dispose();mesh.material.map=texture;mesh.material.needsUpdate=true;mesh.userData.imageState='ready';mesh.userData.imageAspect=w/h;onReady?.(mesh);
+ },undefined,fail);};
+ mesh.userData.loadImage=load;mesh.userData.unloadImage=()=>{if(mesh.userData.imageState!=='ready')return;mesh.material.map?.dispose();mesh.material.map=textTexture('Loading image…',768,Math.round(768*height/width),'rgba(0,0,0,.12)',34,'image_arrow_up');mesh.material.needsUpdate=true;mesh.userData.imageState='idle';};if(!defer)load();return mesh;
 }

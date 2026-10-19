@@ -20,7 +20,7 @@ export interface Block {type:'text'|'image'|'link'|'embed';text:string;url:strin
 export interface Page {id:string;title:string;html:string;blocks:Block[]}
 export type SceneBackground={type:"solid";color:string;topColor?:string;bottomColor?:string}|{type:"panorama";source:string;yawDegrees:number}|{type:"splat";source:string;transform:Transform};
 export interface TourScene {collisionAuthoring?:CollisionAuthoring;background?:SceneBackground;walkHeight?:number;thumbnailMode?:'starting-view'|'custom';audio?:AudioTrack;id:string;name:string;source:string;thumbnail:string;transform:Transform;collider:string;colliderTransform:Transform;modes:Mode[];entry:string;walkStart:string;viewpoints:Viewpoint[];hotspots:Hotspot[]}
-export interface Project {bubbles?:{occlusion?:boolean;translucency?:number;size?:number;distanceFade?:number};performance?:PerformanceLibrary;version:1;title:string;description:string;cover:string;startScene:string;scenes:TourScene[];pages:Page[]}
+export interface Project {appearance?:{glassShade:number};bubbles?:{occlusion?:boolean;translucency?:number;size?:number;distanceFade?:number};performance?:PerformanceLibrary;version:1;title:string;description:string;cover:string;startScene:string;scenes:TourScene[];pages:Page[]}
 export interface Hosting {assetBaseUrl:string;sceneUrls:Record<string,string>}
 export interface RecoverySnapshot {project:Project;hosting:Hosting}
 export interface Snapshot {project:Project;hosting:Hosting;base:string;path:string;recovery?:RecoverySnapshot}

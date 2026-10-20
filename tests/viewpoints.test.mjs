@@ -16,3 +16,13 @@ test('unlisted entry views round trip and stay linkable without appearing in vis
  round.viewpoints.forEach(v=>v.listed=false);assert.deepEqual(listedViewpoints(round),[]);
  s.viewpoints[0].listed='no';assert.equal(ProjectSchema.safeParse(p).success,false);
 });
+
+import {Vector3,Quaternion,Euler} from 'three';
+test('rotated splats keep orbit motion and animation around world-up within positive elevation limits',()=>{
+ for(const rotation of [[0,0,0],[-Math.PI/2,0,0],[Math.PI,0,0],[.4,.7,-.9]]){
+  const sceneQ=new Quaternion().setFromEuler(new Euler(...rotation,'YXZ')),frame=sceneQ.clone().invert(),center=[2,-1,3],radius=70,start=new Vector3(0,Math.sin(1),Math.cos(1)).multiplyScalar(radius).applyQuaternion(frame).add(new Vector3(...center)),view={id:'orbit',name:'Orbit',position:start.toArray(),rotation:[0,0,0],type:'orbit',autoAnimate:true,orbit:{center,radius,elevationBounds:[50.9,64]}};
+  const check=pose=>{const delta=new Vector3(...pose.position).sub(new Vector3(...center)).applyQuaternion(sceneQ);assert.ok(Math.abs(delta.length()-radius)<1e-8);const elevation=Math.asin(delta.y/delta.length())*180/Math.PI;assert.ok(elevation>=50.9-1e-8&&elevation<=64+1e-8);assert.ok(delta.y>0,'never circles below the center with positive elevation bounds');const worldQ=sceneQ.clone().multiply(new Quaternion().setFromEuler(new Euler(...pose.rotation,'YXZ'))),direction=new Vector3(0,0,-1).applyQuaternion(worldQ);assert.ok(direction.distanceTo(delta.clone().normalize().negate())<1e-8);return delta;};
+  const n=new ViewNavigation(view,frame);for(let i=0;i<1000;i++)check(n.animate(.1));
+  const before=check(n.pose()),after=check(n.drag(40,0));assert.ok(Math.abs(before.y-after.y)<1e-8,'horizontal drag keeps the same world height');assert.equal(n.automatic,false);check(n.drag(0,10000));check(n.drag(0,-10000));assert.deepEqual(n.view,view);
+ }
+});

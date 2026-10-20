@@ -451,3 +451,17 @@ Regression tests cover unchanged valid nodes, the exact overflowing aerial root,
 Complete regression suite: 274 tests pass (test-output/v1.19.10-release-tests.log). Packaged app.asar version 1.19.10 and bundled shared/lod-bounds.mjs verified against source.
 
 Windows portable: release/Spark Tour Studio 1.19.10.exe; 184979458 bytes; SHA-256 147CE3416E81EA4D202AC9EFF42B387B2ED697AA074A77D64070C5775A8185F8. Actual portable cold start, About/version 1.19.10 and normal close pass (test-output/portable smoke 1792465121850).
+
+## v1.19.11 Orbit axis and authored elevation limits (2026-10-19)
+
+Reproduced wrong-axis orbiting with Tourv2's HungarsAerial source rotation (-90 degrees X). Orbit angles, animation and editor rings previously used source-local Y, which becomes horizontal after scene alignment; even positive elevation restrictions could therefore circle the camera underground. A rotated graveyard source also reversed drag direction.
+
+Use one tour-up orbit frame derived from the scene rotation. Shared playback computes its angles and camera orientation in that frame, while retaining scene-local center, radius and stored position. Both mouse buttons, touch, animation, editor ring/bound handles, frame-geometry and Update from camera use the same frame. Photosphere and slider behavior is unchanged. Existing project data needs no migration or rewriting.
+
+Tests sample 1000 animation poses with 50.9–64 degree bounds on identity, aerial, inverted and arbitrary scene rotations. Check fixed radius, positive world elevation, a level horizontal drag, correct facing, stopped animation on drag, editor ring and bound handle alignment, and capture round trips. Full regression suite: 276 tests pass (test-output/v1.19.11-release-tests.log).
+
+Read-only packaged test serves the real aerial RAD with a cloned viewpoint using the screenshot's 50.9–64 degree limits. Actual left/right mouse drags and touch pass; 1000 animation steps retain the radius and positive elevation bounds; the editor's horizontal ring stays level. Screenshot visually checked. Report: test-output/orbit axes 1792465939361. Tourv2 originals remain unchanged.
+
+Final packaged real-asset check also edits source rotation after creating the active orbit (arbitrary tilt, inversion, then original aerial alignment): world elevation remains correct in all cases. Updated report: test-output/orbit axes 1792466130720. Live source transforms update the orbit frame without changing authored center/radius/limits.
+
+Final focused controls/authoring checks: 15 pass. Final Windows portable: release/Spark Tour Studio 1.19.11.exe; 184979429 bytes; SHA-256 91502E11C23AC4BAA326864AB361F13F9124430102E87407328249B914DD4D09. Actual portable cold start, About/version 1.19.11 and normal close pass (test-output/portable smoke 1792466364856). Final packaged viewer bundle matches dist byte-for-byte.

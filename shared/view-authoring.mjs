@@ -12,10 +12,10 @@ function includeAngle(bounds,angle,periodic=false){
  const shift=value<bounds[0]?value-bounds[0]:value>bounds[1]?value-bounds[1]:0;
  return bounds.map(bound=>bound+shift);
 }
-export function viewFromCamera(view,camera){
+export function viewFromCamera(view,camera,orbitFrame=new Quaternion()){
  const patch={position:[...camera.position],rotation:[...camera.rotation],thumbnail:camera.thumbnail};
  if(view.type==='orbit'&&view.orbit){
-  const orbit=structuredClone(view.orbit),direction=new Vector3(0,0,-1).applyQuaternion(new Quaternion().setFromEuler(new Euler(...camera.rotation,'YXZ'))),delta=direction.clone().negate();
+  const orbit=structuredClone(view.orbit),direction=new Vector3(0,0,-1).applyQuaternion(new Quaternion().setFromEuler(new Euler(...camera.rotation,'YXZ'))),delta=direction.clone().negate().applyQuaternion(orbitFrame.clone().invert());
   orbit.center=new Vector3(...camera.position).addScaledVector(direction,orbit.radius).toArray();
   orbit.azimuthBounds=includeAngle(orbit.azimuthBounds,MathUtils.radToDeg(Math.atan2(delta.x,delta.z)),true);
   orbit.elevationBounds=includeAngle(orbit.elevationBounds,MathUtils.radToDeg(Math.asin(MathUtils.clamp(delta.y,-1,1))));

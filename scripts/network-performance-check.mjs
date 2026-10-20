@@ -44,6 +44,7 @@ try{
   ['quest-style-https',shareUrl,{viewport:{width:1000,height:700},isMobile:true,hasTouch:true,deviceScaleFactor:1.5,userAgent:'Mozilla/5.0 (Linux; Android 12; Quest 3) AppleWebKit/537.36 (KHTML, like Gecko) OculusBrowser/40.0.0.0.0 Chrome/138.0.0.0 VR Safari/537.36'}]
  ]){
   const context=await browser.newContext({ignoreHTTPSErrors:true,...options}),page=await context.newPage(),errors=[],external=[];page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));
+  const tourControls=async()=>{const toggle=page.getByRole('button',{name:'Tour controls',exact:true});if(await toggle.count())await toggle.click();};
   let release;const gate=new Promise(resolve=>release=resolve);let delayed=true;
   await page.route('**/*',async route=>{const request=route.request().url();if(!request.startsWith(site)&&!request.startsWith('blob:')&&!request.startsWith('data:')){external.push(request);return route.abort();}if(delayed&&request===site+'config/tour.json'){await gate;delayed=false;}return route.continue();});
   try{
@@ -58,8 +59,8 @@ try{
    await page.evaluate(settings=>{window.tourRuntime.applyPerformance(settings);},project.performance.presets[1].settings);
    await expect(precision).not.toBeChecked();await preset.selectOption('balanced');await expect(preset).toHaveValue('balanced');await precision.check();
    await page.getByRole('button',{name:'Close settings',exact:true}).click();await page.getByRole('button',{name:'Enter tour',exact:true}).click();await streamed(page);
-   await page.getByLabel('Scene',{exact:true}).selectOption('b');await page.waitForFunction(()=>window.tourRuntime.active?.id==='b'&&window.tourRuntime.ready);await streamed(page);
-   await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByText('Advanced performance',{exact:true}).click();await expect(precision).toBeChecked();
+   await tourControls();await page.getByLabel('Scene',{exact:true}).selectOption('b');await page.waitForFunction(()=>window.tourRuntime.active?.id==='b'&&window.tourRuntime.ready);await streamed(page);
+   await tourControls();await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByText('Advanced performance',{exact:true}).click();await expect(precision).toBeChecked();
    await page.getByLabel('Resolution cap',{exact:true}).fill('1.3');await streamed(page);await page.screenshot({path:path.join(root,name+'.png')});
    // Cold reload restores authored defaults; visitor controls do not rewrite them.
    await page.reload();await page.waitForFunction(()=>window.tourRuntime?.performanceSettings.pagedExtSplats===true);await page.getByRole('button',{name:'Settings',exact:true}).click();await page.getByText('Advanced performance',{exact:true}).click();

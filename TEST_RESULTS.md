@@ -1,5 +1,17 @@
 # Verification results
 
+## v1.21.1 Spark 2.4.0 runtime and converter (2026-10-20)
+
+- Pinned the renderer to exact `@sparkjsdev/spark` 2.4.0 and rebuilt the CPU-only native converter from the official v2.4.0 archive (SHA-256 `1d9371ce10ac37ad5082839c362e29307d9545f338a7592c6972f9ca1ee326aa`). Both converter methods, malformed-input handling and cancellation pass with the new binary. Main/shared source, runtime/converter versions, executable hash and packaged license metadata were checked.
+- All 293 unit/integration tests pass (`test-output/v1.21.1-final-tests.log`); TypeScript/Vite production build passes. The exact-voxel-corner regression now keeps floor normals upward rather than treating a clear grid seam as a wall; unknown collision cells remain blocked.
+- Real streamed rendering/picking and collision checks pass: `test-output/paged runtime 1792504973065`, `collision recovery 1792504972475`, `bubble-runtime-1792504767445`, `collision engine 1792505257077`, and `paged collision engine 1792505265742`. Tests cover actual cold-page trigger targeting,404/retry/repair, same-session recovery and source leaf decoding.
+- XR comfort/precision and mobile checks pass (`test-output/viewpoint comfort 1792504779936`, `extended-precision-1792504812858`, `mobile-viewer-1792504852898`). Physical Quest hardware remains a manual acceptance target.
+- The main/tag v1.21.0 GitHub failures were traced to obsolete fatal-error assertions and eager-collider assumptions. Updated browser checks wait for explicit movement initialization, verify nonfatal errors without moving the visitor, and use the compact mobile menu. Assertions for collision safety, original assets, export, networking and session identity remain intact. Packaged paged authoring, collider replacement, mobile/key controls and onboarding pass; additional narrow/legacy/coarse/air physics checks pass with 2.4.0.
+- Native imports, saved performance settings, scene directory, backgrounds and XR content checks pass with the new runtime/converter (`test-output/advanced-import-1792505144961`, `performance-persistence-1792505221899`, `tour-directory-1792505290833`, `hemisphere-background-1792505234339`, `xr-polish-1792505317292`). Portable exports retain actual float32 foreground/background data with external requests blocked.
+- Desktop-local and Quest-style HTTPS/offline checks pass (`test-output/network performance 1792505594562`), including real local launcher, unchanged hosting config, scene changes, no Node on PATH and clean server shutdown.
+
+- Final local portable EXE launch, version 1.21.1 and normal close pass (`test-output/portable smoke 1792505746375`). EXE: `release/Spark Tour Studio 1.21.1.exe`, 185,064,306 bytes; SHA-256 `9B9F69AA838C5DF6A11FE92D45E0E28D4EE8E15278903AF583FA10897B5B13E5`.
+
 ## v1.21.0 mixed-scale defaults, compact mobile and paged collision recovery (2026-10-20)
 
 - All 292 unit/integration tests pass (`test-output/v1.21.0-tests.log`). New coverage preserves old fade curves, verifies project/scene bubble distance and walking defaults, validates explicit zero-step overrides, and prevents stale collision generation after inherited-default changes.

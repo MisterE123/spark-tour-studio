@@ -39,7 +39,9 @@ try{
  page.on('pageerror',error=>errors.push(error.message));
  page.on('request',request=>{if(request.url().includes('/tiles/'))payloads.push(request.url());if(/^https?:/.test(request.url())&&!request.url().startsWith(url))external.push(request.url());});
  await page.goto(url+'?diagnostics=1');await page.getByRole('button',{name:'Enter tour'}).click();
- await page.waitForFunction(()=>window.tourRuntime?.ready&&window.tourRuntime.pagedCollider?.ready);
+ await page.waitForFunction(()=>window.tourRuntime?.ready);
+ await page.evaluate(async()=>{const r=window.tourRuntime;r.setMode('fly');await r.modeTransition;});
+ await page.waitForFunction(()=>window.tourRuntime.pagedCollider?.ready);
  await page.evaluate(()=>window.tourRuntime.renderer.setAnimationLoop(null));
  assert.deepEqual(payloads,[],'a certified-air start needs no leaf payload downloads');
 

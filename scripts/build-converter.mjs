@@ -3,12 +3,12 @@ import {existsSync} from 'node:fs';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
-const tag='v2.3.1', expected='dd7e1f052c6259940e3ef11426b9b234928be180a1be85170121530287cb51f0';
-const root=path.resolve('.build'), archive=path.join(root,'spark-v2.3.1.tar.gz'), source=path.join(root,'spark-2.3.1');
+const tag='v2.4.0', expected='1d9371ce10ac37ad5082839c362e29307d9545f338a7592c6972f9ca1ee326aa';
+const root=path.resolve('.build'), archive=path.join(root,'spark-v2.4.0.tar.gz'), source=path.join(root,'spark-2.4.0');
 await fs.mkdir(root,{recursive:true});
 if(!existsSync(archive)){const r=await fetch(`https://github.com/sparkjsdev/spark/archive/refs/tags/${tag}.tar.gz`);if(!r.ok)throw Error('Spark source download failed: '+r.status);await fs.writeFile(archive,Buffer.from(await r.arrayBuffer()));}
 if(createHash('sha256').update(await fs.readFile(archive)).digest('hex')!==expected)throw Error('Spark source archive checksum mismatch.');
-if(!existsSync(path.join(source,'rust/Cargo.toml')))execFileSync('tar',['-xzf',archive,'-C',root,'spark-2.3.1/rust','spark-2.3.1/LICENSE']);
+if(!existsSync(path.join(source,'rust/Cargo.toml')))execFileSync('tar',['-xzf',archive,'-C',root,'spark-2.4.0/rust','spark-2.4.0/LICENSE']);
 const cargoHome=process.env.CARGO_HOME||path.join(root,'cargo'),rustupHome=process.env.RUSTUP_HOME||path.join(root,'rustup');
 const cargo=path.join(cargoHome,'bin/cargo.exe'),rustc=path.join(cargoHome,'bin/rustc.exe');
 const env={...process.env,CARGO_HOME:cargoHome,RUSTUP_HOME:rustupHome,PATH:path.join(cargoHome,'bin')+';'+process.env.PATH};

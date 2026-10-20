@@ -17,3 +17,7 @@ test('ray bounds, exact edges, cancellation and failed pages stay closed',async(
  const cancelled=fixture();let current=true;cancelled.load=async()=>{current=false;};assert.equal(await raycastCollision(cancelled,[1,1,1],[1,0,0],{isCurrent:()=>current}),null);assert.deepEqual(cancelled.requests,[]);
  const failed=fixture();failed.load=async()=>{throw Error('503');};await assert.rejects(raycastCollision(failed,[1,1,1],[1,0,0]),/503/);
 });
+test('a floor at an exact voxel-corner crossing retains its upward normal',async()=>{
+ const floor=await raycastCollision(fixture(),[1,2,1],[1,-.5,0]);assert.deepEqual(floor.point,[5,0,1]);assert.deepEqual(floor.normal,[0,1,0],'the internal X seam must not turn the floor into a wall');
+ const wall=await raycastCollision(fixture(),[9,1,1],[1,.5,0]);assert.deepEqual(wall.point,[11,2,1]);assert.deepEqual(wall.normal,[-1,0,0],'an internal Y seam must not change a wall normal');
+});

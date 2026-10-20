@@ -25,20 +25,24 @@ const browser=await chromium.launch({channel:'msedge',headless:true,args:['--ena
 let page,releaseSlow,releasePaged,releaseInitial;const errors=[],external=[],requests=[];
 try{
  page=await browser.newPage({viewport:{width:1280,height:850}});page.setDefaultTimeout(30000);page.on('pageerror',error=>errors.push(error.message));page.on('request',request=>{requests.push(request.url());if(/^https?:/.test(request.url())&&!request.url().startsWith(url))external.push(request.url());});
- await page.goto(url+'?diagnostics=1');await page.getByRole('button',{name:'Enter tour'}).click();await page.waitForFunction(()=>window.tourRuntime?.ready&&window.tourRuntime.world);
+ await page.goto(url+'?diagnostics=1');await page.getByRole('button',{name:'Enter tour'}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);
  await page.evaluate(async()=>{
   const r=window.tourRuntime;r.renderer.setAnimationLoop(null);r.setMode('fly');await r.modeTransition;r.showCollider(true);
   window.saved={mesh:r.mesh,generation:r.generation,collider:r.collider,world:r.world,position:r.rig.position.toArray(),rotation:r.rig.quaternion.toArray(),worldFreed:false,geometryDisposed:false};
   const free=r.world.free.bind(r.world);r.world.free=()=>{window.saved.worldFreed=true;free();};r.collider.traverse(object=>object.geometry?.addEventListener('dispose',()=>window.saved.geometryDisposed=true));
-  const walkStart=r.active.walkStart;r.active.walkStart='bad-walk-start';r.active.viewpoints.push({id:'bad-walk-start',name:'Invalid walking start',position:[50,1.7,50],rotation:[0,0,0]});r.rig.position.set(50,1.7,50);r.setMode('explore',true);
-  window.saved.navigationError=r.status;r.active.walkStart=walkStart;r.active.viewpoints.pop();r.rig.position.fromArray(window.saved.position);
+  const walkStart=r.active.walkStart;r.active.walkStart='bad-walk-start';r.active.viewpoints.push({id:'bad-walk-start',name:'Invalid walking start',position:[50,1.7,50],rotation:[0,0,0]});r.rig.position.set(50,1.7,50);const onStatus=r.onStatus;r.onStatus=(text,error)=>{window.saved.navigationError=text;window.saved.navigationFatal=error;onStatus(text,error);};try{r.setMode('explore',true);}finally{r.onStatus=onStatus;}window.saved.navigationReady=r.ready;
+  r.active.walkStart=walkStart;r.active.viewpoints.pop();r.rig.position.fromArray(window.saved.position);
  });
  assert.match(await page.evaluate(()=>window.saved.navigationError),/No valid walking position/,'the fixture produces a real invalid walking start');
+ assert.equal(await page.evaluate(()=>window.saved.navigationFatal),false);assert.equal(await page.evaluate(()=>window.saved.navigationReady),true,'invalid starts leave the splat scene usable');
  assert.equal(await page.evaluate(()=>window.tourRuntime.mode),'fly');
  const radRequestsAtStart=requests.filter(request=>new URL(request).pathname==='/scan.rad').length;
  const update=async(ref,transform=identity())=>{
   await page.evaluate(({ref,transform})=>{const r=window.tourRuntime,s=structuredClone(r.active);s.collider=ref;s.colliderTransform=transform;r.updateScene(s);},{ref,transform});
   await page.evaluate(()=>window.tourRuntime.colliderTransition);
+  // This check intentionally stops the renderer loop to compare exact camera
+  // poses. Pump that loop while the new pager prepares its deferred coverage.
+  await page.waitForFunction(()=>{const r=window.tourRuntime;r.frame(r.last+20);return !r.pagedCollider||r.pagedCollider.ready;});
  };
  const blockedMovement=async(label)=>{
   const result=await page.evaluate(async()=>{

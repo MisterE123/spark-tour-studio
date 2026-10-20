@@ -1,7 +1,7 @@
 {
-  "spark": "v2.3.1",
-  "sourceArchiveSha256": "dd7e1f052c6259940e3ef11426b9b234928be180a1be85170121530287cb51f0",
+  "spark": "v2.4.0",
+  "sourceArchiveSha256": "1d9371ce10ac37ad5082839c362e29307d9545f338a7592c6972f9ca1ee326aa",
   "rust": "rustc 1.98.1 (48a229cea 2026-09-01)",
   "features": "CPU, no default build-lod GPU features",
-  "sha256": "a8681e43a228a0ab175f3d3f56e755e9edf7d00fe86239ffd4e253ea45b05a30"
+  "sha256": "7c1d9137b2c8c441260021fd4e53bcdfa74bd950a3de37aad762bdefb3c06ff8"
 }

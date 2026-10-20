@@ -4,7 +4,7 @@ The MIT license in `LICENSE` covers Spark Tour Studio's original code.
 Dependencies retain their own copyright and license terms; they are not
 relicensed by this project.
 
-- Spark, Three.js, React, Zod, Recast Navigation, Electron, Tiptap OSS,
+- Spark 2.4.0 (viewer runtime), Three.js, React, Zod, Recast Navigation, Electron, Tiptap OSS,
   ProseMirror:
   MIT (with their included notices).
 - Google Material Symbols: Copyright Google LLC, Apache-2.0. The locally bundled
@@ -15,7 +15,7 @@ relicensed by this project.
 - Rapier: Apache-2.0, distributed with its license text.
 - The bundled Node.js runtime includes its own MIT license and third-party
   notices in `licenses/Node-LICENSE.txt`.
-- Spark's Rust converter and its crates retain the notices in `converter/`;
+- Spark 2.4.0's separately checksum-verified Rust converter and its crates retain the notices in `converter/`;
   Rust's library notices are included separately.
 - The editor bundles the official GitHub CLI 2.102.0 Windows x64 distribution
   under MIT. Its original notice is in `github-tools/LICENSE.txt`.

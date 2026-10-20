@@ -42,7 +42,7 @@ export async function generateCollision(request:CollisionRequest){
  const paged=new PagedSplats({rootUrl:request.url,pager:{extSplats:true} as SplatPager,maxSh:0});let scanned=0,leaves=0;
  try{const {meta}=await paged.getRadMeta();assertPagedRad(meta);const total=meta.chunks.length;
   for(let chunk=0;chunk<total;chunk++){progress('Reading selected splats',chunk,total);const decoded=await paged.fetchDecodeChunk(chunk);if(!('extArrays' in decoded))throw Error('Extended splat decoding is unavailable.');const tree=decoded.extra.lodTree as Uint32Array|undefined;if(!tree||tree.length<decoded.numSplats*4)throw Error('RAD page has no complete LoD tree.');
-   // Spark 2.3.1 ExtSplats stores XYZ as float32 words 0..2 and opacity as
+   // Spark 2.4.0 ExtSplats stores XYZ as float32 words 0..2 and opacity as
    // float16 in word 3 of its first array. Inspect those decoded values without
    // allocating colors, scales, quaternions or textures for millions of points.
    const words=decoded.extArrays[0],centers=new Float32Array(words.buffer,words.byteOffset,words.length);

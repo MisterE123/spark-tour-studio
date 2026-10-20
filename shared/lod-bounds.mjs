@@ -1,4 +1,4 @@
-// Spark 2.3.1's LoD nodes use half-float bounds even with float32 splat paging.
+// Spark's RAD LoD nodes use half-float bounds even with float32 splat paging.
 // Saturate overflowing bounds; internal nodes receive a conservative split size.
 // The rendered splats and the on-disk RAD/chunks are never modified.
 export function repairLodBounds(tree){

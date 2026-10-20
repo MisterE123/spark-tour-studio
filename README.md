@@ -1,6 +1,6 @@
 # Spark Tour Studio
 
-Windows authoring application and a shared Spark 2.3.1 / Three.js web viewer. Exported tours include a website, editable JSON, locally bundled runtime code, and a Windows launcher.
+Windows authoring application and a shared Spark 2.4.0 / Three.js web viewer. Exported tours include a website, editable JSON, locally bundled runtime code, and a Windows launcher.
 
 ## Run
 
@@ -197,15 +197,17 @@ The `.rad` container supports both ordinary splats and a LoD hierarchy. This tou
 
 ## Import a PLY (v1.1)
 
-Choose **Add → PLY scenes** after creating/opening a project. Select Quality (Bhattacharyya) or Quick (Tiny LoD), choose the maximum spherical-harmonics degree, and click **Choose PLY & queue**. Degree 3 preserves all available SH coefficients; lower limits reduce output size. The converter expects supported Gaussian splat PLY data; Spark 2.3.1's PLY decoder uses binary little-endian PLY.
+Choose **Add → PLY scenes** after creating/opening a project. Select Quality (Bhattacharyya) or Quick (Tiny LoD), choose the maximum spherical-harmonics degree, and click **Choose PLY & queue**. Degree 3 preserves all available SH coefficients; lower limits reduce output size. The converter expects supported Gaussian splat PLY data; the bundled Spark 2.4.0 converter’s PLY decoder uses binary little-endian PLY.
 
-The editor bundles Spark 2.3.1's unmodified Rust `build-lod` tool, compiled in release mode with CPU features. End users need neither Rust nor Node.js. Conversion runs outside the renderer, with live stage messages and a Cancel button. It uses `--gsplat --rad-chunked`, validates the resulting LoD metadata and every companion chunk, then adds the scene. The original PLY is unchanged. A temporary hard link avoids copying on compatible local volumes; otherwise the PLY is copied with streaming I/O. Failed/cancelled output is removed, with available diagnostics kept in `conversion-logs/`.
+The viewer runtime is pinned to Spark 2.4.0. It is bundled locally in editor previews and exported websites, including its decoder code, workers and WASM. The bundled CPU PLY converter is also pinned to Spark 2.4.0, with its source checksum and executable provenance recorded separately. Upgrading the application does not rewrite existing scene assets.
+
+The editor bundles Spark 2.4.0's unmodified Rust `build-lod` tool, compiled in release mode with CPU features. End users need neither Rust nor Node.js. Conversion runs outside the renderer, with live stage messages and a Cancel button. It uses `--gsplat --rad-chunked`, validates the resulting LoD metadata and every companion chunk, then adds the scene. The original PLY is unchanged. A temporary hard link avoids copying on compatible local volumes; otherwise the PLY is copied with streaming I/O. Failed/cancelled output is removed, with available diagnostics kept in `conversion-logs/`.
 
 Converted assets are stored in `assets/converted/<id>/` inside the project and travel through Save As/export like imported RAD assets. Save the project after importing. Large PLY files can require substantial RAM and conversion time; the converter reads the splats into memory. This release does not provide an out-of-core conversion algorithm. It does not generate collision geometry.
 
 To update an existing scan, select its scene and choose **Source asset → Re-import PLY** (also under Tools). Choose the updated PLY in the same coordinate system, then queue it with the desired LoD/SH settings. Successful conversion replaces only the scene's source: IDs, bubbles, content, viewpoints, alignment, colliders and navigation settings remain intact, including annotations edited during conversion. Failure/cancellation leaves the current source unchanged. If the target was deleted or its source changed, the result is not applied. Previous generated files remain available for undo. A relative per-scene hosting override points to the new local RAD, and save/recovery/undo retain that override together with the source.
 
-Developer rebuild: install Rust 1.98.1 (Windows x64 GNU or MSVC toolchain) into `.build/cargo` and `.build/rustup`, without changing PATH, or supply `CARGO_HOME` and `RUSTUP_HOME`. Run `npm run build:converter` before packaging. The script verifies the pinned Spark v2.3.1 archive checksum, uses Cargo.lock and release optimizations, and records executable provenance and license notices in `converter/`. It downloads the source archive if needed. No Rust source modifications are applied.
+Developer rebuild: install Rust 1.98.1 (Windows x64 GNU or MSVC toolchain) into `.build/cargo` and `.build/rustup`, without changing PATH, or supply `CARGO_HOME` and `RUSTUP_HOME`. Run `npm run build:converter` before packaging. The script verifies the pinned Spark v2.4.0 archive checksum, uses Cargo.lock and release optimizations, and records executable provenance and license notices in `converter/`. It downloads the source archive if needed. No Rust source modifications are applied.
 
 Importer verification: `node --test tests/converter.test.mjs`, `node scripts/ply-import-check.mjs`, and `node scripts/render-import-check.mjs <export-folder>`. Set `SPARK_PACKAGED=1` to run the import UI check against `release/win-unpacked/Spark Tour Studio.exe`.
 
@@ -325,7 +327,7 @@ Legacy content bubbles with empty references reconnect to their stable content I
 
 ## Bubble visibility and rich content (v1.10)
 
-Tour settings separate glass translucency, whole-bubble distance fade, size and optional occlusion culling. At 0% translucency the bubble interior is opaque. Distance fade affects the icon, rim, glass and label together: higher strength hides bubbles sooner, with a displayed distance. Below 5% visibility a bubble no longer intercepts mouse, touch or XR rays. Selected editor bubbles remain visible for placement.
+Tour settings separate glass translucency, whole-bubble distance fade, size and optional occlusion culling. At 0% translucency the bubble interior is opaque. Distance fade affects the icon, rim, glass and label together. Tour defaults specify the disappearance distance in meters or disable fading; each scene can inherit it, multiply it, set its own distance, or disable fading. Existing strength-based settings keep their original behavior until edited. Below 5% visibility a bubble no longer intercepts mouse, touch or XR rays. Selected editor bubbles remain visible for placement.
 
 **Hide obscured bubbles** is optional and defaults on. It uses a loaded collider and Spark's currently available streamed splats to check line of sight, with bounded work per frame and a surface tolerance. No extra splat scenes or files are loaded. Visibility can lag by a fraction of a second and reflects available LoD; thin surfaces or incomplete scans can affect results. Disable it in Tour settings independently of distance fade.
 

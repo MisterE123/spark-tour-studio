@@ -1,6 +1,6 @@
 {
   "name": "spark-tour-studio",
-  "version": "1.21.0",
+  "version": "1.21.1",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",
-    "@sparkjsdev/spark": "2.3.1",
+    "@sparkjsdev/spark": "2.4.0",
     "@tiptap/extension-image": "3.31.4",
     "@tiptap/extension-text-align": "3.31.4",
     "@tiptap/pm": "3.31.4",

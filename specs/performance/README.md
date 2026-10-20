@@ -40,4 +40,4 @@ The resolved tour settings apply when the editor opens a project or the viewer l
 
 Exports include individual `performance/<id>.performance.json` files, the resolved tour settings at `performance/active/preset.performance.json`, and this specification. The active copy uses a subdirectory so it cannot conflict with any named preset ID. These files are portable exchange copies, not a second source of configuration: edit `config/tour.json` or import a preset and re-export to change tour defaults. Importing creates and selects a new ID. Deleting the selected preset clears custom adjustments and selects the first remaining preset; deleting the last preset is disabled.
 
-Validated against Spark 2.3.1. The schema version tracks the preset contract, independently of the application or Spark release. Invalid data is reported rather than silently ignored.
+The runtime integration uses Spark 2.4.0. The schema version tracks the preset contract, independently of the application or Spark release. Invalid data is reported rather than silently ignored.

@@ -1,5 +1,13 @@
 # Verification results
 
+## v1.21.2 release verification repairs (2026-10-20)
+
+- Retains the Spark 2.4.0 runtime, native converter and collision corner fix verified for v1.21.1 below. Production TypeScript/Vite build passes; the application runtime is unchanged by this patch.
+- GitHub monitoring exposed two obsolete test assumptions. The collider replacement check now waits for Spark's initial root page after its metadata request before counting reload requests; mesh, pager, fetch-source and scene-generation identity checks remain strict. Its local evidence records exactly two initial byte ranges and no later RAD requests (`test-output/collider replacement 1792506709465`); the corrected check also passed on GitHub run 39440337676.
+- The rich-content check now exercises the current bubble fade checkbox and distances, project defaults, per-scene factors and per-bubble sizing. Native editing, duplication, save/export round trips and offline image/rich-text rendering pass (`test-output/ui-polish-1792507389210`).
+- Packaged history, mocked GitHub publishing, navigation caching and advanced import checks pass (`test-output/git editor 1792506933673`, `github editor 1792507205626`, `navigation cache 1792507269203`, `advanced-import-1792507284853`). Earlier successful performance, directory, background and XR exports contain assets byte-identical to the current packaged runtime; every packaged desktop/shared source file was also checked against current source.
+- Final v1.21.2 package audit verifies all 55 desktop/shared files, all 169 runtime files, editor/runtime/converter versions, actual converter executable hash, launcher and 100 dependency license entries against the current source/build.
+
 ## v1.21.1 Spark 2.4.0 runtime and converter (2026-10-20)
 
 - Pinned the renderer to exact `@sparkjsdev/spark` 2.4.0 and rebuilt the CPU-only native converter from the official v2.4.0 archive (SHA-256 `1d9371ce10ac37ad5082839c362e29307d9545f338a7592c6972f9ca1ee326aa`). Both converter methods, malformed-input handling and cancellation pass with the new binary. Main/shared source, runtime/converter versions, executable hash and packaged license metadata were checked.

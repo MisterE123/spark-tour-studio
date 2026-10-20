@@ -315,7 +315,7 @@ A failed publishing step can be recovered through Actions → **Publish tested r
 
 ## Bubble appearance and mouse capture
 
-Tour settings include Bubble translucency (0% opaque to 100% clear), Global bubble size (0.5–3× the default footprint), and Distance fade. Distance fade hides the entire bubble farther from the camera; it is independent of the glass translucency. Settings apply to content, scene-link and viewpoint-link bubbles in desktop, mobile and WebXR viewing.
+Tour settings include Bubble translucency (0% opaque to 100% clear), Global bubble size (0.5–3× the default footprint), and Bubble fade distance in meters. Disable Fade distant bubbles to keep them visible at any distance. Each scene can inherit these defaults or override them. Settings apply to content, scene-link and viewpoint-link bubbles in desktop, mobile and WebXR viewing.
 
 Each bubble has a Size slider. 0 uses the global size; 1 doubles it; 2 triples it, up to 4 (five times global). Existing projects retain their original appearance. These optional preferences are saved in `bubbles: {translucency, size, distanceFade}` on the project and `size` on each hotspot; they survive save, reopening and export.
 

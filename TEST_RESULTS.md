@@ -409,3 +409,15 @@ Final full regression run: all 266 tests pass (test-output/v1.19.7-tests.log).
 Windows portable: release/Spark Tour Studio 1.19.7.exe; 184984360 bytes; SHA-256 8E8C9F16DDC3A7814A11929A6353ECD70EFEB95B5C1A125C6D91740FC03EA530.
 
 Actual portable EXE cold start, 1.19.7 About/version and normal close pass (test-output/portable smoke 1792458939216).
+
+
+## v1.19.8 automatic stepping and detours (2026-10-19)
+
+- East Inside Graveyard's saved tiles already use the default 0.5334 m step height. The discovered planner gap was that successful detours bypassed finer/current-step reconsideration; only failures retried. Nearby successful detours now compare a bounded local route against the original. Paged queries prepare a narrow corridor while retaining visitor support. New proposals must be shorter and pass the actual standing-capsule WalkingMotor in an isolated worker world, without jumps or excessive drops. Existing safe routes survive unavailable geometry, failed/longer proposals and cancellation; long-distance behavior is retained.
+- Initial finer geometry shortened one real route from 5.7862 m to 4.4398 m, but actual walking stopped short. This candidate was rejected after physical validation was added. The final real-project comparison retains all 28 original valid routes without increasing lengths, including the justified detour; actual arrival is within 0.109 m (test-output/real walking safe-detours 1792459861421). No Tourv2 files were changed.
+- Full streamed synthetic check uses older 0.25 m navigation tiles, a 0.4 m ridge and normal automatic step height 0.5334 m. The final path is about 6.08 m instead of detouring around the ridge, climbs it without jumping, and the live capsule arrives within 0.061 m with zero remaining path points. Resident physics remains bounded (test-output/route steps 1792459909168). Lower step-height and excessive-drop tests reject the direct crossing.
+- Unit coverage includes refinement of successful detours, original-corridor retention on failed/longer proposals, current step limits, stale/cancelled worker results, actual automatic stepping and lower-limit rejection. Real Quest remains hardware/manual acceptance.
+
+Final packaged streamed-step verification: test-output/route steps 1792460308936. Final packaged offline straight/angled 65 cm doorway arrival, impassable-gap rejection and cleanup pass: test-output/narrow-walk-1792460351666. Legacy failed-query refinement remains intact; physical shortcut validation is scoped to reconsidering successful detours. Packaged shared-module bytes were compared with source.
+
+Final complete regression suite: all 270 tests pass (test-output/v1.19.8-release-tests.log).

@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BoxGeometry} from 'three';
-import {buildNavigation,NavigationRefinements,navigationClimb,walkingRibbonSamples} from '../shared/navigation.mjs';
+import {physicalWalkingPath} from '../shared/walking-route.mjs';
+import {buildNavigation,NavigationRefinements,navigationClimb,walkingRibbonSamples,walkingPathLength,refinedNavigationPath} from '../shared/navigation.mjs';
 import {bakeNavigationSector,createPagedNavigation} from '../shared/paged-navigation.mjs';
 import {DEFAULT_STEP_HEIGHT} from '../shared/walking.mjs';
 import {transform} from 'esbuild';
@@ -36,4 +37,22 @@ test('walking path display preserves the height of each surface segment',()=>{
 test('navigation cache invalidates on changed step height and hashes typed-array slices correctly',async()=>{
  const entry=new URL('../src/navigation-cache.ts',import.meta.url),source=(await readFile(entry,'utf8')).replace("'../shared/walking.mjs'",JSON.stringify(new URL('../shared/walking.mjs',import.meta.url).href)),compiled=await transform(source,{loader:'ts',format:'esm'}),{navigationKey}=await import('data:text/javascript;base64,'+Buffer.from(compiled.code).toString('base64'));
  const part=stair(.5),key=await navigationKey(part.positions,part.indices);assert.equal(key,await navigationKey(part.positions,part.indices,{stepHeight:DEFAULT_STEP_HEIGHT}));assert.notEqual(key,await navigationKey(part.positions,part.indices,{stepHeight:.2}));assert.notEqual(key,await navigationKey(part.positions,part.indices,{stepHeight:0}));const backing=new Float32Array(part.positions.length+4);backing.set(part.positions,2);const slice=backing.subarray(2,2+part.positions.length);assert.equal(key,await navigationKey(slice,part.indices));backing[0]=999;assert.equal(key,await navigationKey(slice,part.indices));
+});
+
+test('a successful long detour is reconsidered using the active step limit',async()=>{
+ const floor=new BoxGeometry(20,.2,20);floor.translate(0,-.1,0);const bump=new BoxGeometry(1,.4,10);bump.translate(0,.2,0);
+ const positions=new Float32Array([...floor.attributes.position.array,...bump.attributes.position.array]),indices=new Uint32Array([...floor.index.array,...Array.from(bump.index.array,n=>n+floor.attributes.position.count)]);floor.dispose();bump.dispose();
+ const start={x:-3,y:0,z:0},end={x:3,y:0,z:0},old=await buildNavigation(positions,indices,undefined,{stepHeight:.25}),fine=new NavigationRefinements(positions,indices,{stepHeight:.5334}),low=new NavigationRefinements(positions,indices,{stepHeight:.1});
+ try{const detour=old.path(start,end),short=await refinedNavigationPath(old,fine,start,end),blocked=await refinedNavigationPath(old,low,start,end);
+ assert.ok(walkingPathLength(detour)>12);assert.ok(walkingPathLength(short)<walkingPathLength(detour)*.7);assert.ok(short.some(p=>p.y>.3));const physical=await physicalWalkingPath([{positions,indices}],start,end,undefined,.5334);assert.ok(physical&&physical.some(p=>p.y>.3),'the actual walking motor steps over this ridge without jumping');assert.equal(await physicalWalkingPath([{positions,indices}],start,end,undefined,.25),null,'the lower automatic step limit remains a barrier');assert.ok(walkingPathLength(blocked)>12,'lower step limit still detours');
+ }finally{old.dispose();fine.dispose();low.dispose();}
+});
+test('failed or longer refinement retains a valid coarse corridor',async()=>{
+ const start={x:0,y:0,z:0},end={x:4,y:0,z:0},route=[start,{x:0,y:0,z:5},{x:4,y:0,z:5},end],nav={path:()=>route};
+ assert.equal(await refinedNavigationPath(nav,{path:async()=>{throw Error('No route');}},start,end),route);
+ assert.equal(await refinedNavigationPath(nav,{path:async()=>[start,{x:0,y:0,z:20},end]},start,end),route);
+});
+
+test('physical shortcuts do not substitute a large drop for normal automatic steps',async()=>{
+ for(const height of [.4,.8]){const part=stair(height),route=await physicalWalkingPath([part],{x:3,y:height,z:0},{x:-3,y:0,z:0},undefined,.5334);if(height<.5334)assert.ok(route);else assert.equal(route,null);}
 });

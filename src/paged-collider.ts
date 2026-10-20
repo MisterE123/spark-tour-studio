@@ -10,7 +10,7 @@ type Point={x:number;y:number;z:number};
 type Chunk={key:string;coord:number[];cells:number;bounds:{min:number[];max:number[]}};
 type Surface={key:string;positions:Float32Array;indices:Uint32Array;complete:boolean};
 type Resident={mesh:THREE.Mesh;collider:RAPIER.Collider;triangles:number};
-type FocusWindow={point:THREE.Vector3;body?:THREE.Vector3};
+type FocusWindow={point:THREE.Vector3;body?:THREE.Vector3;samples?:THREE.Vector3[]};
 export type PhysicsLease={release():void};
 const MAX_TRIANGLES=600000,MAX_CHUNKS=2048,BATCH=4;
 const vector=(p:Point)=>new THREE.Vector3(p.x,p.y,p.z);
@@ -51,7 +51,7 @@ export class PagedCollider {
  private priority(chunk:Chunk){const center=chunk.bounds.min.map((value,i)=>(value+chunk.bounds.max[i])/2),distance=(p:THREE.Vector3)=>(center[0]-p.x)**2+(center[1]-p.y)**2*.45+(center[2]-p.z)**2,nearest=Math.min(...this.centers.map(distance)),primary=Math.min(...this.primaryCenters.map(distance));return primary<=this.coreSquared?nearest-1000000:nearest;}
  private plan(){
   if(this.dead)return;const scale=this.scale();this.coreSquared=(1.25/scale)**2;const inverse=this.group.matrixWorld.clone().invert().elements,windows=[...(this.primary?[this.primary]:[]),...this.leases.values()],centers:THREE.Vector3[]=[],targets:{center:THREE.Vector3;vertical:number;primary:boolean}[]=[];
-  for(const window of windows){const head=this.toGeneration(window.point);centers.push(head);targets.push({center:head,vertical:2.7,primary:window===this.primary});if(window.body){const body=this.toGeneration(window.body);centers.push(body);targets.push({center:body,vertical:1.05,primary:window===this.primary});}}
+  for(const window of windows){for(const sample of window.samples||[window.point]){const head=this.toGeneration(sample);centers.push(head);targets.push({center:head,vertical:2.7,primary:window===this.primary});}if(window.body){const body=this.toGeneration(window.body);centers.push(body);targets.push({center:body,vertical:1.05,primary:window===this.primary});}}
   if(!centers.length)return;const buckets=targets.map(({center,vertical})=>center.toArray().map(value=>Math.floor(value/(this.config.size*.5))).join(',')+':'+vertical).join(';');if(buckets===this.focusKey)return;this.focusKey=buckets;
   this.centers=centers;this.primaryCenters=targets.filter(target=>target.primary).map(target=>target.center);const next=new Map<string,Chunk>(),horizontal=Math.max(.7,Math.min(1.5,this.config.size*scale*1.5));
   for(const {center,vertical}of targets){const radii=[0,1,2].map(axis=>Math.abs(inverse[axis])*horizontal+Math.abs(inverse[axis+4])*vertical+Math.abs(inverse[axis+8])*horizontal);for(const chunk of this.nearChunks(center,radii))if(this.ownerKnown(chunk))next.set(chunk.key,chunk);}
@@ -76,6 +76,13 @@ export class PagedCollider {
   try{this.plan();await this.flush();if(this.dead)throw new DOMException('Collision scene disposed.','AbortError');return lease;}catch(error){lease.release();throw error;}
  }
  async ensure(point:Point,_radius=4){if(this.dead)throw new DOMException('Collision scene disposed.','AbortError');this.focus(point);if(this.focusError)throw this.focusError;await this.flush();this.failure='';return [...this.stream.pinned];}
+ async routeParts(start:Point,end:Point,signal:AbortSignal){
+  const a=vector(start),b=vector(end),distance=a.distanceTo(b);if(distance>16||this.dead||signal.aborted||this.leases.size>=4)throw new DOMException('Walking refinement cancelled.','AbortError');
+  const id=++this.leaseSequence,count=Math.max(1,Math.ceil(distance/.75)),samples=Array.from({length:count+1},(_,i)=>a.clone().lerp(b,i/count).add(new THREE.Vector3(0,.9,0)));
+  this.leases.set(id,{point:samples[0],samples});const release=()=>{this.leases.delete(id);try{if(!this.dead)this.plan();}catch(error){this.focusKey='';this.notice(error);}};signal.addEventListener('abort',release,{once:true});
+  try{this.plan();await this.flush();if(this.dead||signal.aborted)throw new DOMException('Walking refinement cancelled.','AbortError');return this.navigationParts();}
+  finally{signal.removeEventListener('abort',release);release();}
+ }
  private invalidate(keys:string[]){if(this.dead)return;const changed=new Set(keys);for(const chunk of this.desired.values())if(this.pageKeys(chunk).some(key=>changed.has(key))){this.prepared.delete(chunk.key);this.skipped.delete(chunk.key);}this.schedule();}
  private notice(error:unknown){if(this.dead||(error as Error)?.name==='AbortError')return;const message=error instanceof Error?error.message:String(error);if(message!==this.failure){this.failure=message;this.onError(message);}}
  private pending(){return [...this.desired.keys()].some(key=>!this.prepared.has(key)&&!this.skipped.has(key));}

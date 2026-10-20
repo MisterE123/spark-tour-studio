@@ -12,15 +12,17 @@ export interface CollisionVolume {id:string;type:'ball'|'box';operation:'add'|'r
 export interface CollisionOptions {detail:.05|.1|.2|.5|1;pageSize?:number;surface:'smooth'|'blocky';smoothing:number;wallHeight:number;extrudeUp?:boolean;ignoreTransparent:boolean;opacityCutoff:number}
 export interface CollisionAuthoring {scope?:'selected'|'entire';format?:'paged'|'glb';bounds?:CollisionVolume;volumes:CollisionVolume[];options:CollisionOptions}
 export interface AudioTrack {source:string;loop:boolean;volume:number}
-export interface Viewpoint {listed?:boolean;type?:'photosphere'|'orbit'|'slider';autoAnimate?:boolean;animationSpeed?:number;orbit?:{center:Vec3;radius:number;azimuthBounds?:[number,number];elevationBounds?:[number,number]};slider?:{origin:Vec3;rotation:Vec3;bounds?:[number,number]};description?:string;audio?:AudioTrack;thumbnail?:string;id:string;name:string;position:Vec3;rotation:Vec3}
+export interface SceneLink {id:string;label:string;sceneId:string;viewpointId?:string}
+export interface ExtendedDescription {enabled:boolean;richText:RichTextDocument;links:SceneLink[]}
+export interface Viewpoint {vrScale?:number;extendedDescription?:ExtendedDescription;listed?:boolean;type?:'photosphere'|'orbit'|'slider';autoAnimate?:boolean;animationSpeed?:number;orbit?:{center:Vec3;radius:number;azimuthBounds?:[number,number];elevationBounds?:[number,number]};slider?:{origin:Vec3;rotation:Vec3;bounds?:[number,number]};description?:string;audio?:AudioTrack;thumbnail?:string;id:string;name:string;position:Vec3;rotation:Vec3}
 export interface Hotspot {createdAt?:number;size?:number;id:string;label:string;position:Vec3;kind:'page'|'scene'|'viewpoint';target:string;viewpoint?:string}
 export interface RichTextNode {type:string;text?:string;attrs?:Record<string,unknown>;marks?:{type:string;attrs?:Record<string,unknown>}[];content?:RichTextNode[]}
 export interface RichTextDocument {version:1;doc:RichTextNode}
 export interface Block {type:'text'|'image'|'link'|'embed';text:string;url:string;richText?:RichTextDocument}
-export interface Page {id:string;title:string;html:string;blocks:Block[]}
+export interface Page {sceneLinks?:SceneLink[];id:string;title:string;html:string;blocks:Block[]}
 export type SceneBackground={type:"solid";color:string;topColor?:string;bottomColor?:string}|{type:"panorama";source:string;yawDegrees:number}|{type:"splat";source:string;transform:Transform};
-export interface TourScene {collisionAuthoring?:CollisionAuthoring;background?:SceneBackground;walkHeight?:number;walkStepHeight?:number;thumbnailMode?:'starting-view'|'custom';audio?:AudioTrack;id:string;name:string;source:string;thumbnail:string;transform:Transform;collider:string;colliderTransform:Transform;modes:Mode[];entry:string;walkStart:string;viewpoints:Viewpoint[];hotspots:Hotspot[]}
-export interface Project {appearance?:{glassShade:number};bubbles?:{occlusion?:boolean;translucency?:number;size?:number;distanceFade?:number};performance?:PerformanceLibrary;version:1;title:string;description:string;cover:string;startScene:string;scenes:TourScene[];pages:Page[]}
+export interface TourScene {speedMultiplier?:number;vrScale?:number;collisionAuthoring?:CollisionAuthoring;background?:SceneBackground;walkHeight?:number;walkStepHeight?:number;thumbnailMode?:'starting-view'|'custom';audio?:AudioTrack;id:string;name:string;source:string;thumbnail:string;transform:Transform;collider:string;colliderTransform:Transform;modes:Mode[];entry:string;walkStart:string;viewpoints:Viewpoint[];hotspots:Hotspot[]}
+export interface Project {navigation?:{baseSpeed:number};appearance?:{glassShade:number};bubbles?:{occlusion?:boolean;translucency?:number;size?:number;distanceFade?:number};performance?:PerformanceLibrary;version:1;title:string;description:string;cover:string;startScene:string;scenes:TourScene[];pages:Page[]}
 export interface Hosting {assetBaseUrl:string;collisionBaseUrl?:string;sceneUrls:Record<string,string>}
 export interface RecoverySnapshot {project:Project;hosting:Hosting}
 export interface Snapshot {project:Project;hosting:Hosting;base:string;path:string;recovery?:RecoverySnapshot}

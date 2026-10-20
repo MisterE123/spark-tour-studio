@@ -2,6 +2,7 @@
 export function deleteScene(project,id){
  project.scenes=project.scenes.filter(s=>s.id!==id);
  for(const scene of project.scenes)scene.hotspots=scene.hotspots.filter(h=>!(h.kind==='scene'&&h.target===id));
+ for(const s of project.scenes)for(const v of s.viewpoints)if(v.extendedDescription)v.extendedDescription.links=v.extendedDescription.links.filter(link=>link.sceneId!==id);
  if(project.startScene===id)project.startScene=project.scenes[0]?.id||'';
 }
 export function deleteViewpoint(project,sceneId,id){
@@ -9,6 +10,7 @@ export function deleteViewpoint(project,sceneId,id){
  scene.viewpoints=scene.viewpoints.filter(v=>v.id!==id);const fallback=scene.viewpoints[0].id;
  if(scene.entry===id)scene.entry=fallback;if(scene.walkStart===id)scene.walkStart=fallback;
  scene.hotspots=scene.hotspots.filter(h=>!(h.kind==='viewpoint'&&h.target===id));
+ for(const s of project.scenes)for(const v of s.viewpoints)for(const link of v.extendedDescription?.links||[])if(link.sceneId===sceneId&&link.viewpointId===id)delete link.viewpointId;
  for(const s of project.scenes)for(const h of s.hotspots)if(h.kind==='scene'&&h.target===sceneId&&h.viewpoint===id)delete h.viewpoint;
 }
 export function reorder(items,id,direction){const index=items.findIndex(x=>x.id===id),to=index+direction;if(index>=0&&to>=0&&to<items.length)[items[index],items[to]]=[items[to],items[index]];}

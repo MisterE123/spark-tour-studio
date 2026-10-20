@@ -9,11 +9,11 @@ import {RichTextSchema,plainTextDocument,richTextPlainText,resolveRichReference,
 import './rich-text.css';
 
 export interface RichTextEditorProps {
- value?:RichTextDocument;text:string;base:string;disabled?:boolean;
+ label?:string;value?:RichTextDocument;text:string;base:string;disabled?:boolean;
  onChange:(value:RichTextDocument,text:string)=>void;
  importImage?:(file:File)=>Promise<string>;
 }
-export function RichTextEditor({value,text,base,disabled=false,onChange,importImage}:RichTextEditorProps){
+export function RichTextEditor({label='Bubble rich text',value,text,base,disabled=false,onChange,importImage}:RichTextEditorProps){
  const change=useRef(onChange);change.current=onChange;
  const [panel,setPanel]=useState<'link'|'image'|null>(null),[url,setUrl]=useState(''),[error,setError]=useState(''),[working,setWorking]=useState(false);
  const fileInput=useRef<HTMLInputElement>(null);
@@ -21,7 +21,7 @@ export function RichTextEditor({value,text,base,disabled=false,onChange,importIm
  const editor=useEditor({
   extensions:[StarterKit.configure({heading:{levels:[1,2,3]},codeBlock:false,link:{openOnClick:false,autolink:true,defaultProtocol:'https',isAllowedUri:url=>safeContentReference(url)}}),TextAlign.configure({types:['heading','paragraph']}),Image.extend({renderHTML({HTMLAttributes}){return ['img',{...HTMLAttributes,src:resolveRichReference(String(HTMLAttributes.src||''),base)}];}}).configure({allowBase64:false})],
   content:content.doc,editable:!disabled,shouldRerenderOnTransaction:true,
-  editorProps:{attributes:{role:'textbox','aria-multiline':'true','aria-label':'Bubble rich text','data-placeholder':'Write text…'},transformPastedHTML(html){const parsed=new DOMParser().parseFromString(html,'text/html');for(const element of parsed.querySelectorAll('script,style,iframe,object,embed'))element.remove();for(const element of parsed.querySelectorAll('[href]'))if(!safeContentReference(element.getAttribute('href')||''))element.removeAttribute('href');for(const element of parsed.querySelectorAll('img'))if(!safeContentReference(element.getAttribute('src')||''))element.remove();return parsed.body.innerHTML;}},
+  editorProps:{attributes:{role:'textbox','aria-multiline':'true','aria-label':label,'data-placeholder':'Write text…'},transformPastedHTML(html){const parsed=new DOMParser().parseFromString(html,'text/html');for(const element of parsed.querySelectorAll('script,style,iframe,object,embed'))element.remove();for(const element of parsed.querySelectorAll('[href]'))if(!safeContentReference(element.getAttribute('href')||''))element.removeAttribute('href');for(const element of parsed.querySelectorAll('img'))if(!safeContentReference(element.getAttribute('src')||''))element.remove();return parsed.body.innerHTML;}},
   onUpdate({editor}){const parsed=RichTextSchema.safeParse({version:1,doc:editor.getJSON()});if(!parsed.success){setError(parsed.error.issues[0]?.message||'This content cannot be saved.');return;}setError('');change.current(parsed.data as RichTextDocument,richTextPlainText(parsed.data));}
  },[base]);
  useEffect(()=>{if(editor)editor.setEditable(!disabled);},[editor,disabled]);

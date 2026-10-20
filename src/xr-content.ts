@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type {Page} from './model';
+import type {Page,SceneLink} from './model';
 import {richTextToBlocks} from '../shared/rich-text.mjs';
 import {imagePanel,panel} from './spatial-ui';
 
@@ -15,7 +15,7 @@ export class XRContent {
  private track?:ContentMesh;private thumb?:ContentMesh;
  private refresh=()=>{};
  reset(){this.page=null;this.offset=0;this.extent=0;this.focus=-1;this.items=[];this.hud=undefined;}
- render(hud:THREE.Group,page:Page,base:string,refresh:()=>void){
+ render(hud:THREE.Group,page:Page,base:string,refresh:()=>void,onSceneLink?:(link:SceneLink)=>void){
   if(this.page!==page){this.page=page;this.offset=0;this.focus=-1;}
   this.hud=hud;this.refresh=refresh;this.items=[];this.track=undefined;this.thumb=undefined;
   this.planes=[new THREE.Plane(),new THREE.Plane(),new THREE.Plane(),new THREE.Plane()];
@@ -50,6 +50,7 @@ export class XRContent {
    else if(block.type==='link')text(block.text+'\n'+block.url+'\nAvailable in the browser view.');
    else text(block.text||'');
   }
+  for(const link of page.sceneLinks||[]){const button=panel(link.label,this.width,.24,'rgba(255,255,255,.14)','image_arrow_up');button.userData.label=link.label;button.userData.action=()=>onSceneLink?.(link);add(button);}
   this.track=panel('',.022,this.top-this.bottom,'rgba(255,255,255,.12)');this.track.position.set(1.2,(this.top+this.bottom)/2,.04);hud.add(this.track);
   this.thumb=panel('',.026,.2,'rgba(255,255,255,.65)');this.thumb.position.set(1.2,0,.045);hud.add(this.thumb);
   this.layout();

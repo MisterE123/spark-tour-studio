@@ -1,5 +1,13 @@
 # Verification results
 
+## v1.20.0 authored movement, VR scale and viewpoint history (2026-10-20)
+
+- All 281 unit/integration tests pass (`test-output/v1.20.0-final-tests.log`); TypeScript/Vite production build passes. New tests cover backward-compatible speed/scale settings, rich history media export, stable scene links and deletion cleanup, head-pinned VR scaling and normalized stereo view matrices.
+- Packaged editor and exported-viewer checks pass (`test-output/view options 1792469583903`): author/save/reopen, base and scene speed factors, scene/view VR factors, rich description formatting, unlisted scene entry buttons and retained visitor speed multiplier. In both Preview and the exported viewer, X collapses the details to a visible About this view button; reopening restores rich text and scene buttons.
+- Simulated XR checks verify combined scale, scaled native panels, controller-ray scene buttons, unchanged session identity across scene changes, precision-retune scale/near-plane restoration and desktop reset. Existing packaged transform/collision and XR content regression passes (`test-output/xr-polish-1792469306605`). Physical Quest 3/3S acceptance remains manual.
+- Runtime and generated tour resources remain locally bundled; test projects, profiles, media and executables remain ignored.
+- Actual portable EXE launch, version/About and normal shutdown pass (`test-output/portable smoke 1792469819636`). Local EXE: `release/Spark Tour Studio 1.20.0.exe`, 184,984,541 bytes; SHA-256 `7654CEBE69AE629A3AD8B39C55C5C6A825A6316765F1C16C3C2431094F87FD46`.
+
 ## v1.14 local website repositories, resumable uploads and walking cache (2026-10-12)
 
 - All 99 unit/integration checks pass (98 in the full suite plus the added collision-transform test). TypeScript/Vite production build passes. Real disposable Git tests cover a persistent offline website checkout, idempotent updates, source-commit metadata, obsolete runtime cleanup, preserved unrelated files, ignored local launcher, foreign destinations, local edits and changes after review.

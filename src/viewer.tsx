@@ -1,3 +1,4 @@
+import {ViewpointStory} from './viewpoint-story';
 import {ViewerPerformance} from './performance-editor';
 import {sceneThumbnail,listedViewpoints} from '../shared/viewpoints.mjs';
 import {tourPerformanceSettings} from '../shared/performance.mjs';
@@ -27,7 +28,7 @@ function Viewer(){
  const [settings,setSettings]=useState(false),[page,setPage]=useState<Page|null>(null),[loadError,setLoadError]=useState('');
  const [requested,setRequested]=useState<TourDestination|null>(null);
  const [captured,setCaptured]=useState(false),[guide,setGuide]=useState(false),[guideStep,setGuideStep]=useState(0),[guideSeen,setGuideSeen]=useState(true);
- const [speed,setSpeed]=useState(2),[snap,setSnap]=useState(true),[swapSticks,setSwapSticks]=useState(false),[muted,setMuted]=useState(false);
+ const [speed,setSpeed]=useState(1),[snap,setSnap]=useState(true),[swapSticks,setSwapSticks]=useState(false),[muted,setMuted]=useState(false);
  const base=new URL('./',location.href).href;
  useEffect(()=>{
   Promise.all([
@@ -35,7 +36,8 @@ function Viewer(){
    fetch(new URL('config/hosting.json',base)).then(r=>r.ok?r.json():{})
   ]).then(([p,h])=>{const parsed=ProjectSchema.parse(p) as Project;const issues=validateProject(parsed);if(issues.length)throw Error(issues.join('\n'));setProject(parsed);setHosting(HostingSchema.parse(h));setSceneId(parsed.startScene);}).catch(e=>setLoadError(String(e)));
  },[]);
- useEffect(()=>{if(!rt)return;rt.onStatus=(s,e)=>{setStatus(s);setError(!!e);};rt.onScene=id=>{setSceneId(id);setRequested(value=>value?.sceneId===id?value:null);};rt.onViewpoint=setViewpointId;rt.onMode=setMode;rt.onPage=setPage;rt.onPointerCapture=setCaptured;setCaptured(rt.pointerCaptured);return()=>{rt.onPointerCapture=()=>{};};},[rt]);
+ useEffect(()=>{if(!rt)return;rt.onStatus=(s,e)=>{setStatus(s);setError(!!e);};rt.onScene=id=>{setSceneId(id);setRequested(value=>value?.sceneId===id?value:null);};rt.onViewpoint=setViewpointId;rt.onSpeed=setSpeed;rt.onMode=setMode;rt.onPage=setPage;rt.onPointerCapture=setCaptured;setCaptured(rt.pointerCaptured);return()=>{rt.onPointerCapture=()=>{};};},[rt]);
+ useEffect(()=>{if(rt)rt.speedMultiplier=speed;},[rt,speed]);
  useEffect(()=>{if(rt&&project)rt.applyPerformance(tourPerformanceSettings(project.performance));},[rt,project]);
  useEffect(()=>{if(!rt)return;const syncBlocked=()=>{if(rt.renderer.xr.isPresenting)return;rt.blocked=!started||settings||!!page;if(rt.blocked)rt.releasePointer();};syncBlocked();rt.renderer.xr.addEventListener('sessionend',syncBlocked);return()=>rt.renderer.xr.removeEventListener('sessionend',syncBlocked);},[rt,started,settings,page]);
  const guideKey=guideStorageKey(project?.title||'',location.pathname);
@@ -75,6 +77,7 @@ function Viewer(){
     {modes}
     <div className="viewpoints" role="group" aria-label="Viewpoints">{listedViewpoints(current).map((p,index)=><button className={'tour-viewpoint '+(p.id===viewpointId?'active':'')} title={'Go to View: '+p.name} aria-pressed={p.id===viewpointId} key={p.id} onClick={()=>rt?.jump(p.id)}>{p.thumbnail?<img src={new URL(p.thumbnail,base).href} alt=""/>:<Icon name="photo"/>}<span className="view-number">{index+1}</span><span>{p.name}</span></button>)}</div>
    </div>
+   {project&&<ViewpointStory hidden={settings||!!page||guide} project={project} scene={current} view={selectedView} runtime={rt} base={base}/>}
    <TouchPad runtime={rt} enabled={mobile.enabled} mode={mode}/>
    {!settings&&!page&&!guide&&<NavigationCoach mode={mode} touch={mobile.enabled} captured={captured} ready={!!rt?.ready&&!rt?.loading} onCapture={()=>{void rt?.capturePointer();}} onRelease={()=>rt?.releasePointer()} onGuide={openGuide}/>}
    {guide&&!settings&&!page&&rt?.ready&&!rt?.loading&&<ViewerGuide mode={mode} touch={mobile.enabled} captured={captured} step={guideStep} onStep={setGuideStep} onCapture={()=>{void rt?.capturePointer();}} onClose={closeGuide}/>}
@@ -83,7 +86,7 @@ function Viewer(){
   {settings&&<section className="settings floating" role="dialog" aria-label="Viewing settings"><header><h3><Icon name="settings"/>Viewing settings</h3><IconButton icon="close" label="Close settings" onClick={()=>setSettings(false)}/></header>
    <InspectorSection title="Movement" icon="directions_walk" defaultOpen className="settings-group">
     {started&&modes}
-    <Field label={'Movement speed · '+speed.toFixed(1)+' m/s'}><input aria-label="Movement speed" type="range" min="0.5" max="10" step="0.5" value={speed} onChange={e=>{const n=Number(e.target.value);setSpeed(n);if(rt)rt.speed=n;}}/></Field>
+    <Field label={'Movement speed · '+speed+'×'}><input aria-label="Movement speed multiplier" type="range" min=".25" max="4" step=".25" value={speed} onChange={e=>{const n=Number(e.target.value);setSpeed(n);if(rt)rt.speedMultiplier=n;}}/></Field>
     <MobileControlSetting value={mobile.choice} onChange={mobile.setChoice}/>
    </InspectorSection>
    <InspectorSection title="Display" icon="tune" defaultOpen className="settings-group"><ViewerPerformance project={project} runtime={rt}/></InspectorSection>

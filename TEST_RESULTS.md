@@ -1,5 +1,11 @@
 # Verification results
 
+## v1.20.1 release-check repair (2026-10-20)
+
+- Corrected two collision authoring checks to use the current Scale button name. The rotated-face drag fixture now establishes a clear camera angle before selecting its X face, avoiding overlap with a nearer Z face while retaining opposite-wall, direct-drag and undo/redo assertions.
+- Packaged collision generation/save/reopen/export passes (`test-output/paged collision editor 1792469954114`). Packaged view geometry, camera updates, rotated-face resizing, direct dragging, history and walking acceleration pass (`test-output/authoring movement 1792470168544`). TypeScript/Vite build passes.
+- Actual portable 1.20.1 launch, About version and clean shutdown pass (`test-output/portable smoke 1792470187811`). EXE: `release/Spark Tour Studio 1.20.1.exe`, 184,985,734 bytes; SHA-256 `34914AB5DD6D1D63A042ADC0A712696C855B4FDAFCD14EA9A8AED27ABA4D8979`.
+
 ## v1.20.0 authored movement, VR scale and viewpoint history (2026-10-20)
 
 - All 281 unit/integration tests pass (`test-output/v1.20.0-final-tests.log`); TypeScript/Vite production build passes. New tests cover backward-compatible speed/scale settings, rich history media export, stable scene links and deletion cleanup, head-pinned VR scaling and normalized stereo view matrices.

@@ -8,6 +8,8 @@ export class CollisionSelectionLayer {
  readonly group=new THREE.Group();readonly shapes=new THREE.Group();private faces=new THREE.Group();private signature='';private mesh?:SplatMesh;private volumes:CollisionVolume[]=[];selected='';
  private tintSignature='';private texture?:THREE.DataTexture;private tintCount={value:0};
  constructor(){this.group.name='collision-selection';this.group.add(this.shapes,this.faces);}
+ mountHandles(overlay:THREE.Scene){overlay.add(this.faces);this.faces.matrixAutoUpdate=false;this.syncHandles();}
+ syncHandles(){if(!this.faces.matrixAutoUpdate){this.group.updateWorldMatrix(true,false);this.faces.matrix.copy(this.group.matrixWorld);this.faces.updateMatrixWorld(true);}}
  private remove(object:THREE.Object3D){object.traverse(child=>{if(child instanceof THREE.Mesh||child instanceof THREE.Line){child.geometry.dispose();(child.material as THREE.Material).dispose();}});object.removeFromParent();}
  private releaseTint(){if(this.mesh&&this.texture){this.mesh.objectModifier=undefined;this.mesh.updateGenerator();}this.texture?.dispose();this.texture=undefined;this.tintSignature='';}
  clear(){this.signature='';for(const group of [this.shapes,this.faces])for(const child of [...group.children])this.remove(child);this.releaseTint();this.mesh=undefined;this.volumes=[];}
@@ -28,10 +30,10 @@ export class CollisionSelectionLayer {
   // Keep a live gizmo's target and geometry while adjusting its transform.
   const box=resize?volumes.find(volume=>volume.id===selected&&volume.type==='box'):undefined;
   for(const node of [...this.faces.children])if(node.userData.collisionVolume.id!==box?.id)this.remove(node);
-  if(box)for(let axis=0;axis<3;axis++)for(const sign of [-1,1]){const name=`${box.id}-wall-${axis}-${sign}`;let node=this.faces.children.find(child=>child.name===name);if(!node){node=new THREE.Mesh(new THREE.BoxGeometry(.12,.12,.12),new THREE.MeshBasicMaterial({color:[0xf59c94,0x6eedc5,0x8dbfc9][axis],depthTest:false,depthWrite:false}));node.name=name;node.userData.collisionFace={axis,sign};node.renderOrder=502;this.faces.add(node);}node.position.fromArray(boxWallPosition(box,axis,sign));node.quaternion.setFromEuler(new THREE.Euler(...box.rotation,'YXZ'));node.userData.collisionVolume=box;}
+  if(box)for(let axis=0;axis<3;axis++)for(const sign of [-1,1]){const name=`${box.id}-wall-${axis}-${sign}`;let node=this.faces.children.find(child=>child.name===name);if(!node){node=new THREE.Mesh(new THREE.BoxGeometry(.12,.12,.12),new THREE.MeshBasicMaterial({color:[0xf59c94,0x6eedc5,0x8dbfc9][axis],depthTest:false,depthWrite:false,transparent:true,opacity:1}));node.name=name;node.userData.collisionFace={axis,sign};node.renderOrder=502;const border=new THREE.LineSegments(new THREE.EdgesGeometry((node as THREE.Mesh).geometry),new THREE.LineBasicMaterial({color:0xffffff,transparent:true,depthTest:false,depthWrite:false}));border.renderOrder=503;node.add(border);this.faces.add(node);}node.position.fromArray(boxWallPosition(box,axis,sign));node.quaternion.setFromEuler(new THREE.Euler(...box.rotation,'YXZ'));node.userData.collisionVolume=box;}
   this.tint(volumes);return this.shapes.children.find(child=>child.name===selected);
  }
- sizeHandles(camera:THREE.PerspectiveCamera,height:number){const eye=camera.getWorldPosition(new THREE.Vector3()),scale=this.faces.getWorldScale(new THREE.Vector3()).x;for(const handle of this.faces.children){const distance=handle.getWorldPosition(new THREE.Vector3()).distanceTo(eye);handle.scale.setScalar(2*Math.tan(camera.fov*Math.PI/360)*distance*12/Math.max(1,height)/(.12*Math.max(.0001,scale)));}}
+ sizeHandles(camera:THREE.PerspectiveCamera,height:number){this.syncHandles();const eye=camera.getWorldPosition(new THREE.Vector3()),scale=this.faces.getWorldScale(new THREE.Vector3()).x;for(const handle of this.faces.children){const distance=handle.getWorldPosition(new THREE.Vector3()).distanceTo(eye);handle.scale.setScalar(2*Math.tan(camera.fov*Math.PI/360)*distance*18/Math.max(1,height)/(.12*Math.max(.0001,scale)));}}
  wallHandles(){return this.faces.children;}
  private tint(volumes:CollisionVolume[]){
   if(!this.mesh)return;const signature=JSON.stringify(volumes);if(signature===this.tintSignature)return;

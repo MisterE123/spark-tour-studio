@@ -425,3 +425,13 @@ Final complete regression suite: all 270 tests pass (test-output/v1.19.8-release
 Windows portable: release/Spark Tour Studio 1.19.8.exe; 184987396 bytes; SHA-256 E8357EDF4D9AF4E5408D8F6CD115C1388275BE626DB56E50234979ACFBE50849.
 
 Actual portable EXE cold start, 1.19.8 About/version and normal close pass (test-output/portable smoke 1792460539543).
+
+## v1.19.9 selection box face visibility (2026-10-19)
+
+Face grips render in the editor overlay after splats, with scene transforms retained for selection and direct face resizing. Removed the later frame update that overwrote screen-size sizing. Grips now target 18 screen pixels and have light outlines. The face opposite a dragged grip remains fixed in Move, Rotate and Scale.
+
+Regression suite: 271 tests pass (test-output/v1.19.9-release-tests.log). Final focused selection and movement checks: 9 pass. Packaged interaction check confirms visible grip pixels over opaque scene geometry, direct dragging in all three modes, unchanged opposite walls, and saved box dimensions (test-output/box faces 1792462183472).
+
+Final packaged Tourv2 read-only check: East Inside Graveyard's real RAD and authored box, including its inverted scene transform, pass visible-pixel checks over an opaque occluder, direct face drags in Move/Rotate/Scale, opposite-wall invariance and saved JSON verification (test-output/box faces 1792462447374). Original Tourv2 files remain unchanged.
+
+Windows portable: release/Spark Tour Studio 1.19.9.exe; 184986546 bytes; SHA-256 0E9F8E98B0CF4580085ECB2AC415A074014ADFA1B9C0A981A0EF091E995F9BA2. Actual portable cold start, About/version 1.19.9 and normal close pass (test-output/portable smoke 1792462565551).

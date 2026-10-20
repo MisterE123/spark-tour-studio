@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Matrix4,Vector3,PerspectiveCamera} from 'three';
+import {Matrix4,Vector3,PerspectiveCamera,Scene,Group} from 'three';
 import {dyno} from '@sparkjsdev/spark';
 import {CollisionSelectionLayer} from '../src/collision-selection.ts';
 import {compileSelection,selectionTextureData,SELECTION_TEXTURE_WIDTH} from '../shared/collision-selection.mjs';
@@ -31,4 +31,14 @@ test('selected boxes expose six face handles by default and retain usable screen
  camera.position.set(0,0,100);layer.sizeHandles(camera,800);assert.ok(handle.scale.x>near*5);
  for(const face of layer.wallHandles()){const patch=layer.patch(face);assert.deepEqual(patch.size,box.size);}
  layer.rebuild([{...box,type:'ball'}],undefined,'box');assert.equal(layer.wallHandles().length,0);layer.clear();
+});
+
+test('face handles render in the overlay and follow transformed scene coordinates',()=>{
+ const layer=new CollisionSelectionLayer(),content=new Group(),overlay=new Scene();content.position.set(3,5,-2);content.rotation.set(Math.PI,.3,0);content.scale.setScalar(2);content.add(layer.group);layer.mountHandles(overlay);
+ const box=shape('overlay-box');layer.rebuild([box],undefined,box.id);layer.syncHandles();
+ assert.equal(layer.wallHandles()[0].parent.parent,overlay);
+ const face=layer.wallHandles()[0],expected=content.localToWorld(face.position.clone());assert.ok(face.getWorldPosition(new Vector3()).distanceTo(expected)<1e-8);
+ content.position.x+=4;layer.syncHandles();assert.ok(face.getWorldPosition(new Vector3()).distanceTo(expected.add(new Vector3(4,0,0)))<1e-8);
+ assert.equal(face.material.depthTest,false);assert.equal(face.material.transparent,true);assert.equal(face.children.length,1);assert.equal(face.children[0].material.depthTest,false);
+ layer.clear();assert.equal(overlay.children[0].children.length,0);
 });

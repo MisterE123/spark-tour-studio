@@ -1,5 +1,11 @@
 # Verification results
 
+## v1.20.2 precision-check timing repair (2026-10-20)
+
+- Precision reload checks now hold a real crouch input and compare the restored rig/capsule immediately after the reload promise resolves, before advancing walking simulation. This preserves strict pose assertions without treating normal eye-height settling as a reload discontinuity. The complete precision/XR scenario passes (`test-output/extended-precision-1792471551920`). Runtime behavior is unchanged by this patch.
+- Additional local checks pass private-interface HTTPS/offline precision (`test-output/network performance 1792471595082`), native project history (`test-output/git editor 1792471612147`), rich content/export (`test-output/ui-polish-1792471578078`) and all 17 performance controls/persistence/cold exports (`test-output/performance-persistence-1792471662888`).
+- TypeScript/Vite production build passes. Actual portable version/About/launch/clean-close check passes (`test-output/portable smoke 1792471901454`). EXE: `release/Spark Tour Studio 1.20.2.exe`, 184,984,540 bytes; SHA-256 `D6CE4BBFA12BF54A234742C66B79E4D538B49C0150A8B7C51E7F03736C81781A`.
+
 ## v1.20.1 release-check repair (2026-10-20)
 
 - Corrected two collision authoring checks to use the current Scale button name. The rotated-face drag fixture now establishes a clear camera angle before selecting its X face, avoiding overlap with a nearer Z face while retaining opposite-wall, direct-drag and undo/redo assertions.

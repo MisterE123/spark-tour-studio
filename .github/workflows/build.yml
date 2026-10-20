@@ -90,6 +90,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/walking-step-runtime-check.mjs
+      - name: Check smooth walking camera and stable voxel contacts at different refresh rates
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/walking-camera-runtime-check.mjs
       - name: Check saved paged routes and local stepping fallback with a real worker
         env:
           SPARK_PACKAGED: '1'

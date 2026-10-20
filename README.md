@@ -50,6 +50,10 @@ Undo/redo covers tour edits. Autosave recovery is offered when reopening a proje
 
 **Scene → Navigation & starts → Walking step height** sets the maximum climb in world meters, independent of the scene's scale. The default is **0.5334 m** (1.75 ft); choose **0** to disable automatic steps. Coarse voxel steps use checked rise-then-forward capsule motion while keeping the requested walking speed. Ceilings, obstructed landings and unprepared collision remain blocked.
 
+Walking uses one motor for gravity, jumping, support, steps and landing. Rapier supplies collision/sliding without a second autostep or ground-snap controller. Ground support checks the full rounded footprint at edges, and step probes use the actual contact rather than skipping past narrow voxels. Accepted contacts drive acceleration; a step that clears an obstacle does not inherit its stale wall response.
+
+Desktop and touch walking ease the eye height over terrain steps in both directions, independently of the collision capsule. The easing has a 2.5 m/s vertical limit and is consistent across refresh rates. Jumps, long falls, crouching, view-height changes and teleport/mode changes keep their intended direct response. Geometry and loaded collision constrain visual lag, and WebXR keeps its tracked head motion unfiltered. Existing collision files work with this update; re-export the viewer to distribute it.
+
 Click-to-walk stays on the clicked floor level and follows the navigation surface without spline dips beneath the ground. Navigation is cached separately for each step height. Existing paged routes remain available when their baked step limit is safe for the current setting, with a bounded local fallback for newly climbable nearby steps. Reducing the limit uses nearby collision instead of unsafe baked routes. Regenerate paged collision to bake the updated limit across the whole scene.
 
 **Tools → Generate collider → Collision format** offers **Paged collision · recommended** and **Legacy GLB mesh**. Existing GLB colliders keep working. Changing authoring settings never replaces a scene's collider until generation and saving finish successfully.

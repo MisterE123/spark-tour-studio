@@ -1,54 +1,127 @@
 import RAPIER from '@dimforge/rapier3d-compat';
 export const DEFAULT_STEP_HEIGHT=.5334;
 export function normalizeStepHeight(value){return Number.isFinite(value)?Math.max(0,Math.min(1,value)):DEFAULT_STEP_HEIGHT;}
-export function configureWalkingController(controller,stepHeight=DEFAULT_STEP_HEIGHT){
- const height=normalizeStepHeight(stepHeight);if(height>0)controller.enableAutostep(height,.2,false);else controller.disableAutostep();
- controller.enableSnapToGround(.3);controller.setMaxSlopeClimbAngle(Math.PI/4);controller.setMinSlopeSlideAngle(Math.PI/4);
+export function configureWalkingController(controller){
+ // Rapier handles collision/sliding. This motor alone owns stairs and ground
+ // following; running native autostep/snap as well produces competing lifts.
+ controller.disableAutostep();controller.disableSnapToGround();controller.setSlideEnabled(true);
+ controller.setMaxSlopeClimbAngle(Math.PI/4);controller.setMinSlopeSlideAngle(Math.PI/4);
 }
-const steps=new WeakMap(),rotation={x:0,y:0,z:0,w:1};
-function stepAdvance(world,capsule,p,dy,forward){
- const shape=new RAPIER.Capsule(capsule.halfHeight(),capsule.radius()),raised={x:p.x,y:p.y+dy,z:p.z};
- if(world.intersectionWithShape(raised,rotation,shape,undefined,undefined,capsule))return null;
- if(dy>1e-6&&world.castShape(p,rotation,{x:0,y:dy,z:0},shape,.005,1,true,undefined,undefined,capsule))return null;
- if(world.castShape(raised,rotation,forward,shape,.005,1,true,undefined,undefined,capsule))return null;
- return {x:forward.x,y:dy,z:forward.z,waypoints:[{x:0,y:dy,z:0},{x:forward.x,y:dy,z:forward.z}]};
-}
-// Keep the step decision independent of rendering and of the streamed splat LoD.
-export function characterMovement(world,controller,capsule,body,desired,stepHeight=DEFAULT_STEP_HEIGHT){
- stepHeight=normalizeStepHeight(stepHeight);
- controller.computeColliderMovement(capsule,desired);
- const movement=controller.computedMovement();
- const length=Math.hypot(desired.x,desired.z),actual=Math.hypot(movement.x,movement.z);
- const p=body.translation(),pending=steps.get(controller);
- if(pending){
-  steps.delete(controller);
-  // Bridge only the capsule's approach to this already checked landing. Stop
-  // assisting immediately on reversal, a jump, changed settings or relocation.
-  if(length>1e-5&&desired.y<=0&&pending.height===stepHeight&&pending.halfHeight===capsule.halfHeight()&&pending.radius===capsule.radius()&&Math.hypot(p.x-pending.expected.x,p.y-pending.expected.y,p.z-pending.expected.z)<.03&&(desired.x*pending.direction.x+desired.z*pending.direction.z)/length>.8){
-   const advance=stepAdvance(world,capsule,p,Math.max(0,pending.y-p.y),{x:desired.x,y:0,z:desired.z});
-   if(advance){pending.remaining-=length;pending.expected={x:p.x+advance.x,y:p.y+advance.y,z:p.z+advance.z};if(pending.remaining>0)steps.set(controller,pending);return advance;}
+const rotation={x:0,y:0,z:0,w:1},upNormal=Math.SQRT1_2-1e-4;
+const point=(p,d)=>({x:p.x+d.x,y:p.y+d.y,z:p.z+d.z});
+const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
+
+/** One authoritative walking state; visual smoothing never enters this solver. */
+export class WalkingMotor {
+ constructor(){this.reset();}
+ reset(){this.velocityY=0;this.grounded=false;this.plan=undefined;this.expected=undefined;this.jumping=false;this.dropAnchor=undefined;}
+ support(world,capsule,p,down){
+  if(down<=0)return null;
+  const half=capsule.halfHeight(),radius=capsule.radius(),shape=new RAPIER.Capsule(half,radius);
+  const clearAt=y=>!world.intersectionWithShape({x:p.x,y,z:p.z},rotation,shape,undefined,undefined,capsule);
+  const hit=world.castRayAndGetNormal(new RAPIER.Ray(p,{x:0,y:-1,z:0}),half+radius+down+.04,true,undefined,undefined,capsule);
+  if(hit&&hit.normal.y>=upNormal){
+   const floor=p.y-hit.timeOfImpact,target=floor+half+(radius+.015)/hit.normal.y,gap=p.y-target;
+   if(gap<=down+.002&&gap>=-.04&&clearAt(target))return {distance:gap,normal:hit.normal,clear:true,floor};
   }
+  // A capsule can stand on an edge even when its center ray misses the floor.
+  // Shrink the probe and its margin to avoid mistaking a nearby wall for ground.
+  const cast=world.castShape({x:p.x,y:p.y-half,z:p.z},rotation,{x:0,y:-down,z:0},new RAPIER.Ball(Math.max(.01,radius-.002)),.001,1,true,undefined,undefined,capsule);
+  if(cast&&cast.normal1.y>=upNormal){
+   const gap=cast.time_of_impact*down-.016/cast.normal1.y;
+   if(gap<=down+.002&&gap>=-.04&&clearAt(p.y-gap))return {distance:gap,normal:cast.normal1,clear:true,floor:p.y-gap-half-radius-.015};
+  }
+  // This ray is useful only for classifying a short terrain descent. It never
+  // grants support or permits a capsule to move through the overhanging edge.
+  if(hit&&hit.normal.y>=upNormal){const floor=p.y-hit.timeOfImpact,target=floor+half+(radius+.015)/hit.normal.y,gap=p.y-target;if(gap<=down+.002&&gap>=-.04)return {distance:gap,normal:hit.normal,clear:false,floor};}
+  return null;
  }
- if(length<1e-5||actual>=length*.85||desired.y>0||stepHeight===0)return movement;
- const halfHeight=capsule.halfHeight(),radius=capsule.radius(),height=halfHeight+radius;
- const bottom=p.y-height;
- const floor=world.castRay(new RAPIER.Ray(p,{x:0,y:-1,z:0}),height+.07,true,undefined,undefined,capsule);
- if(!floor)return movement;
- // A diagonal approach needs enough distance along the blocking face's normal
- // to reach its top, without increasing the visitor's requested movement.
- let incidence=1;for(let i=0;i<controller.numComputedCollisions();i++){const normal=controller.computedCollision(i)?.normal1;if(normal&&Math.abs(normal.y)<.5){const approach=-(desired.x*normal.x+desired.z*normal.z)/length;if(approach>.1)incidence=Math.min(incidence,approach);}}
- const probeHeight=stepHeight+.03,reach=Math.min(1.5,(radius+.03)/incidence+length);
- const probe={x:p.x+desired.x/length*reach,y:bottom+probeHeight,z:p.z+desired.z/length*reach};
- const step=world.castRayAndGetNormal(new RAPIER.Ray(probe,{x:0,y:-1,z:0}),probeHeight,true,undefined,undefined,capsule);
- if(!step||step.normal.y<Math.SQRT1_2)return movement;
- const rise=probeHeight-step.timeOfImpact;
- if(rise<.03||rise>stepHeight+1e-5)return movement;
- // Check room for the complete landing, but advance only this frame's input.
- const landing={x:probe.x-p.x,y:0,z:probe.z-p.z};
- if(!stepAdvance(world,capsule,p,rise+.02,landing))return movement;
- const advance=stepAdvance(world,capsule,p,rise+.02,{x:desired.x,y:0,z:desired.z});if(!advance)return movement;
- steps.set(controller,{y:p.y+advance.y,height:stepHeight,halfHeight:halfHeight,radius,remaining:reach-length,direction:{x:desired.x/length,z:desired.z/length},expected:{x:p.x+advance.x,y:p.y+advance.y,z:p.z+advance.z}});
- return advance;
+ clear(world,capsule,from,to){
+  const delta={x:to.x-from.x,y:to.y-from.y,z:to.z-from.z};
+  if(Math.hypot(delta.x,delta.y,delta.z)<1e-7)return true;
+  return !world.castShape(from,rotation,delta,new RAPIER.Capsule(capsule.halfHeight(),capsule.radius()),.005,1,true,undefined,undefined,capsule);
+ }
+ validPath(origin,waypoints,allows){let previous=origin;for(const offset of waypoints){const next=point(origin,offset);if(!allows(previous,next))return false;previous=next;}return true;}
+ stair(world,controller,capsule,p,dx,dz,height,contacts,allows){
+  const length=Math.hypot(dx,dz),radius=capsule.radius(),extent=capsule.halfHeight()+radius,foot=p.y-extent-.015,dir={x:dx/length,z:dz/length};
+  for(const contact of contacts){
+   const n=contact.normal,horizontal=Math.hypot(n.x,n.z),incidence=horizontal?-(dir.x*n.x+dir.z*n.z)/horizontal:0;
+   if(incidence<.1||n.y>=upNormal||!contact.collider)continue;
+   // Probe immediately inside the actual blocking face. A fixed distant ray
+   // can jump right over a narrow voxel, especially with a large step limit.
+   const probe={x:contact.witness.x-n.x/horizontal*.005,y:foot+height+.03,z:contact.witness.z-n.z/horizontal*.005};
+   const top=world.castRayAndGetNormal(new RAPIER.Ray(probe,{x:0,y:-1,z:0}),height+.06,true,undefined,undefined,capsule,undefined,collider=>collider.handle===contact.collider.handle);
+   if(!top||top.normal.y<upNormal)continue;
+   const topY=probe.y-top.timeOfImpact,rise=topY+extent+.015-p.y;
+   if(rise<.008||rise>height+.002)continue;
+   const raised={x:p.x,y:p.y+rise,z:p.z};if(!this.clear(world,capsule,p,raised))continue;
+   const startReach=Math.min(1.25,(radius+.025)/Math.max(.25,incidence)+.05);
+   for(const reach of [startReach,Math.min(1.5,startReach+radius)]){
+    const landing={x:p.x+dir.x*reach,y:raised.y,z:p.z+dir.z*reach};
+    if(!this.clear(world,capsule,raised,landing))continue;
+    const support=this.support(world,capsule,landing,height+.06);
+    if(!support?.clear)continue;
+    const end={x:landing.x,y:landing.y-support.distance,z:landing.z};
+    // Verify the whole planned bridge and its landing before accepting any
+    // upward motion. Unknown pages cannot become temporary stepping space.
+    const proof=[{x:0,y:rise,z:0},{x:landing.x-p.x,y:rise,z:landing.z-p.z},{x:end.x-p.x,y:end.y-p.y,z:end.z-p.z}];
+    if(!this.validPath(p,proof,allows))continue;
+    const movement={x:dx,y:rise,z:dz,waypoints:[{x:0,y:rise,z:0},{x:dx,y:rise,z:dz}]};
+    if(!this.clear(world,capsule,raised,point(raised,{x:dx,y:0,z:dz}))||!this.validPath(p,movement.waypoints,allows))continue;
+    return {movement,plan:{y:raised.y,remaining:Math.max(0,reach-length),direction:dir,height,halfHeight:capsule.halfHeight(),radius}};
+   }
+  }
+  return null;
+ }
+ step(world,controller,capsule,body,{x=0,z=0,dt=1/60,jump=false,stepHeight=DEFAULT_STEP_HEIGHT,allows=(from,to)=>Boolean(true)}={}){
+  dt=Math.max(.00001,Math.min(.05,Number.isFinite(dt)?dt:1/60));stepHeight=normalizeStepHeight(stepHeight);world.timestep=dt;
+  const p={...body.translation()};if(this.expected&&distance(p,this.expected)>.04)this.reset();
+  const length=Math.hypot(x,z),probe=this.support(world,capsule,p,.06),near=probe?.clear?probe:null,previousGround=this.grounded||!!near;
+  if(near&&!this.jumping&&this.velocityY<=0){this.grounded=true;this.velocityY=0;}
+  if(jump&&this.grounded){this.velocityY=4.8;this.grounded=false;this.jumping=true;this.plan=undefined;}
+  let bridge=this.plan;this.plan=undefined;
+  if(bridge&&(jump||length<1e-6||bridge.height!==stepHeight||bridge.halfHeight!==capsule.halfHeight()||bridge.radius!==capsule.radius()||(x*bridge.direction.x+z*bridge.direction.z)/length<.8))bridge=undefined;
+  if(bridge&&near)bridge=undefined;
+  const onGround=!this.jumping&&(!!near||!!bridge);
+  if(onGround)this.velocityY=0;else this.velocityY=Math.max(-15,this.velocityY-9.81*dt);
+  const desired={x,y:onGround?0:this.velocityY*dt,z};
+  controller.computeColliderMovement(capsule,desired);
+  let movement={...controller.computedMovement()},contacts=[];
+  for(let i=0;i<controller.numComputedCollisions();i++){const hit=controller.computedCollision(i);if(hit)contacts.push({normal:{...hit.normal1},witness:{...hit.witness1},collider:hit.collider});}
+  let terrain=false,stepped=false,collisions=contacts.map(hit=>hit.normal),waypoints=[movement],nextPlan;
+  if(bridge){
+   const rise=Math.max(0,bridge.y-p.y),raised={x:p.x,y:p.y+rise,z:p.z};
+   const path=[{x:0,y:rise,z:0},{x,y:rise,z}];
+   if(this.clear(world,capsule,p,raised)&&this.clear(world,capsule,raised,point(raised,{x,y:0,z}))&&this.validPath(p,path,allows)){
+    movement={x,y:rise,z};waypoints=path;bridge.remaining-=length;nextPlan=bridge.remaining>0?bridge:undefined;terrain=true;stepped=true;collisions=[];
+   }else bridge=undefined;
+  }
+  if(!stepped&&onGround&&length>1e-6&&stepHeight>0&&(movement.x*x+movement.z*z)<length*length*.98){
+   const stair=this.stair(world,controller,capsule,p,x,z,stepHeight,contacts,allows);
+   if(stair){movement=stair.movement;waypoints=movement.waypoints;nextPlan=stair.plan;terrain=true;stepped=true;collisions=[];}
+  }
+  if((!stepped||!nextPlan)&&(onGround||stepped)){
+   const at=point(p,movement),ground=this.support(world,capsule,at,Math.max(.06,stepHeight+.03));
+   if(ground?.clear){const down={x:movement.x,y:movement.y-ground.distance,z:movement.z};const path=stepped?[...waypoints,down]:[down];if(this.validPath(p,path,allows)){movement=down;waypoints=path;terrain=true;}}
+  }
+  // Never accept a backwards contact kick when the visitor keeps pushing
+  // forward. Slide along the wall or stop instead of restarting the approach.
+  if(!stepped&&length>1e-6&&(movement.x*x+movement.z*z)<-1e-7){movement={x:0,y:movement.y,z:0};waypoints=[movement];}
+  let blocked=false;
+  if(!this.validPath(p,waypoints,allows)){movement={x:0,y:0,z:0};nextPlan=undefined;terrain=false;stepped=false;blocked=true;this.velocityY=0;collisions=[];}
+  body.setNextKinematicTranslation(point(p,movement));world.step();const next={...body.translation()},ground=this.support(world,capsule,next,.04);
+  this.grounded=!!nextPlan||!!ground?.clear&&!this.jumping;
+  if(this.velocityY<=0&&(ground?.clear||contacts.some(hit=>hit.normal.y>=upNormal)&&desired.y<0&&movement.y>desired.y+.001)){this.grounded=true;this.velocityY=0;this.jumping=false;}
+  if(stepped||terrain)this.velocityY=0;
+  if(desired.y>0&&movement.y<desired.y-.001)this.velocityY=0;
+  if(!this.jumping&&!this.grounded){
+   if(previousGround&&this.dropAnchor===undefined)this.dropAnchor=p.y-capsule.halfHeight()-capsule.radius()-.015;
+   const below=this.support(world,capsule,next,stepHeight+.06);
+   if(this.dropAnchor!==undefined&&below&&this.dropAnchor-below.floor<=stepHeight+.06&&this.dropAnchor-below.floor>=-.06)terrain=true;else this.dropAnchor=undefined;
+  }else this.dropAnchor=undefined;
+  this.plan=nextPlan;this.expected=next;
+  return {x:next.x-p.x,y:next.y-p.y,z:next.z-p.z,grounded:this.grounded,terrain:terrain&&!this.jumping,stepped,blocked,collisions,waypoints};
+ }
 }
 
 // Validate the actual rise-then-advance trajectory, not a diagonal shortcut

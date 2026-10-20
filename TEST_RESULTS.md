@@ -421,3 +421,7 @@ Actual portable EXE cold start, 1.19.7 About/version and normal close pass (test
 Final packaged streamed-step verification: test-output/route steps 1792460308936. Final packaged offline straight/angled 65 cm doorway arrival, impassable-gap rejection and cleanup pass: test-output/narrow-walk-1792460351666. Legacy failed-query refinement remains intact; physical shortcut validation is scoped to reconsidering successful detours. Packaged shared-module bytes were compared with source.
 
 Final complete regression suite: all 270 tests pass (test-output/v1.19.8-release-tests.log).
+
+Windows portable: release/Spark Tour Studio 1.19.8.exe; 184987396 bytes; SHA-256 E8357EDF4D9AF4E5408D8F6CD115C1388275BE626DB56E50234979ACFBE50849.
+
+Actual portable EXE cold start, 1.19.8 About/version and normal close pass (test-output/portable smoke 1792460539543).

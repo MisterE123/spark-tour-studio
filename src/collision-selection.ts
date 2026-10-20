@@ -12,7 +12,7 @@ export class CollisionSelectionLayer {
  private releaseTint(){if(this.mesh&&this.texture){this.mesh.objectModifier=undefined;this.mesh.updateGenerator();}this.texture?.dispose();this.texture=undefined;this.tintSignature='';}
  clear(){this.signature='';for(const group of [this.shapes,this.faces])for(const child of [...group.children])this.remove(child);this.releaseTint();this.mesh=undefined;this.volumes=[];}
  private pose(object:THREE.Object3D,volume:CollisionVolume){volumeMatrix(volume).decompose(object.position,object.quaternion,object.scale);object.updateMatrixWorld(true);}
- rebuild(volumes:CollisionVolume[],mesh?:SplatMesh,selected='',resize=false){
+ rebuild(volumes:CollisionVolume[],mesh?:SplatMesh,selected='',resize=true){
   this.selected=selected;const signature=JSON.stringify([volumes,selected,resize]);
   if(mesh!==this.mesh){this.releaseTint();this.mesh=mesh;this.signature='';}
   if(signature===this.signature)return this.shapes.children.find(child=>child.name===selected);
@@ -31,6 +31,7 @@ export class CollisionSelectionLayer {
   if(box)for(let axis=0;axis<3;axis++)for(const sign of [-1,1]){const name=`${box.id}-wall-${axis}-${sign}`;let node=this.faces.children.find(child=>child.name===name);if(!node){node=new THREE.Mesh(new THREE.BoxGeometry(.12,.12,.12),new THREE.MeshBasicMaterial({color:[0xf59c94,0x6eedc5,0x8dbfc9][axis],depthTest:false,depthWrite:false}));node.name=name;node.userData.collisionFace={axis,sign};node.renderOrder=502;this.faces.add(node);}node.position.fromArray(boxWallPosition(box,axis,sign));node.quaternion.setFromEuler(new THREE.Euler(...box.rotation,'YXZ'));node.userData.collisionVolume=box;}
   this.tint(volumes);return this.shapes.children.find(child=>child.name===selected);
  }
+ sizeHandles(camera:THREE.PerspectiveCamera,height:number){const eye=camera.getWorldPosition(new THREE.Vector3()),scale=this.faces.getWorldScale(new THREE.Vector3()).x;for(const handle of this.faces.children){const distance=handle.getWorldPosition(new THREE.Vector3()).distanceTo(eye);handle.scale.setScalar(2*Math.tan(camera.fov*Math.PI/360)*distance*12/Math.max(1,height)/(.12*Math.max(.0001,scale)));}}
  wallHandles(){return this.faces.children;}
  private tint(volumes:CollisionVolume[]){
   if(!this.mesh)return;const signature=JSON.stringify(volumes);if(signature===this.tintSignature)return;

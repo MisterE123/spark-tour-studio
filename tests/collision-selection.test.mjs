@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Matrix4,Vector3} from 'three';
+import {Matrix4,Vector3,PerspectiveCamera} from 'three';
 import {dyno} from '@sparkjsdev/spark';
 import {CollisionSelectionLayer} from '../src/collision-selection.ts';
 import {compileSelection,selectionTextureData,SELECTION_TEXTURE_WIDTH} from '../shared/collision-selection.mjs';
@@ -23,4 +23,12 @@ test('moving, resizing and choosing shapes retain geometry and a single shader',
  layer.rebuild([{...box,position:[3,0,0]},ball],mesh,'a',true);assert.equal(layer.shapes.children[0],object);assert.equal(object.children[0],surface);assert.equal(layer.wallHandles()[0],wall);assert.equal(mesh.compiles,1);
  const updates=mesh.updates;layer.rebuild([{...box,position:[3,0,0]},ball],mesh,'b',false);assert.equal(mesh.compiles,1);assert.equal(mesh.updates,updates);assert.equal(disposed,0);
  layer.rebuild([ball],mesh,'b');assert.equal(disposed,1);assert.equal(mesh.compiles,1);layer.clear();assert.equal(mesh.compiles,2);assert.equal(mesh.objectModifier,undefined);assert.equal(layer.shapes.children.length,0);
+});
+
+test('selected boxes expose six face handles by default and retain usable screen size',()=>{
+ const layer=new CollisionSelectionLayer(),box=shape('box');layer.rebuild([box],undefined,'box');assert.equal(layer.wallHandles().length,6);
+ const camera=new PerspectiveCamera(65,1,.05,1000);camera.position.set(0,0,10);layer.sizeHandles(camera,800);const handle=layer.wallHandles()[0],near=handle.scale.x;
+ camera.position.set(0,0,100);layer.sizeHandles(camera,800);assert.ok(handle.scale.x>near*5);
+ for(const face of layer.wallHandles()){const patch=layer.patch(face);assert.deepEqual(patch.size,box.size);}
+ layer.rebuild([{...box,type:'ball'}],undefined,'box');assert.equal(layer.wallHandles().length,0);layer.clear();
 });

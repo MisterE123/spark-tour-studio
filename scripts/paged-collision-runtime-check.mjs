@@ -27,6 +27,12 @@ try{
  assert.ok(new Set(requests).size<5,'initialization loads a nearby neighborhood, not the whole scene');
  await page.evaluate(async()=>{const r=window.tourRuntime;r.renderer.setAnimationLoop(null);r.setMode('explore');await r.modeTransition;});
  const tick=async(n=1)=>page.evaluate(n=>{const r=window.tourRuntime;for(let i=0;i<n;i++)r.frame(r.last+20);return {position:r.rig.position.toArray(),body:r.body.translation(),mode:r.mode,tiles:r.pagedCollider.residentTiles,bytes:r.pagedCollider.residentBytes,chunks:r.pagedCollider.residentChunks,triangles:r.pagedCollider.residentTriangles};},n);
+ // The fixture has no splats at the destination: only the collision ray can
+ // select the far floor, including when its pages have not been installed.
+ await page.evaluate(()=>{const r=window.tourRuntime;r.rig.rotation.y=-Math.PI/2;r.camera.rotation.x=-.12;r.frame(r.last+20);const rect=r.renderer.domElement.getBoundingClientRect();r.click({clientX:rect.x+rect.width/2,clientY:rect.y+rect.height/2});});
+ await page.waitForFunction(()=>window.tourRuntime.routes.points.length>2);
+ assert.ok(await page.evaluate(()=>window.tourRuntime.routes.points.at(-1).x>10),'collision-only click crosses unloaded sectors and starts a path without a Gaussian hit');
+ await page.evaluate(()=>window.tourRuntime.routes.cancel());
  let state=await tick(20);assert.equal(state.mode,'explore');assert.ok(Math.abs(state.position[1]-1.7)<.1,'walk lands on the allowed-space floor');assert.ok(state.chunks<=2048&&state.triangles<=600000,'local physics keeps its own chunk and triangle budgets');
  const permissions=await page.evaluate(()=>{const p=window.tourRuntime.pagedCollider;return {inside:p.allows({x:4,y:1,z:4},.6,.24),outside:p.allows({x:4,y:1,z:-1},.6,.24),cold:p.allows({x:100,y:1,z:4},.6,.24)};});assert.deepEqual(permissions,{inside:true,outside:false,cold:false});
  // Receiving a network page alone does not prepare every physics chunk in it.

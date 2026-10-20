@@ -1,4 +1,4 @@
-import {WalkingMotor,configureWalkingController} from '../shared/walking.mjs';
+import {WalkingMotor,configureWalkingController,clickedWalkingFeet} from '../shared/walking.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import RAPIER from '@dimforge/rapier3d-compat';
 test('Rapier walking capsule grounds, blocks walls, and climbs a low step',async()=>{
  await RAPIER.init();const world=new RAPIER.World({x:0,y:-9.81,z:0});
@@ -17,3 +17,13 @@ import {nearbyWalkingFeet} from '../shared/walking.mjs';import {nearbyFlyPositio
 test('mode placement preserves valid positions, finds nearby clearance and rejects missing floors',async()=>{await RAPIER.init();const world=new RAPIER.World({x:0,y:-9.81,z:0});try{world.createCollider(RAPIER.ColliderDesc.cuboid(10,.1,10).setTranslation(0,-.1,0));world.createCollider(RAPIER.ColliderDesc.cuboid(.2,2,.2).setTranslation(1,2,1));world.step();const feet=nearbyWalkingFeet(world,{x:3,y:1.7,z:2},1.7);assert.ok(Math.abs(feet.x-3)<.001&&Math.abs(feet.z-2)<.001&&Math.abs(feet.y)<.001);const near=nearbyWalkingFeet(world,{x:1,y:1.7,z:1},1.7);assert.ok(near&&Math.hypot(near.x-1,near.z-1)<=1,'escape a viewpoint inside a wall');assert.equal(nearbyWalkingFeet(world,{x:30,y:1.7,z:30},1.7),null);const fly=nearbyFlyPosition(world,{x:3,y:3,z:2});assert.deepEqual(fly,{x:3,y:3,z:2});const escape=nearbyFlyPosition(world,{x:1,y:1,z:1});assert.ok(escape&&Math.hypot(escape.x-1,escape.y-1,escape.z-1)<=1);assert.equal(world.intersectionWithShape(escape,{x:0,y:0,z:0,w:1},new RAPIER.Ball(.2)),null);}finally{world.free();}});
 
 test('walking-mode placement handles slope clearance and rejects low ceilings',async()=>{await RAPIER.init();const slope=new RAPIER.World({x:0,y:-9.81,z:0}),low=new RAPIER.World({x:0,y:-9.81,z:0});try{const angle=Math.PI/8;slope.createCollider(RAPIER.ColliderDesc.cuboid(5,.1,5).setTranslation(0,-.1,0).setRotation({x:0,y:0,z:Math.sin(angle/2),w:Math.cos(angle/2)}));slope.step();const feet=nearbyWalkingFeet(slope,{x:0,y:1.7,z:0},1.7);assert.ok(feet);assert.equal(slope.intersectionWithShape({x:feet.x,y:feet.y+.87,z:feet.z},{x:0,y:0,z:0,w:1},new RAPIER.Capsule(.6,.25)),null);low.createCollider(RAPIER.ColliderDesc.cuboid(10,.1,10).setTranslation(0,-.1,0));low.createCollider(RAPIER.ColliderDesc.cuboid(10,.1,10).setTranslation(0,1.4,0));low.step();assert.equal(nearbyWalkingFeet(low,{x:0,y:1,z:0},1.7),null);}finally{slope.free();low.free();}});
+
+test('clicked landings fit beside a voxel edge without switching floors or crossing obstacles',async()=>{
+ await RAPIER.init();const world=new RAPIER.World({x:0,y:-9.81,z:0});try{
+  world.createCollider(RAPIER.ColliderDesc.cuboid(5,.1,5).setTranslation(0,-.1,0));world.createCollider(RAPIER.ColliderDesc.cuboid(.1,.1,1).setTranslation(.2,.1,0));world.step();
+  assert.equal(clickedWalkingFeet(world,{x:0,y:0,z:0},undefined),null);
+  const feet=clickedWalkingFeet(world,{x:0,y:0,z:0},undefined,()=>true,.25,.6);assert.ok(feet&&Math.hypot(feet.x,feet.z)<=.6);
+  assert.equal(clickedWalkingFeet(world,{x:0,y:1.5,z:0},undefined,()=>true,.25,.6),null);
+  assert.equal(clickedWalkingFeet(world,{x:0,y:0,z:0},undefined,()=>false,.25,.6),null);
+ }finally{world.free();}
+});

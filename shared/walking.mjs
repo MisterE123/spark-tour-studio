@@ -133,13 +133,18 @@ export function walkingMotionAllowed(origin,movement,allows){
 
 // A ground click must stay on the clicked storey. Mode-switch placement uses
 // the broader search below, but click-to-walk must never find a basement floor.
-export function clickedWalkingFeet(world,point,exclude,allowed=p=>true,tolerance=.25){
+export function clickedWalkingFeet(world,point,exclude,allowed=p=>true,tolerance=.25,searchRadius=0){
  tolerance=Number.isFinite(tolerance)?Math.max(.1,Math.min(.75,tolerance)):.25;
- const origin={x:point.x,y:point.y+tolerance,z:point.z},hit=world.castRayAndGetNormal(new RAPIER.Ray(origin,{x:0,y:-1,z:0}),tolerance*2,true,undefined,undefined,exclude);
- if(!hit||hit.normal.y<Math.SQRT1_2)return null;
- const y=origin.y-hit.timeOfImpact,clearance=Math.max(.87,.6+.25/hit.normal.y+.02),center={x:point.x,y:y+clearance,z:point.z};
- if(!allowed(center)||world.intersectionWithShape(center,{x:0,y:0,z:0,w:1},new RAPIER.Capsule(.6,.25),undefined,undefined,exclude))return null;
- return {x:point.x,y:y+clearance-.87,z:point.z};
+ const at=(x,z)=>{const origin={x,y:point.y+tolerance,z},hit=world.castRayAndGetNormal(new RAPIER.Ray(origin,{x:0,y:-1,z:0}),tolerance*2,true,undefined,undefined,exclude);
+  if(!hit||hit.normal.y<Math.SQRT1_2)return null;
+  const y=origin.y-hit.timeOfImpact,clearance=Math.max(.87,.6+.25/hit.normal.y+.02),center={x,y:y+clearance,z};
+  if(!allowed(center)||world.intersectionWithShape(center,{x:0,y:0,z:0,w:1},new RAPIER.Capsule(.6,.25),undefined,undefined,exclude))return null;
+  return {x,y:y+clearance-.87,z};};
+ const exact=at(point.x,point.z);if(exact)return exact;
+ // A point on a voxel stair edge may not fit a capsule. Try a small landing
+ // nearby, preserving the clicked height/storey and all clearance checks.
+ for(const radius of [.1,.2,.35,.5,.6]){if(radius>searchRadius)break;for(let i=0;i<16;i++){const angle=i*Math.PI/8,feet=at(point.x+Math.cos(angle)*radius,point.z+Math.sin(angle)*radius);if(feet)return feet;}}
+ return null;
 }
 
 // Search only on mode changes. Keep horizontal position when a safe floor is below it.

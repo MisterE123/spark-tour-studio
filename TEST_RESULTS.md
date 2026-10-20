@@ -393,3 +393,19 @@ Final packaged onboarding check: test-output/viewer-onboarding-1792416926195. Ac
 Local build: `release/Spark Tour Studio 1.18.0.exe`, 184,942,500 bytes; SHA-256 `f45e0b53d944d19c453bc076592393395fbcc2b376c9ec754ae60a949f3afc0c`.
 
 Local build: `artifacts/Spark-Tour-Studio-1.18.0-windows-x64.zip`, 282,966,293 bytes; SHA-256 `a3b17cae3148f5c2c7a11a7a1364e1c10e1bba62a62cc8b14679dbb055c4f9cb`.
+
+
+## v1.19.7 collision picking and box face handles (2026-10-19)
+
+- Reproduced the reported paged Walk click failures in the current read-only Tourv2 East Inside Graveyard. Original splat-first clicks loaded collision but stopped before routes.find; temporary physics boundaries also appeared at unloaded page seams. Direct bounded collision-grid rays now determine the actual first boundary, fetch crossed pages under existing stream budgets, and preserve scene transforms. Small same-floor landing searches fit the capsule beside voxel edges. Streaming navigation refreshes retain preflight click intent while user cancellations remain authoritative.
+- Packaged synthetic corridor check selects an unloaded distant floor with no splat at that location, starts a path, and passes existing resident-budget/support/streamed-route/drone/XR-cleanup checks (test-output/paged runtime 1792458497569). Real-scene checks now start routes for the five tested reachable headings, including formerly failing 90, 135 and 180 degree directions; a formerly failing destination moves the capsule about 8.9 m. Blocked directions remain rejected. Project config/assets were not modified.
+- Six selected-box face handles are available in all three transform tools, retain screen size, preserve opposite faces and rotate with their box. Actual packaged native mouse drags pass in Move, Rotate and Scale; changed dimensions save correctly (test-output/box faces 1792458551996). Screenshot inspected. Tool changes detach face editing and restore whole-shape controls.
+- Unit regressions cover cold ray seams, real boundaries, exact grid edges, distance/page budgets, cancellation, failed page requests, same-storey nearby landings, selected-face visibility/size and streaming intent. Real Quest acceptance remains manual.
+
+Final packaged real-scene report: test-output/real walking final 1792458731656. All five asserted reachable click headings start routes, and the walking capsule travels 8.8847 m on the formerly failing northbound click.
+
+Final full regression run: all 266 tests pass (test-output/v1.19.7-tests.log).
+
+Windows portable: release/Spark Tour Studio 1.19.7.exe; 184984360 bytes; SHA-256 8E8C9F16DDC3A7814A11929A6353ECD70EFEB95B5C1A125C6D91740FC03EA530.
+
+Actual portable EXE cold start, 1.19.7 About/version and normal close pass (test-output/portable smoke 1792458939216).

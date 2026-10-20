@@ -4,6 +4,7 @@ import {CollisionStream,segmentBoxDistanceSquared} from '../shared/collision-str
 import {collisionTileKey} from '../shared/paged-collision.mjs';
 import {collisionPhysicsChunkConfig,localPhysicsChunks} from '../shared/collision-physics.mjs';
 import {sceneMatrix} from '../shared/collision-selection.mjs';
+import {raycastCollision} from '../shared/collision-ray.mjs';
 
 type Point={x:number;y:number;z:number};
 type Chunk={key:string;coord:number[];cells:number;bounds:{min:number[];max:number[]}};
@@ -36,6 +37,11 @@ export class PagedCollider {
  private scale(){this.group.updateWorldMatrix(true,false);return this.group.matrixWorld.getMaxScaleOnAxis();}
  toGeneration(point:Point){this.group.updateWorldMatrix(true,false);return vector(point).applyMatrix4(this.group.matrixWorld.clone().invert());}
  fromGeneration(point:Point){this.group.updateWorldMatrix(true,false);return vector(point).applyMatrix4(this.group.matrixWorld);}
+ async raycast(ray:THREE.Ray,isCurrent=()=>true){
+  const origin=this.toGeneration(ray.origin),direction=this.toGeneration(ray.origin.clone().add(ray.direction)).sub(origin),scale=direction.length();
+  const hit=await raycastCollision(this.stream,origin.toArray(),direction.toArray(),{maxDistance:100*scale,isCurrent:()=>!this.dead&&isCurrent()});
+  return hit?{point:this.fromGeneration({x:hit.point[0],y:hit.point[1],z:hit.point[2]}),normal:new THREE.Vector3(...hit.normal).applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(this.group.matrixWorld))}:null;
+ }
  private owner(chunk:Chunk){return collisionTileKey(chunk.coord.map(value=>Math.floor(value*chunk.cells/this.manifest.tileCells)));}
  private pageKeys(chunk:Chunk){
   const n=this.manifest.tileCells,low=chunk.coord.map(value=>Math.floor((value*chunk.cells-1)/n)),high=chunk.coord.map(value=>Math.floor(((value+1)*chunk.cells)/n)),keys:string[]=[];

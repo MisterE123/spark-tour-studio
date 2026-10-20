@@ -220,3 +220,10 @@ The user's LichtFeld export will be tested manually. No matching collision GLB w
 
 - Follow a route on desktop and phone. Tiny look jitter should retain automatic turning; after 12 accumulated pixels of deliberate look, walking continues without pulling the view direction back. Check left drag, captured mouse movement and touch drag, including several small events and input while the path is loading.
 - Select another destination and confirm automatic turning returns. Manual movement or Escape still cancels walking. Verify real Quest head tracking remains independent of route direction.
+
+
+## v1.19.7 collision click picking and box faces
+
+- In Tourv2, Preview East Inside Graveyard in Walk with collision wireframe shown. Click reachable floors across page boundaries and near voxel step edges; routes should start and move the capsule. Repeat cold and warm, with the wireframe off, and after rotating the view. Click a bubble while a destination is being prepared: the bubble wins and the old walk never starts later. Actual blocked or disconnected destinations remain silent.
+- Repeat on a legacy collision GLB. Verify a floor click never selects another storey, and capsule clearance still rejects low ceilings and enclosed obstacles.
+- Select a rotated Add/Remove box in collision authoring. Drag each positive and negative face with Move, Rotate and Scale selected; the opposite face stays fixed. Verify undo/redo, saved/reopened dimensions, camera-distance handle sizing, and whole-scene bounds. Switch tools after a face drag: the requested whole-shape control appears. Preview hides authoring handles.

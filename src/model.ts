@@ -21,8 +21,10 @@ export interface RichTextDocument {version:1;doc:RichTextNode}
 export interface Block {type:'text'|'image'|'link'|'embed';text:string;url:string;richText?:RichTextDocument}
 export interface Page {sceneLinks?:SceneLink[];id:string;title:string;html:string;blocks:Block[]}
 export type SceneBackground={type:"solid";color:string;topColor?:string;bottomColor?:string}|{type:"panorama";source:string;yawDegrees:number}|{type:"splat";source:string;transform:Transform};
-export interface TourScene {speedMultiplier?:number;vrScale?:number;collisionAuthoring?:CollisionAuthoring;background?:SceneBackground;walkHeight?:number;walkStepHeight?:number;thumbnailMode?:'starting-view'|'custom';audio?:AudioTrack;id:string;name:string;source:string;thumbnail:string;transform:Transform;collider:string;colliderTransform:Transform;modes:Mode[];entry:string;walkStart:string;viewpoints:Viewpoint[];hotspots:Hotspot[]}
-export interface Project {navigation?:{baseSpeed:number};appearance?:{glassShade:number};bubbles?:{occlusion?:boolean;translucency?:number;size?:number;distanceFade?:number};performance?:PerformanceLibrary;version:1;title:string;description:string;cover:string;startScene:string;scenes:TourScene[];pages:Page[]}
+export interface BubbleSettings {occlusion?:boolean;translucency?:number;size?:number;distanceFade?:number;fadeDistance?:number|null}
+export interface SceneBubbleSettings {occlusion?:boolean;translucency?:number;sizeMultiplier?:number;fadeDistance?:number|null;fadeDistanceMultiplier?:number}
+export interface TourScene {bubbles?:SceneBubbleSettings;speedMultiplier?:number;vrScale?:number;collisionAuthoring?:CollisionAuthoring;background?:SceneBackground;walkHeight?:number;walkStepHeight?:number;thumbnailMode?:'starting-view'|'custom';audio?:AudioTrack;id:string;name:string;source:string;thumbnail:string;transform:Transform;collider:string;colliderTransform:Transform;modes:Mode[];entry:string;walkStart:string;viewpoints:Viewpoint[];hotspots:Hotspot[]}
+export interface Project {navigation?:{baseSpeed:number;walkHeight?:number;walkStepHeight?:number};appearance?:{glassShade:number};bubbles?:BubbleSettings;performance?:PerformanceLibrary;version:1;title:string;description:string;cover:string;startScene:string;scenes:TourScene[];pages:Page[]}
 export interface Hosting {assetBaseUrl:string;collisionBaseUrl?:string;sceneUrls:Record<string,string>}
 export interface RecoverySnapshot {project:Project;hosting:Hosting}
 export interface Snapshot {project:Project;hosting:Hosting;base:string;path:string;recovery?:RecoverySnapshot}

@@ -122,6 +122,12 @@ jobs:
         run: node scripts/viewer-onboarding-check.mjs
       - name: Check bubble ray picking and streamed occlusion
         run: node scripts/bubble-runtime-check.mjs
+      - name: Check constrained viewpoint VR comfort and disabled-view entries
+        run: node scripts/viewpoint-xr-comfort-check.mjs
+      - name: Check partial collision failure and same-session recovery
+        run: node scripts/collision-recovery-check.mjs
+      - name: Check compact portrait and landscape touch viewer
+        run: node scripts/mobile-viewer-check.mjs
       - name: Check precision reloads and persistent XR tracking
         run: node scripts/extended-precision-check.mjs
       - name: Check cold network settings and shared HTTPS precision

@@ -21,6 +21,15 @@ test('corruption and oversized responses do not enter the resident set',async()=
  const f=await fixture(),entry=f.manifest.tiles[0],bad=f.bodies.values().next().value.slice();bad[bad.length-1]^=1;
  for(const response of [()=>new Response(bad),()=>new Response(new Uint8Array(entry.bytes+1))]){const stream=new CollisionStream(f.manifest,'https://tour.test/collider/scene.collision.json',{fetch:async()=>response()});await assert.rejects(stream.load(entry),/checksum|oversized/);assert.equal(stream.resident.size,0);stream.dispose();}
 });
+test('automatic missing-page retries are throttled while explicit queries can recover immediately',async()=>{
+ const f=await fixture(),entry=f.manifest.tiles[0];let requests=0,fail=true;
+ const stream=new CollisionStream(f.manifest,'https://tour.test/collider/scene.collision.json',{fetch:async url=>{requests++;return fail?new Response('',{status:404}):f.fetch(url);}});
+ try{
+  await assert.rejects(stream.load(entry,{retryDelay:3000}),/404/);await assert.rejects(stream.load(entry,{retryDelay:3000}),/404/);assert.equal(requests,1);assert.equal(stream.allowsPoint([2,2,2]),false);
+  fail=false;await stream.load(entry);assert.equal(requests,2);assert.ok(stream.allowsPoint([2,2,2]));assert.equal(stream.failures.size,0);assert.equal(stream.failedAt.size,0);
+  stream.resident.clear();stream.bytes=0;fail=true;await assert.rejects(stream.load(entry,{retryDelay:3000}),/404/);stream.failedAt.set(entry.key,Date.now()-3001);fail=false;await stream.load(entry,{retryDelay:3000});assert.equal(requests,4);assert.ok(stream.allowsPoint([2,2,2]));
+ }finally{stream.dispose();}assert.equal(stream.failures.size,0);assert.equal(stream.failedAt.size,0);
+});
 test('capsule-box distance handles rotated segments and grazing corners exactly',()=>{
  assert.equal(segmentBoxDistanceSquared([-2,0,0],[2,0,0],[-1,-1,-1],[1,1,1]),0);
  assert.equal(segmentBoxDistanceSquared([2,2,0],[2,3,0],[-1,-1,-1],[1,1,1]),2);

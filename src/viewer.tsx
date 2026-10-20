@@ -13,6 +13,7 @@ import {Button,Field,Stage,ControlsHelp,TouchPad,ContentModal,useMobileControls,
 import {Icon,IconButton,InspectorSection,type IconName} from './icons';
 import {TourDirectory} from './tour-directory';
 import {ViewerGuide,NavigationCoach} from './viewer-guide';
+import {MobileTourControls,useCompactViewer} from './mobile-tour-controls';
 import './style.css';
 
 const homeHosting:Hosting={assetBaseUrl:'./',sceneUrls:{}};
@@ -21,6 +22,8 @@ const modeIcon:Record<Mode,IconName>={jumps:'photo',fly:'drone',explore:'directi
 
 function Viewer(){
  const mobile=useMobileControls();
+ const compact=useCompactViewer(),[tourControls,setTourControls]=useState(false);
+ useEffect(()=>{if(!compact)setTourControls(false);},[compact]);
  const [viewpointId,setViewpointId]=useState('');
  const [project,setProject]=useState<Project|null>(null),[hosting,setHosting]=useState(homeHosting);
  const [rt,setRt]=useState<TourRuntime|null>(null),[sceneId,setSceneId]=useState(''),[started,setStarted]=useState(false);
@@ -39,7 +42,7 @@ function Viewer(){
  useEffect(()=>{if(!rt)return;rt.onStatus=(s,e)=>{setStatus(s);setError(!!e);};rt.onScene=id=>{setSceneId(id);setRequested(value=>value?.sceneId===id?value:null);};rt.onViewpoint=setViewpointId;rt.onSpeed=setSpeed;rt.onMode=setMode;rt.onPage=setPage;rt.onPointerCapture=setCaptured;setCaptured(rt.pointerCaptured);return()=>{rt.onPointerCapture=()=>{};};},[rt]);
  useEffect(()=>{if(rt)rt.speedMultiplier=speed;},[rt,speed]);
  useEffect(()=>{if(rt&&project)rt.applyPerformance(tourPerformanceSettings(project.performance));},[rt,project]);
- useEffect(()=>{if(!rt)return;const syncBlocked=()=>{if(rt.renderer.xr.isPresenting)return;rt.blocked=!started||settings||!!page;if(rt.blocked)rt.releasePointer();};syncBlocked();rt.renderer.xr.addEventListener('sessionend',syncBlocked);return()=>rt.renderer.xr.removeEventListener('sessionend',syncBlocked);},[rt,started,settings,page]);
+ useEffect(()=>{if(!rt)return;const syncBlocked=()=>{if(rt.renderer.xr.isPresenting)return;rt.blocked=!started||settings||!!page||tourControls;if(rt.blocked)rt.releasePointer();};syncBlocked();rt.renderer.xr.addEventListener('sessionend',syncBlocked);return()=>rt.renderer.xr.removeEventListener('sessionend',syncBlocked);},[rt,started,settings,page,tourControls]);
  const guideKey=guideStorageKey(project?.title||'',location.pathname);
  useEffect(()=>{if(!project)return;try{setGuideSeen(localStorage.getItem(guideKey)==='done');}catch{setGuideSeen(false);}},[guideKey,project?.title]);
  const current=project?.scenes.find(s=>s.id===sceneId);
@@ -47,12 +50,12 @@ function Viewer(){
  const titleImage=project?.cover||(current?sceneThumbnail(current):'');
  const begin=(guided=false)=>{if(rt&&project){setRequested(null);setStarted(true);setSettings(false);setGuide(guided);if(guided)setGuideStep(0);rt.blocked=false;rt.audio.unlock();void rt.load(project,hosting,base,sceneId);}};
  const visit=(destination:TourDestination)=>{if(!rt||!project)return;setRequested(destination);setPage(null);setStarted(true);setSettings(false);rt.blocked=false;rt.project=project;rt.hosting=hosting;rt.base=base;if(!started&&rt.active?.id===destination.sceneId&&rt.ready){rt.audio.unlock();rt.audio.setScene(rt.active.audio,base);}void rt.visit(destination);};
- const goHome=()=>{setStarted(false);setSettings(false);setGuide(false);setPage(null);if(rt){rt.releasePointer();rt.blocked=true;rt.audio.stop();}};
+ const goHome=()=>{setStarted(false);setSettings(false);setTourControls(false);setGuide(false);setPage(null);if(rt){rt.releasePointer();rt.blocked=true;rt.audio.stop();}};
  const closeGuide=()=>{setGuide(false);setGuideSeen(true);try{localStorage.setItem(guideKey,'done');}catch{}};
  const openGuide=()=>{rt?.releasePointer();setSettings(false);setGuideStep(0);setGuide(true);};
  const toggleSettings=()=>{rt?.releasePointer();setSettings(!settings);};
  const modes=<div className="mode-tabs" data-guide="modes" role="group" aria-label="Movement mode">{current?.modes.map(m=><button key={m} title={modeName[m]} aria-pressed={mode===m} className={mode===m?'active':''} onClick={()=>rt?.setMode(m)}><Icon name={modeIcon[m]}/>{modeName[m]}</button>)}</div>;
- return <main className={'viewer '+(captured?'cursor-captured':'cursor-free')} style={glassVariables(project?.appearance) as React.CSSProperties}><Stage onReady={setRt}/>{started&&<SceneLoading runtime={rt}/>}
+ return <main className={'viewer '+(compact?'viewer-compact ':'')+(mobile.enabled?'viewer-touch ':'')+(captured?'cursor-captured':'cursor-free')} style={glassVariables(project?.appearance) as React.CSSProperties}><Stage onReady={setRt}/>{started&&<SceneLoading runtime={rt}/>}
   {!started?<section className="title-screen">
    <div className="title-art title-backdrop" role="img" aria-label="Tour cover" style={titleImage?{backgroundImage:'url('+new URL(titleImage,base).href+')'}:undefined}>{!titleImage&&<><div className="orb orb-one"/><div className="orb orb-two"/><div className="orbit"/></>}</div>
    <div className="title-copy"><div className="eyebrow">SPARK TOUR / SPATIAL EXPERIENCES</div><h1>{project?.title||'A new perspective.'}</h1><p className="lead">{project?.description||'Explore places as if you were there.'}</p>
@@ -65,6 +68,7 @@ function Viewer(){
    </div>
    <div className="title-side">{project&&!loadError&&<TourDirectory project={project} base={base} disabled={!rt} onVisit={visit}/>}</div>
   </section>:<>
+   {compact?project&&!settings&&!page&&!guide&&<MobileTourControls project={project} scene={current} view={selectedView} mode={mode} open={tourControls} onOpen={()=>{rt?.releasePointer();setTourControls(true);}} onClose={()=>setTourControls(false)} onScene={id=>{setRequested(null);void rt?.selectScene(id);}} onView={id=>{if(current?.modes.includes('jumps'))rt?.setMode('jumps');rt?.jump(id);}} onMode={m=>rt?.setMode(m)} onHome={goHome} onHelp={openGuide} onSettings={()=>setSettings(true)} onXR={()=>void rt?.enterXR()}/>:<>
    <div className="viewer-header"><div><small>{project?.title}</small><h2>{current?.name}</h2></div><div className="actions" data-guide="scenes">
     <select title="Choose scene" aria-label="Scene" value={sceneId} onChange={e=>{setRequested(null);void rt?.selectScene(e.target.value);}}>{project?.scenes.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select>
     <IconButton icon="menu" label="Return to start" onClick={goHome}>Start</IconButton>
@@ -75,11 +79,12 @@ function Viewer(){
    <div className="viewer-bottom">
     {selectedView?.description&&<div className="view-description">{selectedView.description}</div>}
     {modes}
-    <div className="viewpoints" role="group" aria-label="Viewpoints">{listedViewpoints(current).map((p,index)=><button className={'tour-viewpoint '+(p.id===viewpointId?'active':'')} title={'Go to View: '+p.name} aria-pressed={p.id===viewpointId} key={p.id} onClick={()=>rt?.jump(p.id)}>{p.thumbnail?<img src={new URL(p.thumbnail,base).href} alt=""/>:<Icon name="photo"/>}<span className="view-number">{index+1}</span><span>{p.name}</span></button>)}</div>
+    {current?.modes.includes('jumps')&&<div className="viewpoints" role="group" aria-label="Viewpoints">{listedViewpoints(current).map((p,index)=><button className={'tour-viewpoint '+(p.id===viewpointId?'active':'')} title={'Go to View: '+p.name} aria-pressed={p.id===viewpointId} key={p.id} onClick={()=>rt?.jump(p.id)}>{p.thumbnail?<img src={new URL(p.thumbnail,base).href} alt=""/>:<Icon name="photo"/>}<span className="view-number">{index+1}</span><span>{p.name}</span></button>)}</div>}
    </div>
-   {project&&<ViewpointStory hidden={settings||!!page||guide} project={project} scene={current} view={selectedView} runtime={rt} base={base}/>}
-   <TouchPad runtime={rt} enabled={mobile.enabled} mode={mode}/>
-   {!settings&&!page&&!guide&&<NavigationCoach mode={mode} touch={mobile.enabled} captured={captured} ready={!!rt?.ready&&!rt?.loading} onCapture={()=>{void rt?.capturePointer();}} onRelease={()=>rt?.releasePointer()} onGuide={openGuide}/>}
+   </>}
+   {project&&<ViewpointStory initiallyCollapsed={compact} hidden={settings||!!page||guide||tourControls} project={project} scene={current} view={selectedView} runtime={rt} base={base}/>}
+   <TouchPad runtime={rt} enabled={mobile.enabled&&!settings&&!page&&!guide&&!tourControls} mode={mode}/>
+   {!compact&&!settings&&!page&&!guide&&<NavigationCoach mode={mode} touch={mobile.enabled} captured={captured} ready={!!rt?.ready&&!rt?.loading} onCapture={()=>{void rt?.capturePointer();}} onRelease={()=>rt?.releasePointer()} onGuide={openGuide}/>}
    {guide&&!settings&&!page&&rt?.ready&&!rt?.loading&&<ViewerGuide mode={mode} touch={mobile.enabled} captured={captured} step={guideStep} onStep={setGuideStep} onCapture={()=>{void rt?.capturePointer();}} onClose={closeGuide}/>}
   </>}
   {status&&started&&!rt?.loading&&<div role="status" className={'status '+(error?'error':'')}><Icon name={error?'error':'schedule'}/>{status}{mode==='explore'&&!error&&<Button onClick={()=>{rt?.routes.cancel();setStatus('');}}><Icon name="close"/>Stop walking</Button>}{error&&<><Button onClick={()=>requested?void rt?.visit(requested):void rt?.selectScene(sceneId)}><Icon name="refresh"/>Retry</Button><Button onClick={goHome}><Icon name="menu"/>Choose scene</Button></>}</div>}

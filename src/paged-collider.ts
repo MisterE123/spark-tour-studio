@@ -37,9 +37,9 @@ export class PagedCollider {
  private scale(){this.group.updateWorldMatrix(true,false);return this.group.matrixWorld.getMaxScaleOnAxis();}
  toGeneration(point:Point){this.group.updateWorldMatrix(true,false);return vector(point).applyMatrix4(this.group.matrixWorld.clone().invert());}
  fromGeneration(point:Point){this.group.updateWorldMatrix(true,false);return vector(point).applyMatrix4(this.group.matrixWorld);}
- async raycast(ray:THREE.Ray,isCurrent=()=>true){
+ async raycast(ray:THREE.Ray,isCurrent=()=>true,{maxDistance=100,retryDelay=0}={}){
   const origin=this.toGeneration(ray.origin),direction=this.toGeneration(ray.origin.clone().add(ray.direction)).sub(origin),scale=direction.length();
-  const hit=await raycastCollision(this.stream,origin.toArray(),direction.toArray(),{maxDistance:100*scale,isCurrent:()=>!this.dead&&isCurrent()});
+  const hit=await raycastCollision(this.stream,origin.toArray(),direction.toArray(),{maxDistance:maxDistance*scale,retryDelay,isCurrent:()=>!this.dead&&isCurrent()});
   return hit?{point:this.fromGeneration({x:hit.point[0],y:hit.point[1],z:hit.point[2]}),normal:new THREE.Vector3(...hit.normal).applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(this.group.matrixWorld))}:null;
  }
  private owner(chunk:Chunk){return collisionTileKey(chunk.coord.map(value=>Math.floor(value*chunk.cells/this.manifest.tileCells)));}
@@ -75,7 +75,7 @@ export class PagedCollider {
   this.leases.set(id,{point:vector(point)});let released=false;const lease={release:()=>{if(released)return;released=true;this.leases.delete(id);try{this.plan();}catch(error){this.focusKey='';this.notice(error);}}};
   try{this.plan();await this.flush();if(this.dead)throw new DOMException('Collision scene disposed.','AbortError');return lease;}catch(error){lease.release();throw error;}
  }
- async ensure(point:Point,_radius=4){if(this.dead)throw new DOMException('Collision scene disposed.','AbortError');this.focus(point);if(this.focusError)throw this.focusError;await this.flush();this.failure='';return [...this.stream.pinned];}
+ async ensure(point:Point,_radius=4){if(this.dead)throw new DOMException('Collision scene disposed.','AbortError');this.focus(point);if(this.focusError)throw this.focusError;this.schedule();await this.flush();return [...this.stream.pinned];}
  async routeParts(start:Point,end:Point,signal:AbortSignal){
   const a=vector(start),b=vector(end),distance=a.distanceTo(b);if(distance>16||this.dead||signal.aborted||this.leases.size>=4)throw new DOMException('Walking refinement cancelled.','AbortError');
   const id=++this.leaseSequence,count=Math.max(1,Math.ceil(distance/.75)),samples=Array.from({length:count+1},(_,i)=>a.clone().lerp(b,i/count).add(new THREE.Vector3(0,.9,0)));
@@ -91,7 +91,11 @@ export class PagedCollider {
  private async rebuild(){
   while(!this.dead){
    const revision=this.revision,entries=[...new Set([...this.desired.values()].map(chunk=>this.owner(chunk)))].flatMap(key=>{const entry=this.stream.entries.get(key);return entry?[entry]:[];});
-   this.pinPages();const loaded=await Promise.allSettled(entries.map(entry=>this.stream.load(entry)));if(this.dead)return;if(revision!==this.revision)continue;const failed=loaded.find(result=>result.status==='rejected');if(failed?.status==='rejected')throw failed.reason;
+   this.pinPages();const loaded=await Promise.allSettled(entries.map(entry=>this.stream.load(entry,{retryDelay:3000})));if(this.dead)return;if(revision!==this.revision)continue;const failed=loaded.find(result=>result.status==='rejected');if(failed?.status==='rejected')this.notice(failed.reason);else this.failure='';
+   // A failed neighbor is solid, never a fatal scene error. Build the healthy
+   // owners (including their closed boundary) and leave failed owners unprepared.
+   // Arrival on a later retry invalidates skipped chunks and opens only verified
+   // coverage. This also preserves the current floor during destination queries.
    const chunks=[...this.desired.values()].filter(chunk=>!this.prepared.has(chunk.key)&&!this.skipped.has(chunk.key)).sort((a,b)=>this.priority(a)-this.priority(b)).slice(0,BATCH);if(!chunks.length)return;
    const needed=[...new Set(chunks.flatMap(chunk=>this.pageKeys(chunk)))],snapshot=new Map(needed.map(key=>[key,this.stream.resident.get(key)]));
    const retained=[...new Set([...this.desired.values()].flatMap(chunk=>this.pageKeys(chunk)))],retain=retained.filter(key=>this.stream.resident.has(key)),tiles:{key:string;bytes:Uint8Array}[]=[];

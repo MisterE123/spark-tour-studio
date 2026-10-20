@@ -1,5 +1,6 @@
 import RAPIER from '@dimforge/rapier3d-compat';
-export const DEFAULT_STEP_HEIGHT=.5334;
+import {DEFAULT_WALK_STEP_HEIGHT} from './navigation-settings.mjs';
+export const DEFAULT_STEP_HEIGHT=DEFAULT_WALK_STEP_HEIGHT;
 export function normalizeStepHeight(value){return Number.isFinite(value)?Math.max(0,Math.min(1,value)):DEFAULT_STEP_HEIGHT;}
 export function configureWalkingController(controller){
  // Rapier handles collision/sliding. This motor alone owns stairs and ground

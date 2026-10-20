@@ -23,7 +23,8 @@ const browser=await chromium.launch({channel:'msedge',headless:true,args:['--ena
 let page;const errors=[];
 try{
  page=await browser.newPage({viewport:{width:1280,height:850}});const requests=[],external=[];page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));page.on('request',req=>{if(req.url().includes('/tiles/'))requests.push(req.url());if(/^https?:/.test(req.url())&&!req.url().startsWith(url))external.push(req.url());});
- await page.goto(url+'?diagnostics=1');await page.getByRole('button',{name:'Enter tour'}).click();await page.waitForFunction(()=>window.tourRuntime?.ready&&window.tourRuntime.pagedCollider?.ready);
+ await page.goto(url+'?diagnostics=1');await page.getByRole('button',{name:'Enter tour'}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);assert.equal(await page.evaluate(()=>!!window.tourRuntime.pagedCollider),false,'viewpoint mode opens without fetching collision resources');
+ await page.evaluate(async()=>{const r=window.tourRuntime;r.setMode('explore');await r.modeTransition;});await page.waitForFunction(()=>window.tourRuntime.pagedCollider?.ready);
  assert.ok(new Set(requests).size<5,'initialization loads a nearby neighborhood, not the whole scene');
  await page.evaluate(async()=>{const r=window.tourRuntime;r.renderer.setAnimationLoop(null);r.setMode('explore');await r.modeTransition;});
  const tick=async(n=1)=>page.evaluate(n=>{const r=window.tourRuntime;for(let i=0;i<n;i++)r.frame(r.last+20);return {position:r.rig.position.toArray(),body:r.body.translation(),mode:r.mode,tiles:r.pagedCollider.residentTiles,bytes:r.pagedCollider.residentBytes,chunks:r.pagedCollider.residentChunks,triangles:r.pagedCollider.residentTriangles};},n);

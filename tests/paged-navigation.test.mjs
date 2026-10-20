@@ -60,6 +60,10 @@ test('failed walking tile requests can be retried, cancelled results cannot ente
  let fail=true;const loader=new PagedNavigationLoader({tileSize:8,tiles:[descriptor(0,0)]},async()=>{if(fail)throw Error('network unavailable');return new Uint8Array(4);});await assert.rejects(loader.route({x:1,z:1},{x:2,z:1}),/network/);assert.equal(loader.cache.size,0);fail=false;assert.equal((await loader.route({x:1,z:1},{x:2,z:1})).length,1);loader.dispose();
  let release;const controller=new AbortController(),cancelled=new PagedNavigationLoader({tileSize:8,tiles:[descriptor(0,0)]},()=>new Promise(resolve=>{release=resolve;})),pending=cancelled.route({x:1,z:1},{x:2,z:1},controller.signal);controller.abort();release(new Uint8Array(4));await assert.rejects(pending,error=>error.name==='AbortError');assert.equal(cancelled.cache.size,0);cancelled.dispose();
 });
+test('missing optional navigation neighbors do not discard a healthy walking corridor and retry later',async()=>{
+ let fail=true;const requested=[],loader=new PagedNavigationLoader({tileSize:8,tiles:[descriptor(0,0),descriptor(1,0),descriptor(0,1)]},async entry=>{requested.push(entry.key);if(fail&&entry.key==='0,1')throw Error('Navigation tile request failed (404).');return new Uint8Array(4);});
+ try{assert.deepEqual((await loader.route({x:1,z:1},{x:9,z:1})).map(entry=>entry.key),['0,0','1,0']);assert.equal(loader.cache.has('0,1'),false);fail=false;assert.deepEqual((await loader.route({x:1,z:1},{x:9,z:1})).map(entry=>entry.key),['0,0','1,0','0,1']);assert.equal(requested.filter(key=>key==='0,1').length,2);}finally{loader.dispose();}
+});
 
 test('route byte budgets are checked before download and optional halos fit remaining memory',async()=>{
  let requests=0;const oversized=new PagedNavigationLoader({tileSize:8,tiles:[{...descriptor(0,0),bytes:20},{...descriptor(1,0),bytes:20}]},async entry=>{requests++;return new Uint8Array(entry.bytes);},{maxBytes:32});try{await assert.rejects(oversized.route({x:1,z:1},{x:9,z:1}),/memory/);assert.equal(requests,0);assert.equal(oversized.bytes,0);}finally{oversized.dispose();}

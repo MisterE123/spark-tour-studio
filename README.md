@@ -350,3 +350,11 @@ Step height is the maximum normal automatic walking step, not a jump height. Cli
 In **Tour settings → Movement defaults**, choose the global base speed. **Scene → Navigation & starts** adds the scene speed factor and VR scale. **View → VR scale** adds the viewpoint's VR factor. Movement is base × scene × visitor multiplier; the exported viewing settings and VR Options show a visitor multiplier. VR size combines scene × viewpoint factors and applies only in WebXR, without changing scene/collider transforms.
 
 In **View → Extended description**, enable the history side panel and use the bubble-style rich-text editor, including imported or URL images. Add related-scene buttons below it, optionally choosing an unlisted entry viewpoint. Preview and exported tours show the same closable glass side panel; VR uses native scrolling content and controller-selectable scene buttons. The existing short description remains available below the view. See [navigation settings format](NAVIGATION_SETTINGS.md) for defaults and JSON fields.
+
+### Mixed-scale tours and compact viewing
+
+Set common values in Tour settings → Movement defaults and Bubble defaults. Scenes inherit walking height/step height unless explicitly overridden; scene speed remains a multiplier. In Scene → Bubble overrides, choose tour distance, a multiplier (for example 40× for an aerial overview), a scene distance in meters, or no distance fade. Size, translucency and occlusion can also vary per scene. Effective values appear beside the controls; old settings retain their behavior until edited.
+
+Phones use a compact scene selector and Tour controls sheet in portrait and landscape. Viewpoint details begin collapsed to About this view, with controls remaining recoverable. Immersive VR never auto-animates authored viewpoints: the left stick moves along the authored geometry and the right stick turns around the tracked head. Walk/Drone retain trigger teleportation; viewpoint triggers select content without starting ground navigation.
+
+Viewpoints do not request collision data. Movement modes load it when needed; missing tiles remain blocked while healthy areas and content continue working, and repaired tiles can recover without refreshing the tour. Re-export existing tours to receive the updated viewer.

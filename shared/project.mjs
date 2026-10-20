@@ -1,6 +1,6 @@
 import {NavigationSettingsSchema} from './navigation-settings.mjs';
 import {normalizeBubbleContent,usedContent} from './authoring.mjs';
-import {BubbleSettingsSchema} from './bubbles.mjs';
+import {BubbleSettingsSchema,SceneBubbleSettingsSchema} from './bubbles.mjs';
 import {AppearanceSchema} from './appearance.mjs';
 import { z } from 'zod';
 import {ViewControlsSchema} from './viewpoints.mjs';
@@ -23,7 +23,7 @@ const page = z.object({ id, title:z.string(), html:ref, blocks:z.array(block) })
 const hotspot = z.object({ createdAt:finite.int().min(0).optional(), size:finite.min(0).max(4).optional(), id, label:z.string(), position:vec, kind:z.enum(['page','scene','viewpoint']), target:z.string(), viewpoint:z.string().optional() });
 const backgroundColor=z.string().regex(/^#[0-9a-f]{6}$/i);
 export const BackgroundSchema=z.discriminatedUnion('type',[z.object({type:z.literal('solid'),color:backgroundColor,topColor:backgroundColor.optional(),bottomColor:backgroundColor.optional()}),z.object({type:z.literal('panorama'),source:ref,yawDegrees:finite.min(-360).max(360).default(0)}),z.object({type:z.literal('splat'),source:ref,transform})]);
-const scene = z.object({speedMultiplier:finite.min(.05).max(20).optional(),vrScale:finite.min(.01).max(100).optional(), collisionAuthoring:CollisionAuthoringSchema.optional(), background:BackgroundSchema.optional(), walkHeight:finite.min(1).max(2.4).optional(), walkStepHeight:finite.min(0).max(1).optional(), audio:audio.optional(), id, name:z.string(), source:ref, thumbnail:ref, thumbnailMode:z.enum(['starting-view','custom']).optional(), transform, collider:ref, colliderTransform:transform, modes:z.array(mode), entry:z.string(), walkStart:z.string(), viewpoints:z.array(typedViewpoint), hotspots:z.array(hotspot) });
+const scene = z.object({bubbles:SceneBubbleSettingsSchema.optional(),speedMultiplier:finite.min(.05).max(20).optional(),vrScale:finite.min(.01).max(100).optional(), collisionAuthoring:CollisionAuthoringSchema.optional(), background:BackgroundSchema.optional(), walkHeight:finite.min(1).max(2.4).optional(), walkStepHeight:finite.min(0).max(1).optional(), audio:audio.optional(), id, name:z.string(), source:ref, thumbnail:ref, thumbnailMode:z.enum(['starting-view','custom']).optional(), transform, collider:ref, colliderTransform:transform, modes:z.array(mode), entry:z.string(), walkStart:z.string(), viewpoints:z.array(typedViewpoint), hotspots:z.array(hotspot) });
 export const ProjectSchema = z.object({ navigation:NavigationSettingsSchema.optional(),appearance:AppearanceSchema.optional(), bubbles:BubbleSettingsSchema.optional(), performance:PerformanceLibrarySchema.optional(), version:z.literal(1), title:z.string().min(1), description:z.string(), cover:ref, startScene:z.string(), scenes:z.array(scene), pages:z.array(page) }).transform(normalizeBubbleContent);
 export const HostingSchema = z.object({ assetBaseUrl:ref.default('./'), collisionBaseUrl:ref.optional(), sceneUrls:z.record(z.string(),ref).default({}) });
 export function identity(){return {position:[0,0,0],rotation:[0,0,0],scale:1};}

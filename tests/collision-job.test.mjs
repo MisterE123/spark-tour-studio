@@ -36,7 +36,7 @@ function fixture(t,{format='glb',bridge={}}={}){
  Object.defineProperty(globalThis,'window',{configurable:true,writable:true,value:{studio}});
  Object.defineProperty(globalThis,'document',{configurable:true,writable:true,value:{baseURI:'https://editor.test/app/editor.html'}});
  Object.defineProperty(globalThis,'Worker',{configurable:true,writable:true,value:FakeWorker});
- const job=new CollisionJob(),environment={context:id=>{const scene=scenes.get(id);return scene?{root:state.root,scene,hosting:{assetBaseUrl:'./',sceneUrls:{}},base:'https://editor.test/tour/'}:undefined;},complete:async(id,ref)=>{calls.complete.push({id,ref});scenes.get(id).collider=ref;},bounds:(id,bounds)=>calls.bounds.push({id,bounds}),status:text=>calls.statuses.push(text)};
+ const job=new CollisionJob(),environment={context:id=>{const scene=scenes.get(id);return scene?{root:state.root,scene,navigation:state.navigation,hosting:{assetBaseUrl:'./',sceneUrls:{}},base:'https://editor.test/tour/'}:undefined;},complete:async(id,ref)=>{calls.complete.push({id,ref});scenes.get(id).collider=ref;},bounds:(id,bounds)=>calls.bounds.push({id,bounds}),status:text=>calls.statuses.push(text)};
  job.configure(environment);
  t.after(()=>{job.dispose();for(const [key,descriptor]of globals)if(descriptor)Object.defineProperty(globalThis,key,descriptor);else delete globalThis[key];});
  return {job,workers,studio,calls,scenes,state,environment,progressListeners};
@@ -115,4 +115,16 @@ test('bounds estimation survives inspector remount and selection changes',async 
 test('paged generation captures the scene step height in meters for native walking tiles',async t=>{
  const f=fixture(t,{format:'paged'});f.scenes.get('north').walkStepHeight=.42;f.scenes.get('north').transform.scale=3;
  f.job.start('north');await until(()=>f.workers.length===1);const worker=f.workers[0];await worker.emit({type:'sink',id:8,method:'finalize',args:[{fixture:true}]});assert.equal(f.calls.finalize[0].stepHeight,.42,'generation geometry is already in authored world meters; scene scale must not scale the setting again');worker.emit({type:'complete',ref:'colliders/generated/scene.collision.json',stats});await until(()=>!f.job.getSnapshot().working);assert.equal(f.calls.complete.length,1);
+});
+
+test('paged generation inherits the project step height without creating a scene override',async t=>{
+ const f=fixture(t,{format:'paged'});f.state.navigation={baseSpeed:2,walkStepHeight:.3};f.job.start('north');await until(()=>f.workers.length===1);const worker=f.workers[0];
+ await worker.emit({type:'sink',id:9,method:'finalize',args:[{fixture:true}]});assert.equal(f.calls.finalize[0].stepHeight,.3);assert.equal(f.scenes.get('north').walkStepHeight,undefined);
+ worker.emit({type:'complete',ref:'colliders/generated/scene.collision.json',stats});await until(()=>!f.job.getSnapshot().working);assert.equal(f.calls.complete.length,1);
+});
+
+for(const overridden of [false,true])test(`project step changes ${overridden?'preserve explicit scene generation':'prevent stale inherited generation'}`,async t=>{
+ const f=fixture(t);f.state.navigation={baseSpeed:2,walkStepHeight:.3};if(overridden)f.scenes.get('north').walkStepHeight=0;
+ f.job.start('north');await until(()=>f.workers.length===1);f.state.navigation={baseSpeed:8,walkStepHeight:.6};f.workers[0].emit({type:'complete',bytes:new Uint8Array([1]),stats});await until(()=>!f.job.getSnapshot().working);
+ assert.equal(f.calls.complete.length,overridden?1:0);if(!overridden)assert.match(f.job.getSnapshot().result,/Scene changed during generation/);
 });

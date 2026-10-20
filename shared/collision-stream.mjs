@@ -28,7 +28,7 @@ export function segmentBoxDistanceSquared(a,b,min,max){
 export class CollisionStream {
  constructor(manifest,url,{fetch:fetcher=(...args)=>globalThis.fetch(...args),maxBytes=48*1024*1024,maxTiles=64,concurrency=3,onChange=(keys)=>{}}={}){
   this.manifest=validatePagedCollisionManifest(manifest);this.air=collisionAirIndex(manifest);this.url=url;this.fetcher=fetcher;this.maxBytes=maxBytes;this.maxTiles=maxTiles;this.concurrency=concurrency;this.onChange=onChange;
-  this.entries=new Map(manifest.tiles.map(entry=>[entry.key,entry]));this.resident=new Map();this.pending=new Map();this.failures=new Map();this.abort=new AbortController();this.queue=[];this.running=0;this.bytes=0;this.clock=0;this.dead=false;this.pinned=new Set();this.available=(key)=>true;
+  this.entries=new Map(manifest.tiles.map(entry=>[entry.key,entry]));this.resident=new Map();this.pending=new Map();this.failures=new Map();this.failedAt=new Map();this.abort=new AbortController();this.queue=[];this.running=0;this.bytes=0;this.clock=0;this.dead=false;this.pinned=new Set();this.available=(key)=>true;
  }
  near(point,radius){
   const p=array(point),size=this.manifest.tileSize,min=p.map(v=>Math.floor((v-radius)/size)),max=p.map(v=>Math.floor((v+radius)/size)),result=[];
@@ -37,13 +37,16 @@ export class CollisionStream {
   return result.sort((a,b)=>a.coord.reduce((d,v,i)=>d+((v+.5)*size-p[i])**2,0)-b.coord.reduce((d,v,i)=>d+((v+.5)*size-p[i])**2,0));
  }
  async ensureNear(point,radius=this.manifest.tileSize*.8){const entries=this.near(point,radius);if(entries.length>this.maxTiles||entries.reduce((sum,entry)=>sum+entry.bytes,0)>this.maxBytes)throw Error('Required collision neighborhood exceeds its memory budget.');this.pinned=new Set(entries.map(entry=>entry.key));await Promise.all(entries.map(entry=>this.load(entry)));return entries.map(entry=>entry.key);}
- load(entry){
+ load(entry,{retryDelay=0}={}){
   if(this.dead)return Promise.reject(new DOMException('Collision stream disposed.','AbortError'));
   const resident=this.resident.get(entry.key);if(resident){resident.used=++this.clock;return Promise.resolve(resident.tile);}
   if(this.pending.has(entry.key))return this.pending.get(entry.key);
+  // Frame-driven collision refreshes must not hammer a missing tile. Explicit
+  // queries keep the default immediate retry so a repaired host needs no reload.
+  if(retryDelay>0&&this.failures.has(entry.key)&&Date.now()-(this.failedAt.get(entry.key)??0)<retryDelay)return Promise.reject(this.failures.get(entry.key));
   const promise=new Promise((resolve,reject)=>{this.queue.push({entry,resolve,reject});});this.pending.set(entry.key,promise);this.drain();return promise;
  }
- drain(){while(!this.dead&&this.running<this.concurrency&&this.queue.length){const task=this.queue.shift();this.running++;this.fetchTile(task.entry).then(task.resolve,task.reject).finally(()=>{this.running--;this.pending.delete(task.entry.key);this.drain();});}}
+ drain(){while(!this.dead&&this.running<this.concurrency&&this.queue.length){const task=this.queue.shift();this.running++;const finish=()=>{this.running--;this.pending.delete(task.entry.key);};this.fetchTile(task.entry).then(tile=>{finish();task.resolve(tile);this.drain();},error=>{finish();task.reject(error);this.drain();});}}
  async fetchTile(entry){
   try{
    let tile,bytes;
@@ -58,8 +61,8 @@ export class CollisionStream {
    }if(this.dead)throw new DOMException('Collision stream disposed.','AbortError');
    if(bytes.byteLength>this.maxBytes)throw Error('Collision tile exceeds the residency budget.');
    const removed=[];for(const [key,value] of [...this.resident].sort((a,b)=>a[1].used-b[1].used)){if(this.bytes+bytes.byteLength<=this.maxBytes&&this.resident.size<this.maxTiles)break;if(this.pinned.has(key))continue;this.resident.delete(key);this.bytes-=value.bytes.byteLength;removed.push(key);}if(removed.length)this.onChange(removed);if(this.bytes+bytes.byteLength>this.maxBytes||this.resident.size>=this.maxTiles)throw Error('Collision residency budget is exhausted.');
-   this.resident.set(entry.key,{entry,tile,bytes,used:++this.clock});this.bytes+=bytes.byteLength;this.failures.delete(entry.key);this.onChange([entry.key]);return tile;
-  }catch(error){if(!this.dead)this.failures.set(entry.key,error);throw error;}
+   this.resident.set(entry.key,{entry,tile,bytes,used:++this.clock});this.bytes+=bytes.byteLength;this.failures.delete(entry.key);this.failedAt.delete(entry.key);this.onChange([entry.key]);return tile;
+  }catch(error){if(!this.dead){this.failures.set(entry.key,error);this.failedAt.set(entry.key,Date.now());}throw error;}
  }
  trim(protectedKeys=[]){
   this.pinned=new Set(protectedKeys);const removed=[];
@@ -109,5 +112,5 @@ export class CollisionStream {
   }
   return true;
  }
- dispose(){if(this.dead)return;this.dead=true;this.abort.abort();for(const task of this.queue.splice(0))task.reject(new DOMException('Collision stream disposed.','AbortError'));this.resident.clear();this.pending.clear();this.bytes=0;}
+ dispose(){if(this.dead)return;this.dead=true;this.abort.abort();for(const task of this.queue.splice(0))task.reject(new DOMException('Collision stream disposed.','AbortError'));this.resident.clear();this.pending.clear();this.failures.clear();this.failedAt.clear();this.bytes=0;}
 }

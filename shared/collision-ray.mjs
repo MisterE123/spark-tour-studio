@@ -4,9 +4,9 @@
 /** @param {any} stream
  * @param {number[]} origin
  * @param {number[]} direction
- * @param {{maxDistance?:number,isCurrent?:()=>boolean,maxPages?:number}} options
+ * @param {{maxDistance?:number,isCurrent?:()=>boolean,maxPages?:number,retryDelay?:number}} options
  */
-export async function raycastCollision(stream,origin,direction,{maxDistance=100,isCurrent=()=>true,maxPages=32}={}){
+export async function raycastCollision(stream,origin,direction,{maxDistance=100,isCurrent=()=>true,maxPages=32,retryDelay=0}={}){
  const length=Math.hypot(...direction);if(!length||![...origin,...direction,maxDistance].every(Number.isFinite)||maxDistance<=0)return null;
  const d=direction.map(value=>value/length),size=stream.manifest.detail,n=stream.manifest.tileCells;
  const cell=origin.map((value,i)=>Math.floor((value+d[i]*1e-7)/size)),step=d.map(Math.sign),delta=d.map(value=>value?size/Math.abs(value):Infinity);
@@ -16,7 +16,7 @@ export async function raycastCollision(stream,origin,direction,{maxDistance=100,
   const coord=cell.map(value=>Math.floor(value/n)),key=coord.join(',');
   if(!pages.has(key)){
    if(pages.size>=maxPages)return null;pages.add(key);
-   const entry=stream.entries.get(key);if(entry)await stream.load(entry);
+   const entry=stream.entries.get(key);if(entry)await stream.load(entry,{retryDelay});
    if(!isCurrent())return null;
   }
   if(!stream.hasCell(cell))return inside?{point:origin.map((value,i)=>value+d[i]*distance),normal,distance}:null;

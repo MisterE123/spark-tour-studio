@@ -435,3 +435,19 @@ Regression suite: 271 tests pass (test-output/v1.19.9-release-tests.log). Final 
 Final packaged Tourv2 read-only check: East Inside Graveyard's real RAD and authored box, including its inverted scene transform, pass visible-pixel checks over an opaque occluder, direct face drags in Move/Rotate/Scale, opposite-wall invariance and saved JSON verification (test-output/box faces 1792462447374). Original Tourv2 files remain unchanged.
 
 Windows portable: release/Spark Tour Studio 1.19.9.exe; 184986546 bytes; SHA-256 0E9F8E98B0CF4580085ECB2AC415A074014ADFA1B9C0A981A0EF091E995F9BA2. Actual portable cold start, About/version 1.19.9 and normal close pass (test-output/portable smoke 1792462565551).
+
+## v1.19.10 Hungars Aerial disappearing (2026-10-19)
+
+Reproduced against Tourv2's HungarsAerial RAD: decoded LoD bounds in the first chunk contain infinite half-float positions. The first splat has float32 center approximately (9894, 85874, 635); Spark 2.3.1 stores its traversal bounds as half floats, whose finite range ends at 65504. Traversal selected one root splat and the scene was blank, with no streaming request or WebGL errors. Root decoding identified 248 overflowing traversal nodes.
+
+Correct only non-finite decoded traversal bounds in memory before uploading chunks to Spark's LoD worker. Saturate their positions to finite half values and give affected internal nodes a conservative refinement size. Preserve topology, ordinary finite nodes, rendered float32 splats, original RAD/chunks and project settings. Apply the correction to foreground and splat backgrounds. Explicitly invalidate LoD selection and its previous pixel limit when scene transforms change.
+
+Pinned source verification: https://github.com/sparkjsdev/spark/blob/v2.3.1/rust/spark-rs/src/lod_tree.rs (LodSplat half-float center/size and update_lod_trees node decoding).
+
+Packaged viewer against the real scene passes six scale/rotation edits, Preview entry, twelve orbit poses at three elevations, and three reloads. Assertions check current-scene display ownership, active splat counts, nonblank rendered pixels, no RAD request failures and no WebGL errors. Repair restored up to 3.75 million active splats; screenshot visually checked. Report: test-output/aerial visibility 1792464948727. Original project is served read-only, never rewritten.
+
+Regression tests cover unchanged valid nodes, the exact overflowing aerial root, negative overflow, invalid leaf sizes, preserved child links, and idempotence.
+
+Complete regression suite: 274 tests pass (test-output/v1.19.10-release-tests.log). Packaged app.asar version 1.19.10 and bundled shared/lod-bounds.mjs verified against source.
+
+Windows portable: release/Spark Tour Studio 1.19.10.exe; 184979458 bytes; SHA-256 147CE3416E81EA4D202AC9EFF42B387B2ED697AA074A77D64070C5775A8185F8. Actual portable cold start, About/version 1.19.10 and normal close pass (test-output/portable smoke 1792465121850).

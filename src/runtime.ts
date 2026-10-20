@@ -1,3 +1,4 @@
+import {repairLodBounds} from '../shared/lod-bounds.mjs';
 import {moveViewGeometry,viewFromCamera} from '../shared/view-authoring.mjs';
 import {WalkMotion} from '../shared/walk-motion.mjs';
 import {keyboardMotion,isJumpKey,lookRotation} from '../shared/navigation-input.mjs';
@@ -160,7 +161,7 @@ export class TourRuntime {
   try{
    if(!s.source)throw new Error('Choose a RAD file or URL for this scene.');
    let streamError:unknown;const mesh=new SplatMesh({url:sceneUrl(s,this.hosting,this.base),paged:true});this.mesh=mesh;mesh.maxSh=this.performanceSettings.maxSh;
-   if(mesh.paged){const paged=mesh.paged,decode=paged.fetchDecodeChunk.bind(paged);let reported=false;paged.fetchDecodeChunk=async chunk=>{try{return await decode(chunk);}catch(e){if(!reported&&token===this.generation&&!this.dead){reported=true;streamError=e;paged.abortController.abort();mesh.visible=false;this.report(`Streaming failed: ${String(e)}. Retry the scene.`,true);}throw e;}};}
+   if(mesh.paged){const paged=mesh.paged,decode=paged.fetchDecodeChunk.bind(paged);let reported=false;paged.fetchDecodeChunk=async chunk=>{try{const data=await decode(chunk),repaired=repairLodBounds(data.extra?.lodTree);if(repaired){if(!mesh.userData.lodBoundsRepairs)console.warn('[Spark Tour] Corrected non-finite LoD bounds', {chunk,nodes:repaired});mesh.userData.lodBoundsRepairs=(mesh.userData.lodBoundsRepairs||0)+repaired;}return data;}catch(e){if(!reported&&token===this.generation&&!this.dead){reported=true;streamError=e;paged.abortController.abort();mesh.visible=false;this.report(`Streaming failed: ${String(e)}. Retry the scene.`,true);}throw e;}};}
    await mesh.initialized;const rad=await mesh.paged?.getRadMeta();if(token!==this.generation||this.dead)return;if(rad)assertPagedRad(rad.meta);this.content.add(mesh);completed++;progress('Preparing background…');
    await this.setBackground(this.active?.id===s.id?this.active.background:s.background);if(token!==this.generation||this.dead)return;
    if(s.background?.type&&s.background.type!=='solid')completed++;await this.loadInitialCollider(s.id,token,progress);if(this.active?.collider)completed++;if(token!==this.generation||this.dead)return;progress('Opening scene…');
@@ -227,7 +228,7 @@ export class TourRuntime {
  updateScene(scene:TourScene){
   if(this.active?.id!==scene.id)return;this.active=scene;
   const transform=JSON.stringify(scene.transform),colliderTransform=JSON.stringify(scene.colliderTransform),changed=transform!==this.transformKey||colliderTransform!==this.colliderTransformKey;
-  if(changed){apply(this.content,scene.transform);for(const group of [this.bubbles,this.viewMarkers]){group.position.copy(this.content.position);group.quaternion.copy(this.content.quaternion);group.scale.copy(this.content.scale);}if(this.collider)apply(this.collider,scene.colliderTransform);this.transformKey=transform;this.colliderTransformKey=colliderTransform;this.rebuildPhysics();this.spark.dirty=true;}
+  if(changed){if(transform!==this.transformKey){this.spark.lodDirty=true;this.spark.lastPixelLimit=undefined;}apply(this.content,scene.transform);for(const group of [this.bubbles,this.viewMarkers]){group.position.copy(this.content.position);group.quaternion.copy(this.content.quaternion);group.scale.copy(this.content.scale);}if(this.collider)apply(this.collider,scene.colliderTransform);this.transformKey=transform;this.colliderTransformKey=colliderTransform;this.rebuildPhysics();this.spark.dirty=true;}
   if(this.sceneResourcesReady&&scene.collider!==this.colliderSource)this.replaceCollider(scene);
  }
  private replaceCollider(scene:TourScene){

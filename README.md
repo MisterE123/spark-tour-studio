@@ -28,6 +28,8 @@ For web development, `npm run dev` serves the viewer. The desktop editor uses th
 7. Scene and View link bubbles derive their labels automatically from their destinations (for example, “Go to Scene: North” and “Go to View: Start”). Refine positions with the gizmo or inspector. Surface picking uses the currently available splat detail. Existing content can be copied from the bubble inspector; older tours remain compatible.
 8. Preview, validate under **Tools → Validate project**, save, then export to an empty folder outside the project.
 
+The tour description on the landing page preserves line breaks and automatically makes HTTP, HTTPS and `www` addresses clickable. Links open in a separate tab, and long URLs wrap within the panel on desktop and mobile. The description remains plain text; pasted HTML is displayed literally.
+
 Solid-color scene backgrounds have separate **Top hemisphere color** and **Bottom hemisphere color** pickers under Scene → Background. They blend softly at the world horizon and follow both WebXR eyes. Existing single-color scenes keep the same color in both halves; choose identical colors for a uniform background. The exported JSON retains `color` as the legacy fallback and optional `topColor` / `bottomColor` fields. No image asset or external dependency is required.
 
 The tour browser has Scenes, Views and Bubbles tabs. Scenes default to **Tour order**; select a scene and use **Move scene up/down** above the list to reorder it. The saved array order is used by the splash screen, scene chooser and XR scene menu. Name sorting is an editor browsing option and never changes tour order. Reordering supports undo/redo and keeps scene IDs, links and the starting-scene choice intact.
@@ -141,6 +143,8 @@ Scene changes keep the same renderer and XRSession. The viewer never navigates t
 **Referenced:** keeps remote URLs. The optional omit-local-splats setting leaves those files for separate upload. Application scripts, workers, WASM, styles and required notices remain bundled; editor-only chunks are excluded.
 
 On Windows, run `Launch Tour.exe`. It opens the default browser and a server-control tab. Use that tab's **Stop tour server** button or close the launcher console to shut down. The default viewer binds to loopback. To use a standalone Quest or another device, open the launcher control tab and choose **Share on this network**. Select the Wi-Fi/Ethernet address, then scan the QR code or enter the displayed HTTPS address. Sharing serves read-only tour assets on that interface, supports HTTP ranges, and can be stopped separately. No Internet service, Node installation or developer mode is needed for the network server. Windows Firewall may need to allow the launcher on your private network.
+
+Local HTTPS sharing includes `.scv` paged collision data and `.bin` walking tiles. Exports made before v1.21.3 need an updated launcher for paged collision on shared devices: re-export, or stop the old server, replace only `Launch Tour.exe` with the current version, then restart sharing and reload the visitor page. The tour data does not need rebuilding.
 
 For public viewing, upload the export to an HTTPS static host. Subdirectory hosting is supported. Serve `.rad` with real `206 Partial Content` responses; do not rewrite asset requests to the HTML page. Remote asset hosts must allow CORS for the tour origin. Keep companion chunk names/paths unchanged. Configure CDN authentication for all chunks, not only the RAD header.
 

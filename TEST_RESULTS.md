@@ -1,5 +1,15 @@
 # Verification results
 
+## v1.21.3 shared mobile collision and landing description links (2026-10-20)
+
+- Confirmed the reported live HTTPS sharing endpoint served North Graveyard's collision manifest (200) and walking tile (200), but rejected its `.scv` collision page (404). The launcher asset allowlist now includes `.scv`; read-only sharing, private-file exclusions, containment, HEAD and byte ranges remain enforced.
+- All 300 unit/integration tests pass (`test-output/v1.21.3-final-tests.log`), including real encoded `.scv` GET/HEAD/ranges, private-page protection and description-link parsing. The production TypeScript/Vite build passes.
+- The strengthened network check fails against the old compiled launcher with the same collision-page 404, then passes against the rebuilt SEA executable (`test-output/network performance 1792544622331`). Desktop HTTP, Quest-style HTTPS and phone landscape HTTPS all cold-load a paged collision scene, wait for a deliberately delayed page, enter Walk and move through actual keyboard/touch input while grounded. Precision, external-network blocking, no Node on PATH and server shutdown checks also pass.
+- Landing descriptions now link HTTP(S)/www addresses without interpreting HTML, retain line breaks and wrap long URLs. Six parser tests cover source-text preservation, safe schemes, punctuation and balanced brackets. The network check verifies a real new-tab link click with no opener and unchanged tour document, literal HTML, and contained layout on desktop, Quest-style, 915px landscape, 390px portrait and 320px phones. Portrait and landscape screenshots were inspected.
+- Final package audit verifies editor v1.21.3, all 56 desktop/shared source files and 169 viewer resources, unchanged Spark/converter v2.4.0, and current license notices. The packaged launcher matches the rebuilt SEA executable (SHA-256 `a4d088867055af3ceb023448e31ae54583a8e708d5d137adf7bbf8ec59a4c2d8`) and embeds the corrected sharing code.
+- Read-only North Graveyard verification uses its real 40 collision pages, 18 walking tiles, transforms and walking settings, with a placeholder splat to isolate collision behavior (`test-output/north-sharing-audit/1792543882394/results.json`). Cold desktop and mobile landscape with 4x CPU throttling and delayed collision downloads both load six nearby pages, enter Walk, move 1.33 m and remain grounded in verified space. Original project data is unchanged.
+- Actual portable EXE launch, version, About and normal close pass (`test-output/portable smoke 1792544969631`). Its served landing HTML and all five visitor entry assets match the final build by SHA-256. The release ZIP contents and checksums pass verification. Final EXE: `release/Spark Tour Studio 1.21.3.exe`, 185,059,229 bytes; SHA-256 `faa1582f019c1c7016f7cd1b7938647e6b2b12dcb539edf7ba06d52be5fe3a55`.
+
 ## v1.21.2 release verification repairs (2026-10-20)
 
 - Retains the Spark 2.4.0 runtime, native converter and collision corner fix verified for v1.21.1 below. Production TypeScript/Vite build passes; the application runtime is unchanged by this patch.

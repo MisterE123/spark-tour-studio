@@ -15,7 +15,7 @@ async function startSharing({root,host,cacheRoot,port=8443}){
   if(!['GET','HEAD'].includes(req.method)){res.writeHead(405).end();return;}
   let name;try{name=decodeURIComponent(new URL(req.url,'https://'+host).pathname).slice(1)||'index.html';}catch{res.writeHead(400).end();return;}
   // Share tour resources, never launcher controls, private keys or authoring recovery data.
-  if(name.split('/').some(p=>p.startsWith('.')||p.startsWith('__'))||['autosave.json','package.json','package-lock.json'].includes(name)||!/\.(html?|css|m?js|json|wasm|radc?|glb|gltf|bin|png|jpe?g|webp|avif|gif|svg|mp4|webm|mp3|m4a|aac|flac|ogg|wav|woff2?|ttf|pdf)$/i.test(name)){res.writeHead(404).end();return;}
+  if(name.split('/').some(p=>p.startsWith('.')||p.startsWith('__'))||['autosave.json','package.json','package-lock.json'].includes(name)||!/\.(html?|css|m?js|json|wasm|radc?|scv|glb|gltf|bin|png|jpe?g|webp|avif|gif|svg|mp4|webm|mp3|m4a|aac|flac|ogg|wav|woff2?|ttf|pdf)$/i.test(name)){res.writeHead(404).end();return;}
   res.setHeader('Permissions-Policy','xr-spatial-tracking=(self)');await fileResponse(req,res,root,name);
  });
  await new Promise((resolve,reject)=>{const listen=p=>{server.once('error',error=>{if(error.code==='EADDRINUSE'&&p!==0)listen(0);else reject(error);});server.listen(p,host,()=>{server.removeAllListeners('error');resolve();});};listen(port);});

@@ -21,6 +21,7 @@ collision-tools/node_modules/
 tools/Splatshop/
 
 # Local tour data, credentials and build outputs
+.codex-remote-attachments/
 artifacts/
 .env
 .env.*

@@ -1,4 +1,5 @@
 import {ViewpointStory} from './viewpoint-story';
+import {LinkedDescription} from './linked-description';
 import {ViewerPerformance} from './performance-editor';
 import {sceneThumbnail,listedViewpoints} from '../shared/viewpoints.mjs';
 import {tourPerformanceSettings} from '../shared/performance.mjs';
@@ -58,7 +59,7 @@ function Viewer(){
  return <main className={'viewer '+(compact?'viewer-compact ':'')+(mobile.enabled?'viewer-touch ':'')+(captured?'cursor-captured':'cursor-free')} style={glassVariables(project?.appearance) as React.CSSProperties}><Stage onReady={setRt}/>{started&&<SceneLoading runtime={rt}/>}
   {!started?<section className="title-screen">
    <div className="title-art title-backdrop" role="img" aria-label="Tour cover" style={titleImage?{backgroundImage:'url('+new URL(titleImage,base).href+')'}:undefined}>{!titleImage&&<><div className="orb orb-one"/><div className="orb orb-two"/><div className="orbit"/></>}</div>
-   <div className="title-copy"><div className="eyebrow">SPARK TOUR / SPATIAL EXPERIENCES</div><h1>{project?.title||'A new perspective.'}</h1><p className="lead">{project?.description||'Explore places as if you were there.'}</p>
+   <div className="title-copy"><div className="eyebrow">SPARK TOUR / SPATIAL EXPERIENCES</div><h1>{project?.title||'A new perspective.'}</h1><p className="lead"><LinkedDescription text={project?.description||'Explore places as if you were there.'}/></p>
     {loadError?<div className="notice error">{loadError}<p><a href="editor.html">Open editor information</a></p></div>:<>
      <Field label="Start exploring"><select value={sceneId} onChange={e=>setSceneId(e.target.value)}>{project?.scenes.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
      <div className="actions"><Button primary disabled={!rt||!project} onClick={()=>begin()}><Icon name="image_arrow_up"/>Enter tour</Button><IconButton icon="settings" label="Settings" aria-expanded={settings} onClick={toggleSettings}>Settings</IconButton></div>

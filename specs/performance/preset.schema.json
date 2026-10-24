@@ -128,6 +128,6 @@
     "settings"
   ],
   "additionalProperties": false,
-  "title": "Spark Tour performance preset v1",
+  "title": "3DGS Perspectives Studio performance preset v1",
   "$comment": "Additional semantic validation: settings.coneFov >= settings.coneFov0."
 }

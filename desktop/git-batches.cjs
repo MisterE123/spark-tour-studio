@@ -13,7 +13,7 @@ async function pushCommit({git,root,remote,reference,revision,audit,net,run=runG
   try{await run(git.executable,root,['read-tree','--empty'],{indexFile});for(let i=0;i<plan.length;i++){
    progress('Preparing upload batch '+(i+1)+' of '+plan.length+'…');
    await run(git.executable,root,['update-index','--add','-z','--index-info'],{indexFile,input:Buffer.from(plan[i].blobs.map(blob=>'100644 '+blob.id+'\tobjects/'+blob.id).join('\0')+'\0')});
-   const tree=(await run(git.executable,root,['write-tree'],{indexFile})).output.trim(),commit=(await run(git.executable,root,['commit-tree',tree,...parent?['-p',parent]:[],'-m','Spark Tour upload batch '+(i+1)+' of '+plan.length])).output.trim();state.batches.push({commit,bytes:plan[i].bytes});parent=commit;
+   const tree=(await run(git.executable,root,['write-tree'],{indexFile})).output.trim(),commit=(await run(git.executable,root,['commit-tree',tree,...parent?['-p',parent]:[],'-m','3DGS Perspectives Studio upload batch '+(i+1)+' of '+plan.length])).output.trim();state.batches.push({commit,bytes:plan[i].bytes});parent=commit;
   }await run(git.executable,root,['update-ref',state.ref,parent,'0'.repeat(parent.length)]);await atomicJson(file,state);
   }finally{await fs.rm(indexFile,{force:true});}
  }

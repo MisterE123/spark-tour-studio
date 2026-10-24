@@ -2,7 +2,7 @@ import { _electron as electron } from '@playwright/test';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 const profile=path.resolve('test-output','package-'+Date.now(),'profile');
-const app=await electron.launch({executablePath:path.resolve('release/win-unpacked/Spark Tour Studio.exe'),args:[],env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:profile},timeout:60000});
+const app=await electron.launch({executablePath:path.resolve('release/win-unpacked/3DGS Perspectives Studio.exe'),args:[],env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:profile},timeout:60000});
 try{
  const page=await app.firstWindow();await page.waitForSelector('.studio');
  assert.equal(await page.getByRole('button',{name:'Export tour',exact:true}).count(),1);

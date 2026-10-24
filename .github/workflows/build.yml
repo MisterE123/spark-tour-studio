@@ -1,4 +1,4 @@
-name: Build Spark Tour Studio
+name: Build 3DGS Perspectives Studio
 
 on:
   push:
@@ -148,6 +148,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/ui-polish-check.mjs
+      - name: Check author branding, browser metadata and optional studio credit
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/branding-check.mjs
       - name: Check saved performance settings and exported precision
         env:
           SPARK_PACKAGED: '1'
@@ -178,7 +182,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
-          name: spark-tour-studio-windows-x64-${{ github.sha }}
+          name: 3DGS-Perspectives-Studio-windows-x64-${{ github.sha }}
           path: artifacts/*-windows-x64.zip
           if-no-files-found: error
           retention-days: 30
@@ -203,7 +207,13 @@ jobs:
       - name: Download verified build assets
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh run download ${{ github.run_id }} --repo ${{ github.repository }} --name spark-tour-studio-windows-x64-${{ github.sha }} --dir artifacts
+        shell: pwsh
+        run: |
+          gh run download ${{ github.run_id }} --repo ${{ github.repository }} --name 3DGS-Perspectives-Studio-windows-x64-${{ github.sha }} --dir artifacts
+          if ($LASTEXITCODE -ne 0) {
+            gh run download ${{ github.run_id }} --repo ${{ github.repository }} --name spark-tour-studio-windows-x64-${{ github.sha }} --dir artifacts
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot download tested build assets' }
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -213,5 +223,5 @@ jobs:
           # scalar string would pass each filename character as a separate argument.
           $files = @(Get-ChildItem -LiteralPath artifacts -File -Filter '*-windows-x64.zip' | ForEach-Object FullName)
           if ($files.Count -ne 1) { throw 'Expected exactly one Windows release ZIP' }
-          gh release create $env:GITHUB_REF_NAME @files --repo $env:GITHUB_REPOSITORY --verify-tag --generate-notes --title "Spark Tour Studio $env:GITHUB_REF_NAME"
+          gh release create $env:GITHUB_REF_NAME @files --repo $env:GITHUB_REPOSITORY --verify-tag --generate-notes --title "3DGS Perspectives Studio $env:GITHUB_REF_NAME"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

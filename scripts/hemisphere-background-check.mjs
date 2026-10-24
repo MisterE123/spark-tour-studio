@@ -8,7 +8,7 @@ for(const scene of p.scenes)scene.background={type:'solid',color:'#224466'};
 await fs.writeFile(path.join(folder,'config/tour.json'),JSON.stringify(p));await fs.writeFile(path.join(folder,'config/hosting.json'),'{}');await fs.writeFile(path.join(folder,'main.rad'),radFixture().rad);
 await fs.writeFile(path.join(folder,'sky.svg'),'<svg xmlns="http://www.w3.org/2000/svg" width="256" height="128"><rect width="256" height="128" fill="#597fa2"/></svg>');
 const args=['--disable-background-timer-throttling','--disable-renderer-backgrounding'];
-const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/Spark Tour Studio.exe'),args}:{args:['.',...args]},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
+const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/3DGS Perspectives Studio.exe'),args}:{args:['.',...args]},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
 try{
  const page=await app.firstWindow(),errors=[];page.setDefaultTimeout(30000);page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>dialog.accept());await page.waitForSelector('.studio');await page.goto(page.url()+'?diagnostics=1');
  const choose=files=>app.evaluate(({dialog},files)=>{dialog.showOpenDialog=async()=>({filePaths:files,canceled:false});},files);

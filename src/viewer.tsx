@@ -1,5 +1,7 @@
 import {ViewpointStory} from './viewpoint-story';
 import {LinkedDescription} from './linked-description';
+import {TourIdentity,TourFooter,useTourDocumentBranding,brandUrl} from './tour-branding';
+import {resolveBranding} from '../shared/branding.mjs';
 import {ViewerPerformance} from './performance-editor';
 import {sceneThumbnail,listedViewpoints} from '../shared/viewpoints.mjs';
 import {tourPerformanceSettings} from '../shared/performance.mjs';
@@ -34,9 +36,11 @@ function Viewer(){
  const [captured,setCaptured]=useState(false),[guide,setGuide]=useState(false),[guideStep,setGuideStep]=useState(0),[guideSeen,setGuideSeen]=useState(true);
  const [speed,setSpeed]=useState(1),[snap,setSnap]=useState(true),[swapSticks,setSwapSticks]=useState(false),[muted,setMuted]=useState(false);
  const base=new URL('./',location.href).href;
+ useTourDocumentBranding(project,base);
+ const branding=resolveBranding(project),brandLogo=brandUrl(branding.logo,base);
  useEffect(()=>{
   Promise.all([
-   fetch(new URL('config/tour.json',base)).then(r=>{if(!r.ok)throw Error('No tour configuration found. Open Spark Tour Studio to create a tour.');return r.json();}),
+   fetch(new URL('config/tour.json',base)).then(r=>{if(!r.ok)throw Error('No tour configuration found. Check that this website includes the tour files.');return r.json();}),
    fetch(new URL('config/hosting.json',base)).then(r=>r.ok?r.json():{})
   ]).then(([p,h])=>{const parsed=ProjectSchema.parse(p) as Project;const issues=validateProject(parsed);if(issues.length)throw Error(issues.join('\n'));setProject(parsed);setHosting(HostingSchema.parse(h));setSceneId(parsed.startScene);}).catch(e=>setLoadError(String(e)));
  },[]);
@@ -59,18 +63,18 @@ function Viewer(){
  return <main className={'viewer '+(compact?'viewer-compact ':'')+(mobile.enabled?'viewer-touch ':'')+(captured?'cursor-captured':'cursor-free')} style={glassVariables(project?.appearance) as React.CSSProperties}><Stage onReady={setRt}/>{started&&<SceneLoading runtime={rt}/>}
   {!started?<section className="title-screen">
    <div className="title-art title-backdrop" role="img" aria-label="Tour cover" style={titleImage?{backgroundImage:'url('+new URL(titleImage,base).href+')'}:undefined}>{!titleImage&&<><div className="orb orb-one"/><div className="orb orb-two"/><div className="orbit"/></>}</div>
-   <div className="title-copy"><div className="eyebrow">SPARK TOUR / SPATIAL EXPERIENCES</div><h1>{project?.title||'A new perspective.'}</h1><p className="lead"><LinkedDescription text={project?.description||'Explore places as if you were there.'}/></p>
-    {loadError?<div className="notice error">{loadError}<p><a href="editor.html">Open editor information</a></p></div>:<>
+   <div className="title-copy">{project&&<TourIdentity project={project} base={base}/>}<h1>{project?.title||'A new perspective.'}</h1><p className="lead"><LinkedDescription text={project?.description||'Explore places as if you were there.'}/></p>
+    {loadError?<div className="notice error">{loadError}<p><button onClick={()=>location.reload()}>Retry loading tour</button></p></div>:<>
      <Field label="Start exploring"><select value={sceneId} onChange={e=>setSceneId(e.target.value)}>{project?.scenes.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
      <div className="actions"><Button primary disabled={!rt||!project} onClick={()=>begin()}><Icon name="image_arrow_up"/>Enter tour</Button><IconButton icon="settings" label="Settings" aria-expanded={settings} onClick={toggleSettings}>Settings</IconButton></div>
      {!guideSeen&&<div className="guide-invitation"><Icon name="help" size={26}/><div><strong>New to exploring in 3D?</strong><p>A short guide will help you find your way.</p><button disabled={!rt||!project} onClick={()=>begin(true)}>Show me around<Icon name="chevron_right" size={18}/></button></div></div>}
     </>}
-    <InspectorSection title="Controls help" icon="help"><ControlsHelp/></InspectorSection><div className="subtle">Powered by Spark · Gaussian splat experiences</div>
+    <InspectorSection title="Controls help" icon="help"><ControlsHelp/></InspectorSection>{project&&<TourFooter project={project}/>}
    </div>
    <div className="title-side">{project&&!loadError&&<TourDirectory project={project} base={base} disabled={!rt} onVisit={visit}/>}</div>
   </section>:<>
    {compact?project&&!settings&&!page&&!guide&&<MobileTourControls project={project} scene={current} view={selectedView} mode={mode} open={tourControls} onOpen={()=>{rt?.releasePointer();setTourControls(true);}} onClose={()=>setTourControls(false)} onScene={id=>{setRequested(null);void rt?.selectScene(id);}} onView={id=>{if(current?.modes.includes('jumps'))rt?.setMode('jumps');rt?.jump(id);}} onMode={m=>rt?.setMode(m)} onHome={goHome} onHelp={openGuide} onSettings={()=>setSettings(true)} onXR={()=>void rt?.enterXR()}/>:<>
-   <div className="viewer-header"><div><small>{project?.title}</small><h2>{current?.name}</h2></div><div className="actions" data-guide="scenes">
+   <div className="viewer-header"><div className="viewer-scene-heading">{brandLogo&&<img className="tour-brand-logo" src={brandLogo} alt={branding.name?branding.name+' logo':'Tour logo'}/>}<div><small>{branding.name||project?.title}</small><h2>{current?.name}</h2></div></div><div className="actions" data-guide="scenes">
     <select title="Choose scene" aria-label="Scene" value={sceneId} onChange={e=>{setRequested(null);void rt?.selectScene(e.target.value);}}>{project?.scenes.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select>
     <IconButton icon="menu" label="Return to start" onClick={goHome}>Start</IconButton>
     <IconButton icon="help" label="Tour help" onClick={openGuide}/>

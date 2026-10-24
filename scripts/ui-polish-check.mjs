@@ -10,7 +10,7 @@ await fs.writeFile(path.join(folder,'config/tour.json'),JSON.stringify(p));await
 const image=path.join(root,'image.png');await fs.writeFile(image,Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2z2QAAAAASUVORK5CYII=','base64'));
 // The isolated window is hidden; keep its animation frames running like a visible editor.
 const launchArgs=['--disable-background-timer-throttling','--disable-renderer-backgrounding'];
-const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/Spark Tour Studio.exe'),args:launchArgs}:{args:['.',...launchArgs]},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});let editedId;
+const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/3DGS Perspectives Studio.exe'),args:launchArgs}:{args:['.',...launchArgs]},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});let editedId;
 try{
  const page=await app.firstWindow();page.setDefaultTimeout(30000);const errors=[];page.on('pageerror',error=>errors.push(error.message));await page.waitForSelector('.studio');await page.goto(page.url()+'?diagnostics=1');
  const choose=async files=>app.evaluate(({dialog},files)=>{dialog.showOpenDialog=async()=>({filePaths:files,canceled:false});},files);

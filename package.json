@@ -1,6 +1,6 @@
 {
   "name": "spark-tour-studio",
-  "version": "1.21.3",
+  "version": "1.22.0",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
@@ -48,7 +48,7 @@
   },
   "build": {
     "appId": "studio.sparktour.editor",
-    "productName": "Spark Tour Studio",
+    "productName": "3DGS Perspectives Studio",
     "directories": {
       "output": "release"
     },
@@ -96,8 +96,8 @@
       "signAndEditExecutable": false
     }
   },
-  "description": "Windows authoring and locally bundled WebXR Gaussian splat tours",
-  "author": "Spark Tour Studio",
+  "description": "3DGS Perspectives Studio: author and share locally bundled Gaussian splat tours",
+  "author": "3DGS Perspectives Studio",
   "license": "MIT",
   "allowScripts": {
     "electron-winstaller@5.4.0": true,

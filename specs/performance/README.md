@@ -1,4 +1,4 @@
-# Spark Tour performance preset format — version 1
+# 3DGS Perspectives Studio performance preset format — version 1
 
 A portable preset is a UTF-8 JSON file, conventionally `name.performance.json`:
 

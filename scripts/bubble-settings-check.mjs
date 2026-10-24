@@ -4,7 +4,7 @@ const root=path.resolve('test-output','bubble settings '+Date.now()),folder=path
 await fs.mkdir(path.join(folder,'config'),{recursive:true});project.scenes=[newScene('room','Room','main.rad'),newScene('aerial','Aerial overview','main.rad')];project.startScene='room';project.bubbles={distanceFade:.5,occlusion:false};
 for(const scene of project.scenes)scene.hotspots=[{id:'far',position:[0,1.7,-200],kind:'scene',target:scene.id,label:''}];
 await fs.writeFile(path.join(folder,'main.rad'),radFixture().rad);await fs.writeFile(path.join(folder,'config/tour.json'),JSON.stringify(project));await fs.writeFile(path.join(folder,'config/hosting.json'),'{}');
-const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/Spark Tour Studio.exe')}:{args:['.']},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});let saved;
+const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/3DGS Perspectives Studio.exe')}:{args:['.']},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});let saved;
 try{
  const page=await app.firstWindow();page.setDefaultTimeout(60000);await page.waitForSelector('.studio');await page.goto(page.url()+'?diagnostics=1');await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({filePaths:[folder],canceled:false});},folder);
  const open=async()=>{await page.getByRole('button',{name:'File',exact:true}).click();await page.getByRole('menuitem',{name:'Open project',exact:true}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);};await open();

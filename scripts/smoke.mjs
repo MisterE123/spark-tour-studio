@@ -1,7 +1,7 @@
 import {radFixture} from '../tests/fixtures.mjs';
 import {chromium,_electron as electron} from '@playwright/test';import fs from 'node:fs/promises';import path from 'node:path';import {createRequire} from 'node:module';import assert from 'node:assert/strict';
 const require=createRequire(import.meta.url);const {startServer}=require('../desktop/server.cjs');const root=path.resolve('test-output',`smoke-${Date.now()}`);await fs.mkdir(root,{recursive:true});const projectPath=path.join(root,'project');await fs.mkdir(projectPath);
-const app=await electron.launch({...(process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/Spark Tour Studio.exe'),args:[]}:{args:['.']}),env:{...process.env,SPARK_TEST:'1'},timeout:60000});
+const app=await electron.launch({...(process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/3DGS Perspectives Studio.exe'),args:[]}:{args:['.']}),env:{...process.env,SPARK_TEST:'1'},timeout:60000});
 try{const page=await app.firstWindow();await page.waitForSelector('.studio');const errors=[];page.on('pageerror',e=>errors.push(e.message));await page.screenshot({path:path.join(root,'editor-welcome.png')});
  const selectFolder=async folder=>app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[folder]});},folder);
  await selectFolder(projectPath);await page.getByRole('button',{name:'New',exact:true}).click();await page.getByText('Saved project',{exact:true}).waitFor();await page.getByRole('button',{name:'＋ Add hosted scene'}).click();await page.getByLabel('Name',{exact:true}).fill('Exterior grounds');await page.getByRole('button',{name:'Save',exact:true}).click();await page.getByText('Saved project',{exact:true}).waitFor();

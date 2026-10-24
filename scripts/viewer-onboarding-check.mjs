@@ -8,7 +8,7 @@ await fs.mkdir(path.join(folder,'config'),{recursive:true});await fs.mkdir(out);
 const p=blankProject(),scene=newScene('welcome','A quiet place','main.rad');p.title='Visitor guide';p.scenes=[scene,newScene('another','Another room','main.rad')];p.startScene=scene.id;
 p.pages=[{id:'story',title:'A local story',html:'',blocks:[{type:'text',text:'A story to explore while following the guide.',url:''}]}];scene.hotspots=[{id:'story-bubble',label:'A local story',position:[0,1.5,0],kind:'page',target:'story'}];
 await fs.writeFile(path.join(folder,'config/tour.json'),JSON.stringify(p));await fs.writeFile(path.join(folder,'config/hosting.json'),'{}');await fs.writeFile(path.join(folder,'main.rad'),radFixture().rad);
-const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/Spark Tour Studio.exe'),args:[]}:{args:['.']},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
+const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/3DGS Perspectives Studio.exe'),args:[]}:{args:['.']},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
 try{
  const page=await app.firstWindow();page.setDefaultTimeout(30000);await page.waitForSelector('.studio');
  const choose=folder=>app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({filePaths:[folder],canceled:false});},folder);

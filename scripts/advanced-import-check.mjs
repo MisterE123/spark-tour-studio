@@ -45,7 +45,7 @@ for(let i=0;i<128;i++)ply.writeFloatLE(ply.readFloatLE(plyOffset+i*14*4)+x,plyOf
 await fs.writeFile(source,ply);
 
 const launchArgs=['--disable-background-timer-throttling','--disable-renderer-backgrounding'];
-const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/Spark Tour Studio.exe'),args:launchArgs}:{args:['.',...launchArgs]},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
+const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/3DGS Perspectives Studio.exe'),args:launchArgs}:{args:['.',...launchArgs]},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
 let replacementSource;
 async function waitStream(page,extended){
  await page.evaluate(()=>window.tourRuntime.performanceTransition);

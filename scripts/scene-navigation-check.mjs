@@ -13,7 +13,7 @@ p.scenes=[a,b,c,bad];p.startScene='a';
 await fs.writeFile(path.join(project,'config/tour.json'),JSON.stringify(p));await fs.writeFile(path.join(project,'config/hosting.json'),'{}');
 const fixture=radFixture();await fs.writeFile(path.join(project,'main.rad'),fixture.rad);await fs.writeFile(path.join(project,'floor.glb'),floorGlb());
 const development=process.argv.includes('--dev');
-const app=await electron.launch({executablePath:development?createRequire(import.meta.url)('electron'):path.resolve('release/win-unpacked/Spark Tour Studio.exe'),args:development?[path.resolve('.')]:[],env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
+const app=await electron.launch({executablePath:development?createRequire(import.meta.url)('electron'):path.resolve('release/win-unpacked/3DGS Perspectives Studio.exe'),args:development?[path.resolve('.')]:[],env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(root,'profile')},timeout:60000});
 try{
  const page=await app.firstWindow();await page.waitForSelector('.studio');await page.goto(page.url()+'?diagnostics=1');
  const choose=async folder=>app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({filePaths:[folder],canceled:false});},folder);

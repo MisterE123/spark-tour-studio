@@ -1,6 +1,6 @@
 # Third-party licenses
 
-The MIT license in `LICENSE` covers Spark Tour Studio's original code.
+The MIT license in `LICENSE` covers 3DGS Perspectives Studio's original code.
 Dependencies retain their own copyright and license terms; they are not
 relicensed by this project.
 
@@ -26,7 +26,7 @@ The build writes dependency license texts and version identifiers into
 `dist/licenses/`. Exported tours preserve that directory. The Windows editor
 includes the Node runtime notices, Rust converter notices, and the licenses
 for the editor-only scientific meshing engine. Dependency licenses govern those
-components independently of Spark Tour Studio's MIT license.
+components independently of 3DGS Perspectives Studio's MIT license.
 
 Scan files, images, audio and authored tour content are supplied by authors and
 are not licensed by this repository.
@@ -39,6 +39,6 @@ and wheel license files are included in `editor-engine/dependencies.json` and
 `editor-engine/licenses/` in the Windows editor. Python retains its PSF license.
 These packages are not copied into exported viewer websites.
 
-Spark Tour's ball/box selection, voxel enclosure, merged-face surface builder
+3DGS Perspectives Studio's ball/box selection, voxel enclosure, merged-face surface builder
 and GLB writer were authored independently under MIT. No GPL-marked Lichtfeld
 plugin source has been incorporated or relicensed.

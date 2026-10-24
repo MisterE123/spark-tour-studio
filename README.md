@@ -1,4 +1,4 @@
-# Spark Tour Studio
+# 3DGS Perspectives Studio
 
 Windows authoring application and a shared Spark 2.4.0 / Three.js web viewer. Exported tours include a website, editable JSON, locally bundled runtime code, and a Windows launcher.
 
@@ -29,6 +29,12 @@ For web development, `npm run dev` serves the viewer. The desktop editor uses th
 8. Preview, validate under **Tools → Validate project**, save, then export to an empty folder outside the project.
 
 The tour description on the landing page preserves line breaks and automatically makes HTTP, HTTPS and `www` addresses clickable. Links open in a separate tab, and long URLs wrap within the panel on desktop and mobile. The description remains plain text; pasted HTML is displayed literally.
+
+**Tools → Tour settings → Branding** controls the exported tour's identity: author/organization name, website, logo, favicon and footer. Images accept a URL, file selection or drop; favicon imports also accept `.ico`. Advanced options set a separate browser title, search/link description, link-preview image, public website address and browser theme color. Leave optional fields empty to use the tour title, description and cover. Set the public address to the final tour URL (including its subdirectory) for absolute link-preview image URLs. Branding media is saved, relinked and exported with other tour assets; these application resources are independent of the splat CDN setting.
+
+The unobtrusive **“made with 3DGS Perspectives Studio”** credit links to [studio.chesapeakeperspectives.com](https://studio.chesapeakeperspectives.com/). Its checkbox starts checked as a request to support the studio; authors can uncheck it. There is no required studio logo or name in the visitor interface. Exported website metadata and local launcher screens use the author's branding too. Re-export existing sites to apply branding changes. Dependency licenses and notices remain included.
+
+The studio's existing profile, saved-project identifiers and cache locations remain compatible with earlier Spark Tour Studio versions. The new application name does not move preferences or require project conversion.
 
 Solid-color scene backgrounds have separate **Top hemisphere color** and **Bottom hemisphere color** pickers under Scene → Background. They blend softly at the world horizon and follow both WebXR eyes. Existing single-color scenes keep the same color in both halves; choose identical colors for a uniform background. The exported JSON retains `color` as the legacy fallback and optional `topColor` / `bottomColor` fields. No image asset or external dependency is required.
 
@@ -213,7 +219,7 @@ To update an existing scan, select its scene and choose **Source asset → Re-im
 
 Developer rebuild: install Rust 1.98.1 (Windows x64 GNU or MSVC toolchain) into `.build/cargo` and `.build/rustup`, without changing PATH, or supply `CARGO_HOME` and `RUSTUP_HOME`. Run `npm run build:converter` before packaging. The script verifies the pinned Spark v2.4.0 archive checksum, uses Cargo.lock and release optimizations, and records executable provenance and license notices in `converter/`. It downloads the source archive if needed. No Rust source modifications are applied.
 
-Importer verification: `node --test tests/converter.test.mjs`, `node scripts/ply-import-check.mjs`, and `node scripts/render-import-check.mjs <export-folder>`. Set `SPARK_PACKAGED=1` to run the import UI check against `release/win-unpacked/Spark Tour Studio.exe`.
+Importer verification: `node --test tests/converter.test.mjs`, `node scripts/ply-import-check.mjs`, and `node scripts/render-import-check.mjs <export-folder>`. Set `SPARK_PACKAGED=1` to run the import UI check against `release/win-unpacked/3DGS Perspectives Studio.exe`.
 
 ## Viewpoints and audio (v1.4)
 
@@ -306,7 +312,7 @@ In Views, uncheck **Listed in visitor views** to hide a viewpoint from the visit
 
 ## License and automatic builds
 
-Spark Tour Studio's original code is MIT-licensed; see [LICENSE](LICENSE). Bundled dependencies retain their respective terms and notices in [THIRD_PARTY.md](THIRD_PARTY.md) and the exported `licenses/` directory. Tour authors retain responsibility for their own scan and media rights.
+3DGS Perspectives Studio's original code is MIT-licensed; see [LICENSE](LICENSE). Bundled dependencies retain their respective terms and notices in [THIRD_PARTY.md](THIRD_PARTY.md) and the exported `licenses/` directory. Tour authors retain responsibility for their own scan and media rights.
 
 GitHub Actions builds and tests Windows x64 on pushes to `main`, pull requests, version tags and manual runs. It installs pinned Node 24.21.0 and Rust 1.98.1, builds the Spark converter from checksum-verified source, runs the tests, builds the site and launcher, bundles the editor mesh engine, and checks the packaged editor plus exported viewer. Branch and manual builds provide one Windows ZIP containing the portable editor, standalone tour launcher, web runtime template, licenses and SHA-256 checksums. GitHub Releases publish that same ZIP; local builds still produce the portable EXE. The web runtime template contains no authored scene assets; use the editor to export an actual tour.
 
@@ -337,7 +343,7 @@ Tour settings separate glass translucency, whole-bubble distance fade, size and 
 
 Formatted text is stored as versioned rich JSON on text blocks; the plain text is retained for compatibility. Existing plain text, image/link/embed blocks and HTML pages remain readable. Popups and individual exported pages share the same safe renderer. Generated XR panels preserve readable headings/list text, images and links through native panels. The editor's rich-text libraries are bundled locally and excluded from the exported visitor runtime. Google icons are bundled SVG paths, including the chosen viewpoint and equirectangular panorama icons; no icon font is fetched.
 
-The legacy GLB collision builder bundles Pyodide, NumPy, SciPy and scikit-image locally; it needs neither Python nor a GPU meshing executable. These editor-only libraries are omitted from tour websites. The first development build downloads pinned, checksum-verified wheels; subsequent builds reuse the local cache. Selection and enclosure code was written independently for Spark Tour. GPL-marked Lichtfeld plugin source is not part of this repository. Smooth surface extraction uses SciPy Gaussian filtering and scikit-image Lewiner marching cubes under their own included licenses.
+The legacy GLB collision builder bundles Pyodide, NumPy, SciPy and scikit-image locally; it needs neither Python nor a GPU meshing executable. These editor-only libraries are omitted from tour websites. The first development build downloads pinned, checksum-verified wheels; subsequent builds reuse the local cache. Selection and enclosure code was written independently for 3DGS Perspectives Studio. GPL-marked Lichtfeld plugin source is not part of this repository. Smooth surface extraction uses SciPy Gaussian filtering and scikit-image Lewiner marching cubes under their own included licenses.
 
 
 ## Walk destination picking and box faces (v1.19.7)

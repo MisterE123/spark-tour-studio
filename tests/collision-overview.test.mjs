@@ -1,0 +1,42 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {createCollisionOverview,selectCollisionOverviewLevel,COLLISION_OVERVIEW_SEGMENT_BUDGET} from '../shared/collision-overview.mjs';
+import {compileNavigableDomain} from '../shared/paged-collision-generator.mjs';
+const identity={position:[0,0,0],rotation:[0,0,0],scale:1},bounds={min:[-10,-5,-8],max:[10,5,8]};
+const volume=(id='box',type='box',operation='add')=>({id,type,operation,position:[0,0,0],rotation:[0,0,0],size:[4,6,8]});
+const manifest=(volumes=[volume()],options={extrudeUp:false})=>({bounds:structuredClone(bounds),sourceTransform:structuredClone(identity),generation:{scope:'selected',volumes,options}});
+const close=(a,b,epsilon=1e-5)=>assert.ok(Math.abs(a-b)<=epsilon,`${a} differs from ${b}`);
+function validLines(shape){assert.equal(shape.levels.length,3);for(const level of shape.levels){assert.ok(level instanceof Float32Array);assert.equal(level.length%6,0);assert.ok([...level].every(Number.isFinite));for(let index=0;index<level.length;index++)assert.ok(level[index]>=shape.bounds.min[index%3]-1e-4&&level[index]<=shape.bounds.max[index%3]+1e-4);}}
+
+test('box guides include the full authored boundary at all distances and progressively subdivide faces',()=>{
+ const input=manifest(),before=structuredClone(input),overview=createCollisionOverview(input),shape=overview.shapes[0];assert.equal(overview.segmentBudget,65536);assert.equal(shape.id,'box');assert.equal(shape.operation,'add');assert.deepEqual(shape.bounds,{min:[-2,-3,-4],max:[2,3,4]});assert.equal(shape.levels[0].length/6,12);assert.ok(shape.levels[0].length<shape.levels[1].length&&shape.levels[1].length<shape.levels[2].length);validLines(shape);assert.deepEqual(input,before);
+ for(const x of [-2,2])for(const y of [-3,3])for(const z of [-4,4])assert.ok(Array.from({length:shape.levels[0].length/3},(_,i)=>Array.from(shape.levels[0].subarray(i*3,i*3+3))).some(p=>p[0]===x&&p[1]===y&&p[2]===z),'every box corner is visible');
+});
+
+test('rotated/scaled source transforms and generation-up extrusion match collision generation, including removal guides',()=>{
+ const add=volume(),remove={...volume('cut','box','remove'),position:[1,2,3],rotation:[.4,.2,-.3],size:[1,2,3]},input=manifest([add,remove],{extrudeUp:true,wallHeight:3});input.sourceTransform={position:[7,-3,4],rotation:[.3,1.1,-.2],scale:2};add.position=[-2,1,3];add.rotation=[.2,.7,.1];const result=createCollisionOverview(input),compiled=compileNavigableDomain({scope:'selected',volumes:[add,remove],options:input.generation.options},input.sourceTransform);for(let axis=0;axis<3;axis++){close(result.shapes[0].bounds.min[axis],compiled.bounds[0].min[axis]);close(result.shapes[0].bounds.max[axis],compiled.bounds[0].max[axis]);}assert.equal(result.shapes[1].operation,'remove');for(const shape of result.shapes){validLines(shape);const lines=shape.levels[0];assert.ok(Array.from({length:lines.length/6},(_,index)=>Array.from(lines.subarray(index*6,index*6+6))).some(line=>Math.abs(line[0]-line[3])<1e-5&&Math.abs(line[2]-line[5])<1e-5&&Math.abs(line[4]-line[1]-3)<1e-5),'extrusion stays on generation +Y');}
+});
+
+test('ball guides use spherical radius and form a generation-up capsule when extruded',()=>{
+ const ball={...volume('ball','ball'),position:[2,1,-1],rotation:[.2,.5,.3],size:[2,9,12]},input=manifest([ball],{extrudeUp:true,wallHeight:4});input.sourceTransform={position:[0,0,0],rotation:[0,0,0],scale:3};const shape=createCollisionOverview(input).shapes[0];assert.deepEqual(shape.bounds,{min:[0,-3,-9],max:[12,13,3]});validLines(shape);assert.ok(shape.levels[0].length<shape.levels[1].length&&shape.levels[1].length<shape.levels[2].length);for(let index=0;index<shape.levels[2].length;index+=3){const [x,y,z]=shape.levels[2].subarray(index,index+3),nearestY=Math.max(3,Math.min(7,y));close((x-6)**2+(y-nearestY)**2+(z+3)**2,36,1e-4);}
+});
+
+test('whole-scene generation uses its bounds box and legacy manifests fall back to generation-grid bounds without touching pages or air leaves',()=>{
+ const input=manifest();input.generation={scope:'entire',bounds:{...volume('entire'),position:[4,2,0],size:[10,8,6]},volumes:[volume('irrelevant')],options:{extrudeUp:false}};assert.equal(createCollisionOverview(input).shapes[0].id,'entire');const legacy={bounds:structuredClone(bounds)};Object.defineProperties(legacy,{tiles:{get(){throw Error('Do not visit page payloads');}},airNodes:{get(){throw Error('Do not expand certified air');}}});const fallback=createCollisionOverview(legacy).shapes[0];assert.equal(fallback.id,'manifest-bounds');assert.deepEqual(fallback.bounds,bounds);validLines(fallback);assert.equal(fallback.levels[0].length/6,12);
+});
+
+test('invalid optional generation metadata safely falls back instead of creating partial or non-finite guides',()=>{
+ const invalid=[null,{scope:'unknown'},{scope:'selected',volumes:[]},{scope:'selected',volumes:[{...volume(),size:[0,1,1]}]},{scope:'selected',volumes:[volume(),volume()]},{scope:'selected',volumes:[volume('remove','box','remove')]},{scope:'selected',volumes:[volume()],options:{extrudeUp:'yes'}},{scope:'selected',volumes:[volume()],options:{extrudeUp:true,wallHeight:Infinity}},{scope:'entire',bounds:volume('bad','ball')},{scope:'selected',volumes:Array.from({length:129},(_,i)=>volume('box'+i))}];for(const generation of invalid){const result=createCollisionOverview({...manifest(),generation});assert.equal(result.shapes.length,1);assert.equal(result.shapes[0].id,'manifest-bounds');validLines(result.shapes[0]);}
+ for(const sourceTransform of [null,{...identity,scale:0},{...identity,scale:Infinity},{...identity,scale:1e308}])assert.equal(createCollisionOverview({...manifest(),sourceTransform}).shapes[0].id,'manifest-bounds');assert.deepEqual(createCollisionOverview({bounds:{min:[NaN,0,0],max:[1,1,1]}}).shapes,[]);assert.deepEqual(createCollisionOverview(null).shapes,[]);
+});
+
+test('128 highly detailed extruded shapes remain below the global segment budget',()=>{
+ for(const type of ['box','ball']){const volumes=Array.from({length:128},(_,i)=>({...volume('shape-'+i,type,i%2?'remove':'add'),position:[i*10,0,0]})),overview=createCollisionOverview(manifest(volumes,{extrudeUp:true,wallHeight:10}));assert.equal(overview.shapes.length,128);const segments=overview.shapes.reduce((sum,shape)=>sum+shape.levels[2].length/6,0);assert.ok(segments<=COLLISION_OVERVIEW_SEGMENT_BUDGET,`${type} segment budget: ${segments}`);for(const shape of overview.shapes)validLines(shape);}
+});
+
+test('screen-size LOD is scale invariant and adapts to distance, viewport and field of view',()=>{
+ const box={min:[-1,-1,-1],max:[1,1,1]};assert.equal(selectCollisionOverviewLevel(box,[0,0,1000]),0);assert.equal(selectCollisionOverviewLevel(box,[0,0,10]),1);assert.equal(selectCollisionOverviewLevel(box,[0,0,1]),2);assert.equal(selectCollisionOverviewLevel(box,{x:0,y:0,z:0}),2);assert.equal(selectCollisionOverviewLevel(box,[0,0,10],{viewportHeight:100}),0);assert.equal(selectCollisionOverviewLevel(box,[0,0,10],{viewportHeight:2000}),2);assert.equal(selectCollisionOverviewLevel(box,[0,0,10],{fov:150}),0);assert.equal(selectCollisionOverviewLevel(box,[0,0,10],{worldScale:100}),selectCollisionOverviewLevel(box,[0,0,10],{worldScale:.001}));assert.equal(selectCollisionOverviewLevel(box,[NaN,0,0]),0);assert.equal(selectCollisionOverviewLevel(null,[0,0,0]),0);
+});
+
+test('LOD hysteresis preserves the preceding detail around each threshold and permits large jumps',()=>{
+ const box={min:[-1,-1,-1],max:[1,1,1]},eye=pixels=>[0,0,1+Math.sqrt(12)*720/(2*Math.tan(Math.PI/6)*pixels)],options={hysteresis:.15};assert.equal(selectCollisionOverviewLevel(box,eye(110),{...options,previousLevel:0}),0);assert.equal(selectCollisionOverviewLevel(box,eye(120),{...options,previousLevel:0}),1);assert.equal(selectCollisionOverviewLevel(box,eye(90),{...options,previousLevel:1}),1);assert.equal(selectCollisionOverviewLevel(box,eye(80),{...options,previousLevel:1}),0);assert.equal(selectCollisionOverviewLevel(box,eye(450),{...options,previousLevel:1}),1);assert.equal(selectCollisionOverviewLevel(box,eye(500),{...options,previousLevel:1}),2);assert.equal(selectCollisionOverviewLevel(box,eye(390),{...options,previousLevel:2}),2);assert.equal(selectCollisionOverviewLevel(box,eye(350),{...options,previousLevel:2}),1);assert.equal(selectCollisionOverviewLevel(box,eye(1000),{...options,previousLevel:0}),2);assert.equal(selectCollisionOverviewLevel(box,eye(20),{...options,previousLevel:2}),0);
+});

@@ -30,6 +30,7 @@ function Viewer(){
  const [viewpointId,setViewpointId]=useState('');
  const [project,setProject]=useState<Project|null>(null),[hosting,setHosting]=useState(homeHosting);
  const [rt,setRt]=useState<TourRuntime|null>(null),[sceneId,setSceneId]=useState(''),[started,setStarted]=useState(false);
+ const [startupError,setStartupError]=useState('');
  const [status,setStatus]=useState(''),[error,setError]=useState(false),[mode,setMode]=useState<Mode>('jumps');
  const [settings,setSettings]=useState(false),[page,setPage]=useState<Page|null>(null),[loadError,setLoadError]=useState('');
  const [requested,setRequested]=useState<TourDestination|null>(null);
@@ -60,13 +61,14 @@ function Viewer(){
  const openGuide=()=>{rt?.releasePointer();setSettings(false);setGuideStep(0);setGuide(true);};
  const toggleSettings=()=>{rt?.releasePointer();setSettings(!settings);};
  const modes=<div className="mode-tabs" data-guide="modes" role="group" aria-label="Movement mode">{current?.modes.map(m=><button key={m} title={modeName[m]} aria-pressed={mode===m} className={mode===m?'active':''} onClick={()=>rt?.setMode(m)}><Icon name={modeIcon[m]}/>{modeName[m]}</button>)}</div>;
- return <main className={'viewer '+(compact?'viewer-compact ':'')+(mobile.enabled?'viewer-touch ':'')+(captured?'cursor-captured':'cursor-free')} style={glassVariables(project?.appearance) as React.CSSProperties}><Stage onReady={setRt}/>{started&&<SceneLoading runtime={rt}/>}
+ return <main className={'viewer '+(compact?'viewer-compact ':'')+(mobile.enabled?'viewer-touch ':'')+(captured?'cursor-captured':'cursor-free')} style={glassVariables(project?.appearance) as React.CSSProperties}><Stage onReady={setRt} onError={setStartupError}/>{started&&<SceneLoading runtime={rt}/>}
   {!started?<section className="title-screen">
    <div className="title-art title-backdrop" role="img" aria-label="Tour cover" style={titleImage?{backgroundImage:'url('+new URL(titleImage,base).href+')'}:undefined}>{!titleImage&&<><div className="orb orb-one"/><div className="orb orb-two"/><div className="orbit"/></>}</div>
    <div className="title-copy">{project&&<TourIdentity project={project} base={base}/>}<h1>{project?.title||'A new perspective.'}</h1><p className="lead"><LinkedDescription text={project?.description||'Explore places as if you were there.'}/></p>
     {loadError?<div className="notice error">{loadError}<p><button onClick={()=>location.reload()}>Retry loading tour</button></p></div>:<>
      <Field label="Start exploring"><select value={sceneId} onChange={e=>setSceneId(e.target.value)}>{project?.scenes.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></Field>
-     <div className="actions"><Button primary disabled={!rt||!project} onClick={()=>begin()}><Icon name="image_arrow_up"/>Enter tour</Button><IconButton icon="settings" label="Settings" aria-expanded={settings} onClick={toggleSettings}>Settings</IconButton></div>
+     <div className="actions"><button className="primary" disabled={!rt||!project} aria-describedby={startupError?'viewer-startup-error':undefined} onClick={()=>begin()}><Icon name="image_arrow_up"/>Enter tour</button><IconButton icon="settings" label="Settings" aria-expanded={settings} onClick={toggleSettings}>Settings</IconButton></div>
+     {startupError&&<p className="viewer-startup-error" id="viewer-startup-error" role="alert"><Icon name="error" size={18}/><span>{/webgl|graphics context/i.test(startupError)?'WebGL is unavailable. Open this tour on a device and browser that support WebGL 2.':'The 3D viewer could not start. Reload the tour to try again.'}</span></p>}
      {!guideSeen&&<div className="guide-invitation"><Icon name="help" size={26}/><div><strong>New to exploring in 3D?</strong><p>A short guide will help you find your way.</p><button disabled={!rt||!project} onClick={()=>begin(true)}>Show me around<Icon name="chevron_right" size={18}/></button></div></div>}
     </>}
     <InspectorSection title="Controls help" icon="help"><ControlsHelp/></InspectorSection>{project&&<TourFooter project={project}/>}

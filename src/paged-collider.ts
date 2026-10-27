@@ -5,6 +5,7 @@ import {collisionTileKey} from '../shared/paged-collision.mjs';
 import {collisionPhysicsChunkConfig,localPhysicsChunks} from '../shared/collision-physics.mjs';
 import {sceneMatrix} from '../shared/collision-selection.mjs';
 import {raycastCollision} from '../shared/collision-ray.mjs';
+import {CollisionOverview} from './collision-overview';
 
 type Point={x:number;y:number;z:number};
 type Chunk={key:string;coord:number[];cells:number;bounds:{min:number[];max:number[]}};
@@ -17,7 +18,7 @@ const vector=(p:Point)=>new THREE.Vector3(p.x,p.y,p.z);
 
 /** Verified page caching is independent of the exact physics installed near visitors. */
 export class PagedCollider {
- readonly group=new THREE.Group();readonly stream:CollisionStream;
+ readonly group=new THREE.Group();readonly stream:CollisionStream;readonly overview:CollisionOverview;
  private worker=new Worker(new URL('./paged-physics.worker.ts',import.meta.url),{type:'module',name:'tour-collision-surfaces'});
  private surfaces=new Map<string,Resident>();private prepared=new Set<string>();private desired=new Map<string,Chunk>();private skipped=new Set<string>();
  private requests=new Map<number,{resolve:(surfaces:Surface[])=>void;reject:(error:Error)=>void}>();
@@ -27,16 +28,20 @@ export class PagedCollider {
  onError=(message:string)=>{};onChange=()=>{};
  constructor(readonly manifest:any,readonly url:string,readonly world:RAPIER.World){
   this.config=collisionPhysicsChunkConfig(manifest.detail,manifest.tileCells);
-  this.group.name='paged-collision';this.group.matrixAutoUpdate=false;this.group.matrix.copy(sceneMatrix(manifest.sourceTransform).invert());
+  this.group.name='paged-collision';this.group.matrixAutoUpdate=false;this.group.matrix.copy(sceneMatrix(manifest.sourceTransform).invert());this.group.matrixWorldNeedsUpdate=true;
+  this.overview=new CollisionOverview(manifest,this.group);
   this.stream=new CollisionStream(manifest,url,{onChange:(keys:string[])=>this.invalidate(keys)});
   // Movement also checks prepared local coverage; cached bytes alone never unlock a region.
   this.stream.available=()=>true;this.worker.postMessage({type:'init',airNodes:manifest.airNodes||[]});
   this.worker.onmessage=({data})=>{const request=this.requests.get(data.id);this.requests.delete(data.id);if(!request)return;if(data.error){this.workerPages.clear();request.reject(Error(data.error));}else request.resolve(data.results);};
   this.worker.onerror=event=>{this.workerPages.clear();for(const request of this.requests.values())request.reject(Error(event.message||'Collision surface worker failed.'));this.requests.clear();};
  }
- private scale(){this.group.updateWorldMatrix(true,false);return this.group.matrixWorld.getMaxScaleOnAxis();}
- toGeneration(point:Point){this.group.updateWorldMatrix(true,false);return vector(point).applyMatrix4(this.group.matrixWorld.clone().invert());}
- fromGeneration(point:Point){this.group.updateWorldMatrix(true,false);return vector(point).applyMatrix4(this.group.matrixWorld);}
+ // This source frame has a manual matrix. Refresh it explicitly before queries,
+ // including the first query before rendering and after parent alignment changes.
+ private updateFrame(children=false){this.group.matrixWorldNeedsUpdate=true;this.group.updateWorldMatrix(true,children);}
+ private scale(){this.updateFrame();return this.group.matrixWorld.getMaxScaleOnAxis();}
+ toGeneration(point:Point){this.updateFrame();return vector(point).applyMatrix4(this.group.matrixWorld.clone().invert());}
+ fromGeneration(point:Point){this.updateFrame();return vector(point).applyMatrix4(this.group.matrixWorld);}
  async raycast(ray:THREE.Ray,isCurrent=()=>true,{maxDistance=100,retryDelay=0}={}){
   const origin=this.toGeneration(ray.origin),direction=this.toGeneration(ray.origin.clone().add(ray.direction)).sub(origin),scale=direction.length();
   const hit=await raycastCollision(this.stream,origin.toArray(),direction.toArray(),{maxDistance:maxDistance*scale,retryDelay,isCurrent:()=>!this.dead&&isCurrent()});
@@ -107,7 +112,7 @@ export class PagedCollider {
     const triangles=surface.indices.length/3,old=this.surfaces.get(chunk.key)?.triangles||0;
     if(this.physicsTriangles-old+triangles>MAX_TRIANGLES){const farther=[...this.surfaces.keys()].filter(key=>this.desired.has(key)&&this.priority(this.desired.get(key)!)>this.priority(chunk)).sort((a,b)=>this.priority(this.desired.get(b)!)-this.priority(this.desired.get(a)!));for(const key of farther){this.prepared.delete(key);this.skipped.add(key);this.remove(key);if(this.physicsTriangles-old+triangles<=MAX_TRIANGLES)break;}}
     if(this.physicsTriangles-old+triangles>MAX_TRIANGLES){this.prepared.delete(chunk.key);this.skipped.add(chunk.key);this.remove(chunk.key);continue;}
-    this.prepared.delete(chunk.key);this.remove(chunk.key);this.group.updateWorldMatrix(true,false);
+    this.prepared.delete(chunk.key);this.remove(chunk.key);this.updateFrame();
     if(triangles){const geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(surface.positions,3));geometry.setIndex(new THREE.BufferAttribute(surface.indices,1));const mesh=new THREE.Mesh(geometry,new THREE.MeshBasicMaterial({color:0x77efd3,wireframe:true,transparent:true,opacity:.45}));mesh.name=chunk.key;this.group.add(mesh);
      const positions=new Float32Array(surface.positions.length),point=new THREE.Vector3();for(let i=0;i<positions.length;i+=3){point.fromArray(surface.positions,i).applyMatrix4(this.group.matrixWorld);point.toArray(positions,i);}const collider=this.world.createCollider(RAPIER.ColliderDesc.trimesh(positions,surface.indices));this.surfaces.set(chunk.key,{mesh,collider,triangles});}
     this.prepared.add(chunk.key);
@@ -117,8 +122,9 @@ export class PagedCollider {
  }
  private remove(key:string){const old=this.surfaces.get(key);if(!old)return;this.world.removeCollider(old.collider,true);old.mesh.geometry.dispose();(old.mesh.material as THREE.Material).dispose();old.mesh.removeFromParent();this.surfaces.delete(key);}
  update(point:Point,time:number,body?:Point){this.focus(point,body);if(this.dead||this.updating||time-this.lastUpdate<250)return;this.lastUpdate=time;this.schedule();this.updating=this.flush().catch(error=>this.notice(error)).finally(()=>{this.updating=undefined;});}
+ updateOverview(camera:THREE.PerspectiveCamera,height:number){this.overview.update(camera,height);}
  async realign(){this.prepared.clear();this.skipped.clear();this.planKey='';this.focusKey='';this.plan();await this.flush();}
- navigationParts(){this.group.updateWorldMatrix(true,true);return [...this.surfaces.values()].map(({mesh})=>{const input=mesh.geometry.getAttribute('position'),positions=new Float32Array(input.count*3),point=new THREE.Vector3();for(let i=0;i<input.count;i++){point.fromBufferAttribute(input,i).applyMatrix4(mesh.matrixWorld);point.toArray(positions,i*3);}return {positions,indices:new Uint32Array(mesh.geometry.index!.array)};});}
+ navigationParts(){this.updateFrame(true);return [...this.surfaces.values()].map(({mesh})=>{const input=mesh.geometry.getAttribute('position'),positions=new Float32Array(input.count*3),point=new THREE.Vector3();for(let i=0;i<input.count;i++){point.fromBufferAttribute(input,i).applyMatrix4(mesh.matrixWorld);point.toArray(positions,i*3);}return {positions,indices:new Uint32Array(mesh.geometry.index!.array)};});}
  private covered(a:THREE.Vector3,b:THREE.Vector3,radius:number,halfExtent=[0,0,0]){
   const start=a.toArray(),end=b.toArray(),size=this.config.size,n=this.manifest.tileCells,detail=this.manifest.detail,low=start.map((value,i)=>Math.floor((Math.min(value,end[i])-radius-halfExtent[i])/size)),high=start.map((value,i)=>Math.floor((Math.max(value,end[i])+radius+halfExtent[i])/size));
   const tileLow=start.map((value,i)=>Math.floor((Math.min(value,end[i])-radius-halfExtent[i])/(n*detail))),tileHigh=start.map((value,i)=>Math.floor((Math.max(value,end[i])+radius+halfExtent[i])/(n*detail)));if(this.stream.air.containingNode(tileLow,tileHigh))return true;
@@ -127,6 +133,8 @@ export class PagedCollider {
  }
  allows(point:Point,halfHeight=0,radius=.19){const a=this.toGeneration({x:point.x,y:point.y-halfHeight,z:point.z}),b=this.toGeneration({x:point.x,y:point.y+halfHeight,z:point.z}),r=radius/this.scale();return this.covered(a,b,r)&&this.stream.allowsCapsule(a,b,r);}
  allowsMotion(from:Point,to:Point,radius=.19){const a=this.toGeneration(from),b=this.toGeneration(to),r=radius/this.scale();return this.covered(a,b,r)&&this.stream.allowsCapsule(a,b,r);}
+ /** Head visibility uses known voxel evidence, independently of physics readiness. */
+ probeHeadMotion(from:Point,to:Point,radius=.095){const a=this.toGeneration(from),b=this.toGeneration(to);return this.stream.probeCapsule(a,b,radius/this.scale());}
  allowsWalkingMotion(from:Point,to:Point,halfHeight=.6,radius=.24){const a=this.toGeneration(from),b=this.toGeneration(to),axis=this.toGeneration({x:from.x,y:from.y+halfHeight,z:from.z}).sub(a),half=axis.toArray().map(Math.abs),r=radius/this.scale();return this.covered(a,b,r,half)&&this.stream.allowsCapsule(a,b,r,half);}
  get ready(){return !this.dead&&this.prepared.size>0;}
  get physicsChunks(){return this.prepared.size;}
@@ -135,5 +143,5 @@ export class PagedCollider {
  get residentTriangles(){return this.physicsTriangles;}
  get residentTiles(){return this.stream.resident.size;}
  get residentBytes(){return this.stream.bytes;}
- dispose(){if(this.dead)return;this.dead=true;this.stream.dispose();this.worker.terminate();for(const request of this.requests.values())request.reject(new DOMException('Collision scene disposed.','AbortError'));this.requests.clear();this.leases.clear();this.prepared.clear();this.workerPages.clear();for(const key of [...this.surfaces.keys()])this.remove(key);this.group.removeFromParent();}
+ dispose(){if(this.dead)return;this.dead=true;this.overview.dispose();this.stream.dispose();this.worker.terminate();for(const request of this.requests.values())request.reject(new DOMException('Collision scene disposed.','AbortError'));this.requests.clear();this.leases.clear();this.prepared.clear();this.workerPages.clear();for(const key of [...this.surfaces.keys()])this.remove(key);this.group.removeFromParent();}
 }

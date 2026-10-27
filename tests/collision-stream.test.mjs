@@ -37,6 +37,26 @@ test('capsule-box distance handles rotated segments and grazing corners exactly'
  assert.equal(segmentBoxDistanceSquared([3,1,0],[1,3,0],[0,0,-1],[1,1,1]),2);
 });
 
+test('head evidence distinguishes pending and failed pages from known obstruction without fetching or unlocking motion',async()=>{
+ const f=await fixture([[0,0,0],[1,0,0]]);let requests=0,failed=true;const stream=new CollisionStream(f.manifest,'https://tour.test/collider/scene.collision.json',{fetch:async url=>{requests++;return failed?new Response('',{status:404}):f.fetch(url);}}),point=[2,2,2];
+ try{
+  assert.equal(stream.probeCapsule(point,point,.1),'unknown');assert.equal(stream.allowsCapsule(point,point,.1),false);assert.equal(requests,0);
+  await assert.rejects(stream.load(f.manifest.tiles[0]),/404/);const before=requests;assert.equal(stream.probeCapsule(point,point,.1),'unknown');assert.equal(requests,before,'head probes never retry or fetch');
+  failed=false;await stream.load(f.manifest.tiles[0]);assert.equal(stream.probeCapsule(point,point,.1),'clear');assert.equal(stream.allowsCapsule(point,point,.1),true);
+  assert.equal(stream.probeCapsule([-2,2,2],[-2,2,2],.1),'blocked','unlisted space is a known domain boundary');
+  assert.equal(stream.probeCapsule([3.95,2,2],[4.05,2,2],.1),'unknown','a listed but unloaded neighbor is not a geometric wall');
+  assert.equal(stream.probeCapsule(point,point,0),'clear');assert.equal(stream.probeCapsule([6,2,2],[6,2,2],0),'unknown');assert.equal(stream.probeCapsule([-2,2,2],[-2,2,2],0),'blocked');
+ }finally{stream.dispose();}
+});
+
+test('known obstructed voxels take priority when a head sphere also overlaps an unloaded listed page',async()=>{
+ const f=await fixture([[0,0,0],[1,0,0]]),entry=f.manifest.tiles[1],hole=collisionCellId(0,4,4,8),bytes=encodeCollisionTile({coord:entry.coord,tileCells:8,occupied:Array.from({length:512},(_,i)=>i).filter(i=>i!==hole)});entry.bytes=bytes.length;entry.sha256=await collisionSha256(bytes);entry.voxels=511;f.bodies.set(new URL(entry.url,'https://tour.test/collider/scene.collision.json').href,bytes);
+ const stream=new CollisionStream(f.manifest,'https://tour.test/collider/scene.collision.json',{fetch:f.fetch});try{
+  await stream.load(entry);assert.equal(stream.probeCapsule([4.01,2.25,2.25],[4.01,2.25,2.25],.1),'blocked','unknown first tile must not hide evidence from the next resident tile');
+  assert.equal(stream.probeCapsule([4.01,1.25,2.25],[4.01,1.25,2.25],.1),'unknown');assert.equal(stream.allowsCapsule([4.01,1.25,2.25],[4.01,1.25,2.25],.1),false);
+ }finally{stream.dispose();}
+});
+
 function denseTileWithHole(coord,n,hole){
  const full=encodeCollisionTile({coord,tileCells:n,full:true});if(!hole)return full;
  const axis=n/4,count=axis**3,bytes=new Uint8Array(COLLISION_TILE_HEADER_BYTES+count*12);bytes.set(full);const view=new DataView(bytes.buffer);view.setUint32(24,count,true);view.setUint32(28,n**3-1,true);view.setUint32(32,0,true);

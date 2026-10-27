@@ -1,5 +1,12 @@
 import {WalkingMotor,configureWalkingController,clickedWalkingFeet} from '../shared/walking.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import RAPIER from '@dimforge/rapier3d-compat';
+test('scaled Drone sweeps and placement keep the physical head volume outside walls',async()=>{
+ await RAPIER.init();const world=new RAPIER.World({x:0,y:0,z:0});try{
+  world.createCollider(RAPIER.ColliderDesc.cuboid(.1,10,10));world.step();const eye={x:-1,y:2,z:0},radius=.415,delta=flyMovement(world,eye,{x:3,y:0,z:1},undefined,radius),end={x:eye.x+delta.x,y:eye.y+delta.y,z:eye.z+delta.z};
+  assert.ok(end.x<-.515&&delta.z>.99,'scaled sphere stops and slides outside the wall');assert.equal(world.intersectionWithShape(end,{x:0,y:0,z:0,w:1},new RAPIER.Ball(.4)),null);
+  const placed=nearbyFlyPosition(world,{x:-.3,y:2,z:0},undefined,()=>true,radius);assert.ok(placed&&Math.abs(placed.x+.3)>.1);assert.equal(world.intersectionWithShape(placed,{x:0,y:0,z:0,w:1},new RAPIER.Ball(radius)),null);
+ }finally{world.free();}
+});
 test('Rapier walking capsule grounds, blocks walls, and climbs a low step',async()=>{
  await RAPIER.init();const world=new RAPIER.World({x:0,y:-9.81,z:0});
  try{

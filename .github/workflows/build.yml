@@ -86,6 +86,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/local-collision-runtime-check.mjs
+      - name: Check whole-scene collision guides and bounded nearby detail
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/collision-overview-check.mjs
       - name: Check configurable coarse steps, scene scale and correct-floor walking
         env:
           SPARK_PACKAGED: '1'
@@ -156,6 +160,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/branding-drafts-check.mjs
+      - name: Check visible WebGL-unavailable guidance on desktop and mobile
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/viewer-webgl-check.mjs
       - name: Check saved performance settings and exported precision
         env:
           SPARK_PACKAGED: '1'
@@ -172,6 +180,10 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/xr-polish-check.mjs
+      - name: Check real stereo head collision, scale and tracking recovery
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/xr-head-collision-check.mjs
       - name: Check streamed precision and queued scene replacement
         env:
           SPARK_PACKAGED: '1'

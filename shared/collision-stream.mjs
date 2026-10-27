@@ -78,39 +78,43 @@ export class CollisionStream {
   return containsCollisionCell(tile,...cell.map((v,i)=>v-coord[i]*n));
  }
  allowsPoint(point){const p=array(point);return p.every(Number.isFinite)&&this.hasCell(p.map(v=>Math.floor(v/this.manifest.detail)));}
- allowsCapsule(start,end,radius,halfExtent=[0,0,0]){
-  const a=array(start),b=array(end),{detail,tileCells:n}=this.manifest,stats=this.lastCapsuleQuery={tiles:0,bricks:0,cells:0};if(![...a,...b,radius,...halfExtent].every(Number.isFinite)||radius<0||halfExtent.length!==3||halfExtent.some(value=>value<0))return false;
-  if(radius===0)return halfExtent.every(value=>value===0)&&a.every((value,i)=>value===b[i])&&this.allowsPoint(a);
+ allowsCapsule(start,end,radius,halfExtent=[0,0,0]){return this.capsuleStatus(start,end,radius,halfExtent,false)==='clear';}
+ /** Read-only evidence for head safety: a pending page is not penetration. */
+ probeCapsule(start,end,radius,halfExtent=[0,0,0]){return this.capsuleStatus(start,end,radius,halfExtent,true);}
+ capsuleStatus(start,end,radius,halfExtent,inspectUnknown){
+  const a=array(start),b=array(end),{detail,tileCells:n}=this.manifest,stats=this.lastCapsuleQuery={tiles:0,bricks:0,cells:0};if(![...a,...b,radius,...halfExtent].every(Number.isFinite)||radius<0||halfExtent.length!==3||halfExtent.some(value=>value<0))return 'blocked';
+  if(radius===0){if(!halfExtent.every(value=>value===0)||!a.every((value,i)=>value===b[i]))return 'blocked';const cell=a.map(value=>Math.floor(value/detail)),coord=cell.map(value=>Math.floor(value/n)),key=collisionTileKey(coord);if(this.air.hasTile(coord))return 'clear';const tile=this.resident.get(key)?.tile;if(!tile||!this.available(key))return this.entries.has(key)?'unknown':'blocked';return containsCollisionCell(tile,...cell.map((value,i)=>value-coord[i]*n))?'clear':'blocked';}
   const distance=(min,max)=>segmentBoxDistanceSquared(a,b,min.map((value,i)=>value-halfExtent[i]),max.map((value,i)=>value+halfExtent[i]));
   const low=a.map((v,i)=>Math.floor((Math.min(v,b[i])-radius-halfExtent[i])/detail)),high=a.map((v,i)=>Math.floor((Math.max(v,b[i])+radius+halfExtent[i])/detail)),tileLow=low.map(v=>Math.floor(v/n)),tileHigh=high.map(v=>Math.floor(v/n)),squared=radius*radius,threshold=squared-Math.min(1e-10,squared*1e-6);
-  if(!Number.isFinite(threshold)||threshold<=0)return false;
+  if(!Number.isFinite(threshold)||threshold<=0)return 'blocked';
   // A certified parent proves every finest voxel in this cube is free. It is
   // complete collision data, so neither payload requests nor leaf scans help.
-  if(this.air.containingNode(tileLow,tileHigh)){stats.tiles=1;return true;}
-  if(tileLow.reduce((count,v,i)=>count*(tileHigh[i]-v+1),1)>4096)return false;
+  if(this.air.containingNode(tileLow,tileHigh)){stats.tiles=1;return 'clear';}
+  if(tileLow.reduce((count,v,i)=>count*(tileHigh[i]-v+1),1)>4096)return 'unknown';
   // One 1 cm walking capsule encloses hundreds of thousands of cells. Accept
   // compact full tiles and full 4³ bricks without expanding or scanning them;
   // exact capsule/box tests are needed only around blocked or mixed boundaries.
+  let unknown=false;
   for(let tx=tileLow[0];tx<=tileHigh[0];tx++)for(let ty=tileLow[1];ty<=tileHigh[1];ty++)for(let tz=tileLow[2];tz<=tileHigh[2];tz++){
    stats.tiles++;const coord=[tx,ty,tz];if(this.air.hasTile(coord))continue;const key=coord.join(','),tile=this.resident.get(key)?.tile,tileMin=coord.map(v=>v*n*detail),tileMax=tileMin.map(v=>v+n*detail);
-   if(!tile||!this.available(key)){if(distance(tileMin,tileMax)<threshold)return false;continue;}
+   if(!tile||!this.available(key)){if(distance(tileMin,tileMax)<threshold){if(!inspectUnknown)return 'unknown';if(!this.entries.has(key))return 'blocked';unknown=true;}continue;}
    if(tile.full)continue;
    const bytes=tile.bytes,view=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength),axis=n/4,brickLow=low.map((v,i)=>Math.max(0,Math.floor((v-coord[i]*n)/4))),brickHigh=high.map((v,i)=>Math.min(axis-1,Math.floor((v-coord[i]*n)/4)));
    for(let bx=brickLow[0];bx<=brickHigh[0];bx++)for(let by=brickLow[1];by<=brickHigh[1];by++)for(let bz=brickLow[2];bz<=brickHigh[2];bz++){
-    if(++stats.bricks>32768)return false;
+    if(++stats.bricks>32768)return 'unknown';
     const brickKey=(bx*axis+by)*axis+bz;let left=0,right=view.getUint32(24,true)-1,maskLow=0,maskHigh=0;
     while(left<=right){const mid=(left+right)>>>1,offset=COLLISION_TILE_HEADER_BYTES+mid*12,value=view.getUint32(offset,true);if(value<brickKey)left=mid+1;else if(value>brickKey)right=mid-1;else{maskLow=view.getUint32(offset+4,true);maskHigh=view.getUint32(offset+8,true);break;}}
     if(maskLow===0xffffffff&&maskHigh===0xffffffff)continue;
     const cell=[tx*n+bx*4,ty*n+by*4,tz*n+bz*4],min=cell.map(v=>v*detail),max=min.map(v=>v+4*detail);
     if(distance(min,max)>=threshold)continue;
-    if(!(maskLow||maskHigh))return false;
+    if(!(maskLow||maskHigh))return 'blocked';
     for(let bit=0;bit<64;bit++)if(!((bit<32?maskLow:maskHigh)&(1<<(bit&31)))){
      stats.cells++;const min=[cell[0]+Math.floor(bit/16),cell[1]+Math.floor(bit/4)%4,cell[2]+bit%4].map(v=>v*detail),max=min.map(v=>v+detail);
-     if(distance(min,max)<threshold)return false;
+     if(distance(min,max)<threshold)return 'blocked';
     }
    }
   }
-  return true;
+  return unknown?'unknown':'clear';
  }
  dispose(){if(this.dead)return;this.dead=true;this.abort.abort();for(const task of this.queue.splice(0))task.reject(new DOMException('Collision stream disposed.','AbortError'));this.resident.clear();this.pending.clear();this.failures.clear();this.failedAt.clear();this.bytes=0;}
 }

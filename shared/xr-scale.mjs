@@ -1,7 +1,7 @@
 import {Vector3,Quaternion} from 'three';
 // Scale tracked headset/controller motion, keeping the current head position fixed.
-export function scaleTrackedRig(rig,camera,worldScale){
- const before=camera.getWorldPosition(new Vector3());rig.scale.setScalar(1/worldScale);rig.updateMatrixWorld(true);const after=camera.getWorldPosition(new Vector3());
+export function scaleTrackedRig(rig,camera,worldScale,headPosition=()=>camera.getWorldPosition(new Vector3())){
+ const before=headPosition();rig.scale.setScalar(1/worldScale);rig.updateMatrixWorld(true);const after=headPosition();
  if(rig.parent){rig.parent.worldToLocal(before);rig.parent.worldToLocal(after);}rig.position.add(before.sub(after));rig.updateMatrixWorld(true);
 }
 // Keep eye positions/IPD scaled, but render in ordinary world units. Spark's

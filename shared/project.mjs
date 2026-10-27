@@ -1,5 +1,5 @@
 import {NavigationSettingsSchema} from './navigation-settings.mjs';
-import {BrandingSchema,brandingReferences} from './branding.mjs';
+import {BrandingSchema,brandingReferences,validateBrandingUrls} from './branding.mjs';
 import {normalizeBubbleContent,usedContent} from './authoring.mjs';
 import {BubbleSettingsSchema,SceneBubbleSettingsSchema} from './bubbles.mjs';
 import {AppearanceSchema} from './appearance.mjs';
@@ -32,7 +32,7 @@ export function blankProject(){return {version:1,title:'Untitled tour',descripti
 export function newScene(id,name,source){return {id,name,source,thumbnail:'',transform:identity(),collider:'',colliderTransform:identity(),modes:['jumps','fly'],entry:'start',walkStart:'start',viewpoints:[{id:'start',name:'Starting view',position:[0,1.7,3],rotation:[0,0,0]}],hotspots:[]};}
 export function validateProject(value){
  const parsed=ProjectSchema.safeParse(value); if(!parsed.success)return parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`);
- const p=parsed.data, errors=[];
+ const p=parsed.data, errors=validateBrandingUrls(p.branding);
  const unique=(items,label)=>{const ids=new Set();for(const x of items){if(ids.has(x.id))errors.push(`Duplicate ${label}: ${x.id}`);ids.add(x.id);}};
  unique(p.scenes,'scene');unique(p.pages,'page');
  if(!p.scenes.length)errors.push('Add at least one scene.');

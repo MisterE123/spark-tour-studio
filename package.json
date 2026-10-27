@@ -1,6 +1,6 @@
 {
   "name": "spark-tour-studio",
-  "version": "1.22.0",
+  "version": "1.22.1",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
@@ -55,6 +55,7 @@
     "files": [
       "desktop/**/*",
       "shared/**/*",
+      "assets/studio-icon.*",
       "package.json",
       "LICENSE",
       "THIRD_PARTY.md"
@@ -93,7 +94,8 @@
     ],
     "win": {
       "target": "portable",
-      "signAndEditExecutable": false
+      "icon": "assets/studio-icon.ico",
+      "signExecutable": false
     }
   },
   "description": "3DGS Perspectives Studio: author and share locally bundled Gaussian splat tours",

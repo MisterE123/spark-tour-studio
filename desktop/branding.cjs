@@ -1,12 +1,13 @@
 const fs=require('node:fs/promises'),path=require('node:path');
+const {normalizeBrandingWebUrl}=require('../shared/branding-url.mjs');
 const studioCreditUrl='https://studio.chesapeakeperspectives.com/';
 const escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const text=value=>typeof value==='string'?value.trim():'';
-function safeUrl(value,{absolute=false}={}){value=text(value);if(!value||/[\u0000-\u001f\u007f]/.test(value)||value.includes('\\'))return '';try{const url=new URL(value,'https://tour.local/');if(!['http:','https:'].includes(url.protocol))return '';if(absolute&&!/^https?:\/\//i.test(value))return '';return value;}catch{return '';}}
+function safeUrl(value){value=text(value);if(!value||/[\u0000-\u001f\u007f]/.test(value)||value.includes('\\'))return '';try{const url=new URL(value,'https://tour.local/');if(!['http:','https:'].includes(url.protocol))return '';return value;}catch{return '';}}
 function tourBranding(project={}){const b=project.branding&&typeof project.branding==='object'?project.branding:{};return {
  name:text(b.name)||text(project.title)||'Virtual tour',title:text(b.tabTitle)||text(project.title)||text(b.name)||'Virtual tour',
- description:text(b.metaDescription)||text(project.description),website:safeUrl(b.website,{absolute:true}),
- logo:safeUrl(b.logo),favicon:safeUrl(b.favicon),socialImage:safeUrl(b.socialImage)||safeUrl(project.cover),publicUrl:safeUrl(b.publicUrl,{absolute:true}),
+ description:text(b.metaDescription)||text(project.description),website:normalizeBrandingWebUrl(b.website),
+ logo:safeUrl(b.logo),favicon:safeUrl(b.favicon),socialImage:safeUrl(b.socialImage)||safeUrl(project.cover),publicUrl:normalizeBrandingWebUrl(b.publicUrl),
  footer:text(b.footer),themeColor:/^#[\da-f]{3}(?:[\da-f]{3})?$/i.test(b.themeColor||'')?b.themeColor:'',showStudioCredit:b.showStudioCredit!==false
 };}
 async function readTourBranding(root){try{return tourBranding(JSON.parse(await fs.readFile(path.join(root,'config','tour.json'),'utf8')));}catch{return tourBranding();}}

@@ -1,8 +1,16 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import os from 'node:os';import path from 'node:path';import https from 'node:https';import crypto from 'node:crypto';import {spawn} from 'node:child_process';import {createRequire} from 'node:module';
 import {STUDIO_URL,STUDIO_CREDIT} from '../shared/branding.mjs';
+import {resolveBranding} from '../shared/branding.mjs';
 const require=createRequire(import.meta.url),{startServer}=require('../desktop/server.cjs'),{createSharingControl,startSharing,certificate}=require('../launcher/sharing.cjs'),{studioCreditUrl}=require('../desktop/branding.cjs');
 const secureGet=url=>new Promise((resolve,reject)=>{https.get(url,{rejectUnauthorized:false},res=>{const chunks=[];res.on('data',data=>chunks.push(data));res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,body:Buffer.concat(chunks)}));}).on('error',reject);});
 const stop=async server=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));};
+
+test('launcher normalizes bare author domains and omits unsafe or incomplete saved website drafts',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'tour-brand-domain-controls-'));await fs.mkdir(path.join(root,'config'));const file=path.join(root,'config/tour.json'),servers=[];
+ try{for(const control of [undefined,createSharingControl(root)]){const running=await startServer({root,shutdown:true,control});servers.push(running.server);const project={title:'Museum',branding:{name:'Museum',website:' museum.example/history/ ',publicUrl:'museum.example/tour/',showStudioCredit:false}};await fs.writeFile(file,JSON.stringify(project));const html=await(await fetch(running.url+'__launcher')).text();assert.ok(html.includes('href="https://museum.example/history/"'));assert.equal(resolveBranding(project).website,'https://museum.example/history/');
+ for(const draft of ['museum','https://','not a website','javascript:alert(1)','data:text/html,<svg>','mailto:hello@museum.example']){project.branding.website=draft;await fs.writeFile(file,JSON.stringify(project));const draftHtml=await(await fetch(running.url+'__launcher')).text();assert.ok(!draftHtml.includes('<a href='),'no author link for '+draft);assert.equal(resolveBranding(project).website,'');assert.match(draftHtml,/<small>Museum<\/small>/);}
+ }}finally{for(const server of servers)await stop(server);await fs.rm(root,{recursive:true,force:true});}
+});
 
 test('launcher controls use author identity and favicon, escape text, and make the exact Studio credit optional',async()=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'tour-brand-controls-'));await fs.mkdir(path.join(root,'config'));const file=path.join(root,'config/tour.json'),project={title:'Historic grounds',branding:{name:'Museum & Site',tabTitle:'Visit "today"',logo:'media/logo.svg',favicon:'media/favicon.ico',website:'https://museum.example/',footer:'History <in detail>',showStudioCredit:false}};const servers=[];

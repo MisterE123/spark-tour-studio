@@ -374,10 +374,10 @@ success condition was weakened. The next combined source run must complete.
 ## Validation and handoff
 
 Latest verified local preview: compiled clean commit
-`a6ce26cdcf758a0d1c7a98c7bd65c147a579b736`.
+`134bd61827e307a20872808bb5f5cb1a72a1a440`.
 
-`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental a6ce26cd.exe`  
-SHA-256: `efe89a2a3e542662fb24557eebd8062702e616f3c94f725905530920a4044330`.
+`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental 134bd618.exe`  
+SHA-256: `8b33e8b421b7501904c15316189aa2c47c1e0369aed1682e2adae06e86758d49`.
 
 Its actual portable executable launches, identifies the compiled branch/commit
 and closes normally. The packaged identity check also confirms visitor code
@@ -386,9 +386,16 @@ main/tag commit remain unchanged. The expanded native editor sweep has completed
 all seven checks pass, with logs under
 `test-output/editor-ci-sweep/1793162643805/`.
 The current actual portable launch/About/normal-close check passes at
-`test-output/portable smoke 1793174571431/`; packaged identity and visitor graph
-checks pass at `test-output/studio-build-1793174590969/`. Source commits after
+`test-output/portable smoke 1793177647549/`; packaged identity and visitor graph
+checks pass at `test-output/studio-build-1793177667586/`. Source commits after
 this compiled checkpoint must state whether they affect application behavior.
+The follow-up preview record changes documentation only.
+
+Full source CI for `134bd61` is running at
+[run 40659512940](https://github.com/MisterE123/spark-tour-studio/actions/runs/40659512940).
+It includes the cross-browser physics recovery correction and four new native/
+offline authoring/export checks. Allow this complete run before the next push;
+the stable release and main branch remain unchanged.
 
 - Baseline: 347 unit/integration tests pass.
 - Baseline: packaged editor import dismissal, Mesh controls, export and reopen pass.

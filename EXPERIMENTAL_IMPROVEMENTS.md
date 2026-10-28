@@ -181,24 +181,55 @@ request receives the complete current file because editable local assets have
 weak validators. Ordinary splat byte ranges, cache validation, gzip and HTTPS
 sharing retain their existing behavior.
 
+### Responsive landing page and 3D preparation
+
+Cold-open an exported tour on desktop, portrait and landscape mobile. The cover,
+description, scene selector, search and settings can appear while the 3D engine
+prepares automatically. Enter and directory Visit buttons wait for the engine;
+choosing another scene does not enter it automatically. Preferences selected
+during preparation apply when it is ready. A failed engine download has a Retry
+action inside the same page, with the existing WebGL guidance where appropriate.
+
+The initial static JavaScript graph is **622,967 bytes / 183,994 gzip**, compared
+with the preceding **3,972,378 / 1,290,112** checkpoint (85.7% less compressed).
+Remaining runtime code still loads automatically. This improves paint ordering
+and UI availability; it does not reduce total runtime download or prove a shorter
+time to full splat detail on the VPS. No artificial network delay was added.
+
+Studio can open and edit numeric settings while its engine prepares. Camera
+capture, scene placement and geometry framing wait for an actual runtime, so a
+click cannot create a bubble or shape at a guessed default location.
+
+### Safe closing while work finishes
+
+Begin importing a picture, then close Studio. Even an otherwise clean project
+offers Save and close, Close without saving and Cancel. Saving waits for the
+authorized import to apply, then reads the current project and hosting settings.
+Cancel returns to editing. A prolonged wait or second X offers Keep waiting,
+Keep editing or explicit discard; it does not leave an unresponsive window.
+Existing Git operations retain their wait-or-edit protection.
+
+Native file operations keep the project folder and source mapping captured when
+they began. A project change or renderer reload cannot silently register their
+result in another tour. Main-process scene queue work survives a renderer reload
+but still respects project replacement and cancellation. Already started disk
+writes are not undone by choosing discard.
+
+### Reliable imported filenames
+
+Choose or drop pictures with spaces, `#`, `%`, literal `%20` or Unicode in their
+names. Import, Save As, export, reopen and browser viewing preserve those disk
+names through URL encoding. Actual URL queries and fragments retain their normal
+meaning. RAD companion metadata follows Spark's URL semantics: encoded names
+work; a raw `#` in metadata is a fragment, not a guessed literal filename. Studio
+does not rewrite original RAD files. Companion traversal and private-file
+references are rejected. See [HOSTING.md](HOSTING.md) for the naming details.
+
 ## Work in progress
 
 - Check the next combined feature-set CI run and fix genuine failures.
-- Audit startup loading and the transition from a coarse scene to useful detail;
-  any title-screen preparation must stay bounded and avoid audio or collision
-  work before it is needed.
-- Assess allowing the landing page/configuration to appear before the remaining
-  Spark module evaluation, and overlapping panorama loading with RAD metadata.
-  These are audited candidates, not implemented changes or measured VPS gains.
-- Integrate pending renderer imports with Close. A separate native audit found
-  that a clean project can close during a held image copy without a prompt.
-  Save/Open serialization is verified; Close needs its own bounded wait and
-  fresh saved-state checks, plus immutable main-process asset ownership.
-- Check chooser-imported filenames containing URL punctuation such as `#`.
-  Direct source resolution reproduces truncation of `Photo #1.png`, a URI error
-  for `100%.png`, and misresolution of literal `%20`. A chooser-only encoding
-  change is insufficient because export also decodes and reconstructs refs.
-  Compatible Save As/export and RAD companion handling remain follow-ups.
+- Assess overlapping panorama loading with RAD metadata only if it materially
+  helps without moving memory or failure handling outside existing bounds.
 - Continue reviewing consistency, incomplete features and avoidable work.
 
 ## Verified local checkpoint
@@ -236,8 +267,14 @@ changes the test only, not the packaged application.
 
 The complete `17b242f` source CI then passed: run `40635900700`, including the
 Windows package, all native/browser checks and uploaded build artifacts. The
-next combined deferred-physics/import/content batch adds three focused CI
-checks. Its result is a separate verification target.
+next combined deferred-physics/import/content batch added three focused CI
+checks. Run `40641161367` then exposed the bubble occlusion fixture assigning
+a synthetic collision world without awaiting the newly deferred engine. Real
+collider creation already awaits it. Initializing physics before that mock
+preserves every occlusion assertion and the exact failed browser check passes.
+Its isolated Vite scan also avoids crawling generated test-site HTML. A new
+startup timing assertion waits for React's callback wiring before wrapping it;
+all original rendered-readiness assertions remain in place.
 
 ## Validation and handoff
 
@@ -322,3 +359,36 @@ this compiled checkpoint must state whether they affect application behavior.
   external origins blocked, delayed collision data, no Node on PATH and normal
   shutdown at `test-output/network performance 1793166963756/`.
 - Stop overnight work around the review target and leave this branch unmerged.
+- Startup/Close/filename checkpoint: **414 unit/integration tests passed**.
+  Two strict expected strings were updated for canonical encoded branding URLs
+  and the earlier private-file rejection; asset-copy and protection assertions
+  remain. Log: `test-output/unit-experimental-startup-close-verified-2026-10-28.log`.
+- Portable warm-up beneath `/museum/`, blocked external origins, three layouts,
+  real failed-import Retry, preference changes during preparation and retained
+  explicit scene choice pass at `test-output/runtime warmup 1793169374690/`.
+  No GPU context or WASM work occurs while the actual runtime request is held.
+  Stage cancellation, StrictMode, one renderer and exact disposal pass at
+  `test-output/stage lifecycle 1793169595431/`.
+- Fresh missing-WebGL, authored-entry cover/readiness, deferred-physics retry,
+  precision and full stereo WebXR checks pass. Logs include
+  `test-output/startup presentation 1793169531579/`,
+  `test-output/extended-precision-1793169415507/` and
+  `test-output/xr head collision 1793169584656/`.
+- Native Close passes six scenarios, including held read/apply, source-map
+  persistence, Cancel, repeat X recovery, failed/canceled imports, discard and
+  ordinary exit at `test-output/editor-close-1793169383077/`.
+  Runtime-held numeric editing, no phantom placement and normal placement after
+  warm-up pass at `test-output/editor-warmup-1793169697734/`.
+- Actual chooser imports, encoded RAD/RADC loading in Spark, Save As mappings,
+  portable export/reopen and offline media/custom HTML pass at
+  `test-output/asset-filenames-1793169811968/`.
+  Held chooser/copy/preset rejection after project replacement, same-root late
+  registration rollback, generic renderer reload and surviving/canceled queued
+  RAD jobs pass at `test-output/import-ownership-1793169895574/`.
+- Follow-up native ownership checks additionally block direct Save/Save As while
+  content is pending. A canceled RAD job held during its source-map write now
+  rolls back only its own prefix, preserving previous registrations. These pass
+  at `test-output/import-ownership-1793170111562/`; the focused asset/import/RAD
+  unit checks also pass (9/9). Main-process-only follow-up; renderer build is
+  unchanged. Fresh complete native authoring workflow passes at
+  `test-output/editor-workflow-1793169795659/`.

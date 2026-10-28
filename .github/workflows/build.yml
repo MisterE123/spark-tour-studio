@@ -136,6 +136,10 @@ jobs:
         run: node scripts/adaptive-detail-check.mjs
       - name: Check authored entry paging and first-frame loading presentation
         run: node scripts/startup-presentation-check.mjs
+      - name: Check responsive title paint and retryable local runtime warm-up
+        run: node scripts/runtime-warmup-check.mjs
+      - name: Check runtime warm-up cancellation and one renderer lifecycle
+        run: node scripts/stage-lifecycle-check.mjs
       - name: Check deferred physics, offline chunks and same-session retry
         run: node scripts/lazy-physics-check.mjs
       - name: Check story keyboard focus and validated local content actions
@@ -150,6 +154,22 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/editor-imports-check.mjs
+      - name: Check close waits for authorized imports or permits explicit discard
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/editor-close-check.mjs
+      - name: Check editing stays safe while the 3D runtime prepares
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/editor-warmup-check.mjs
+      - name: Check encoded asset filenames through import, export and reopen
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/asset-filenames-check.mjs
+      - name: Check pending native imports retain their project ownership
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/import-ownership-check.mjs
       - name: Check Studio build identity stays out of exported viewer dependencies
         env:
           SPARK_PACKAGED: '1'

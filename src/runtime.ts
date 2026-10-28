@@ -177,8 +177,15 @@ export class TourRuntime {
    if(!s.source)throw new Error('Choose a RAD file or URL for this scene.');
    let streamError:unknown;const mesh=new SplatMesh({url:sceneUrl(s,this.hosting,this.base),paged:true});this.mesh=mesh;mesh.maxSh=this.performanceSettings.maxSh;
    if(mesh.paged){const paged=mesh.paged,decode=paged.fetchDecodeChunk.bind(paged);let reported=false;paged.fetchDecodeChunk=async chunk=>{try{const data=await decode(chunk),repaired=repairLodBounds(data.extra?.lodTree);if(repaired){if(!mesh.userData.lodBoundsRepairs)console.warn('[Spark Tour] Corrected non-finite LoD bounds', {chunk,nodes:repaired});mesh.userData.lodBoundsRepairs=(mesh.userData.lodBoundsRepairs||0)+repaired;}return data;}catch(e){if(!reported&&token===this.generation&&!this.dead){reported=true;streamError=e;paged.abortController.abort();mesh.visible=false;this.report(`Streaming failed: ${String(e)}. Retry the scene.`,true);}throw e;}};}
+   // Fetch/decode an ordinary panorama while RAD metadata is being read. Keep
+   // splat backgrounds sequential so they do not compete with the destination
+   // pager. Observe rejection now, even if metadata fails or this load is retired.
+   const initialBackground=s.background,panorama=initialBackground?.type==='panorama'?this.setBackground(initialBackground).then(()=>({ok:true as const}),error=>({ok:false as const,error})):undefined;
    await mesh.initialized;const rad=await mesh.paged?.getRadMeta();if(token!==this.generation||this.dead)return;if(rad)assertPagedRad(rad.meta);this.jump(viewpoint||s.entry,false,true,true);this.thumbnailPending=undefined;this.content.add(mesh);completed++;progress('Preparing background…');
-   await this.setBackground(this.active?.id===s.id?this.active.background:s.background);if(token!==this.generation||this.dead)return;
+   const background=this.active?.id===s.id?this.active.background:s.background;
+   if(panorama&&background===initialBackground){const result=await panorama;if(!result.ok)throw result.error;}
+   else await this.setBackground(background);
+   if(token!==this.generation||this.dead)return;
    if(s.background?.type&&s.background.type!=='solid')completed++;if(this.editing||this.mode!=='jumps')await this.loadInitialCollider(s.id,token,progress);if(this.active?.collider)completed++;if(token!==this.generation||this.dead)return;progress('Opening scene…');
    if(streamError)throw streamError;this.rebuildHotspots();if(!this.editing)this.audio.setScene(s.audio,this.base);this.jump(viewpoint||s.entry,false,true);this.report('');const available=s.modes;
    const mode=available.includes(previousMode)?previousMode:available.includes('jumps')?'jumps':available[0];

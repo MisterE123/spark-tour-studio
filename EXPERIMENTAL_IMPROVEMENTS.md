@@ -139,7 +139,7 @@ continues to use the in-world content controls.
 ## Work in progress
 
 - Check the next combined feature-set CI run and fix genuine failures.
-- Complete the broad native/browser verification of this follow-up batch.
+- Finish the combined branch CI verification after the Windows temp-path test fix.
 - Audit startup loading and the transition from a coarse scene to useful detail;
   any title-screen preparation must stay bounded and avoid audio or collision
   work before it is needed.
@@ -174,6 +174,13 @@ CI will validate the combined changes. Broader local checks additionally exposed
 and verified fixes for the asynchronous readiness gap and missing guide update
 described above. No experimental release or merge has been created.
 
+The `c7b682f` run then exposed a Windows temp-path assumption in the new server
+abort test: its stream spy compared an unresolved temporary path with the
+server's canonical path. A disposable Windows junction reproduced the exact
+CI failure; matching canonical paths and asserting that each spy actually ran
+fixed it. Six complete server-suite repeats passed (36/36 checks). This repair
+changes the test only, not the packaged application.
+
 ## Validation and handoff
 
 Latest verified local preview: compiled clean commit
@@ -185,8 +192,9 @@ SHA-256: `c2381e8ed40725911ff0e8f82b14c2f9623edb96275278c85bafd8250f6753b8`.
 Its actual portable executable launches, identifies the compiled branch/commit
 and closes normally. The packaged identity check also confirms visitor code
 does not inherit the Studio's experimental badge. The stable executable and
-main/tag commit remain unchanged. The expanded native editor sweep is still
-running; subsequent checkpoints will record any additional fixes it requires.
+main/tag commit remain unchanged. The expanded native editor sweep has completed:
+all seven checks pass, with logs under
+`test-output/editor-ci-sweep/1793162643805/`.
 
 - Baseline: 347 unit/integration tests pass.
 - Baseline: packaged editor import dismissal, Mesh controls, export and reopen pass.
@@ -216,6 +224,8 @@ running; subsequent checkpoints will record any additional fixes it requires.
 - Fresh native authoring workflow passes conservative cleanup/Undo, busy and
   Preview locks, native collider import, idle settings Undo/Redo and rich-text
   Save/Preview cycles that remain clean without phantom edits.
+- Expanded native/editor sweep: all seven pass (UI polish, tour directory, XR
+  polish, advanced imports, Git editor, GitHub editor and navigation cache).
 - Broad native and browser checks pass for collision authoring/generation,
   paging, walking, mobile layout, branding, WebGL fallback, preset persistence
   and hemisphere backgrounds. Fresh readiness checks pass for certified air,

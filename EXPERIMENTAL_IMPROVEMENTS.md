@@ -184,7 +184,6 @@ sharing retain their existing behavior.
 ## Work in progress
 
 - Check the next combined feature-set CI run and fix genuine failures.
-- Finish the combined branch CI verification after the Windows temp-path test fix.
 - Audit startup loading and the transition from a coarse scene to useful detail;
   any title-screen preparation must stay bounded and avoid audio or collision
   work before it is needed.
@@ -235,13 +234,18 @@ CI failure; matching canonical paths and asserting that each spy actually ran
 fixed it. Six complete server-suite repeats passed (36/36 checks). This repair
 changes the test only, not the packaged application.
 
+The complete `17b242f` source CI then passed: run `40635900700`, including the
+Windows package, all native/browser checks and uploaded build artifacts. The
+next combined deferred-physics/import/content batch adds three focused CI
+checks. Its result is a separate verification target.
+
 ## Validation and handoff
 
 Latest verified local preview: compiled clean commit
-`289c6218aa55b5435b8dc76794b5edf601a20ec3`.
+`c24e179a34721f10392b768c9889acb2aa027cb7`.
 
-`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental 289c6218.exe`  
-SHA-256: `c2381e8ed40725911ff0e8f82b14c2f9623edb96275278c85bafd8250f6753b8`.
+`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental c24e179a.exe`  
+SHA-256: `670bd344d0afc6f588fd43a28aad9f2d3b63a83d4e14f52b0d94f45919ef003c`.
 
 Its actual portable executable launches, identifies the compiled branch/commit
 and closes normally. The packaged identity check also confirms visitor code
@@ -249,6 +253,10 @@ does not inherit the Studio's experimental badge. The stable executable and
 main/tag commit remain unchanged. The expanded native editor sweep has completed:
 all seven checks pass, with logs under
 `test-output/editor-ci-sweep/1793162643805/`.
+The new actual portable launch/About/normal-close check passes at
+`test-output/portable smoke 1793167106880/`; packaged identity and visitor graph
+checks pass at `test-output/studio-build-1793167107054/`. Source commits after
+this compiled checkpoint must state whether they affect application behavior.
 
 - Baseline: 347 unit/integration tests pass.
 - Baseline: packaged editor import dismissal, Mesh controls, export and reopen pass.
@@ -308,4 +316,9 @@ all seven checks pass, with logs under
   preserves its external source mappings and serves the original bytes;
   portable export contains physical copies. The saved-project/export distinction
   and original source files remain intact.
+- Fresh editor workflow guards/Undo/reopen pass at
+  `test-output/editor-workflow-1793166565939/`. The rebuilt real SEA launcher
+  passes cold desktop, Quest-style HTTPS and landscape mobile checks with
+  external origins blocked, delayed collision data, no Node on PATH and normal
+  shutdown at `test-output/network performance 1793166963756/`.
 - Stop overnight work around the review target and leave this branch unmerged.

@@ -8,8 +8,8 @@ import {Button,Field,Vector} from './ui';
 import {IconButton,InspectorSection} from './icons';
 import './collision-editor.css';
 
-interface Props {scene:TourScene;runtime:TourRuntime|null;hosting:Hosting;base:string;disabled:boolean;onChange:(authoring:CollisionAuthoring)=>void;job:CollisionJob;onStatus:(text:string)=>void;showWire:boolean;onWire:(show:boolean)=>void}
-export function CollisionEditor({scene,runtime,hosting,base,disabled,onChange,job,onStatus,showWire,onWire}:Props){
+interface Props {scene:TourScene;runtime:TourRuntime|null;hosting:Hosting;base:string;disabled:boolean;onChange:(authoring:CollisionAuthoring)=>void;job:CollisionJob;onStatus:(text:string)=>void}
+export function CollisionEditor({scene,runtime,hosting,base,disabled,onChange,job,onStatus}:Props){
  const authoring=CollisionAuthoringSchema.parse(scene.collisionAuthoring||{}) as CollisionAuthoring;
  const [selected,setSelected]=useState(authoring.volumes[0]?.id||''),[operation,setOperation]=useState<'add'|'remove'>('add'),[shape,setShape]=useState<'ball'|'box'>('ball'),[gizmo,setGizmo]=useState<'translate'|'rotate'|'scale'>('translate'),[placing,setPlacing]=useState(false);
  const state=useSyncExternalStore(job.subscribe,job.getSnapshot),working=state.working,progress=state.progress,result=state.sceneId===scene.id?state.result:'';
@@ -56,7 +56,6 @@ export function CollisionEditor({scene,runtime,hosting,base,disabled,onChange,jo
     {authoring.format==='glb'&&<p className="muted">Selected surfaces keep their height layers. Perimeter walls and a ceiling enclose the area. Detail and wall height use tour meters.</p>}
    </InspectorSection>
   </fieldset>
-  <label className="check"><input type="checkbox" checked={showWire} onChange={e=>onWire(e.target.checked)}/>Show collision wireframe</label>
   {working&&state.sceneId!==scene.id&&<p className="muted">Generating collision for {state.sceneName}</p>}{progress&&<div role="status" className="collision-progress"><span>{progress.phase}{progress.total?` · ${progress.completed} / ${progress.total}`:''}</span><progress {...(progress.total?{max:progress.total,value:progress.completed}:{})}/></div>}{result&&<p className="collision-result break" role="status">{result}</p>}
   <div className="actions"><Button primary disabled={locked||(authoring.scope==='entire'?!authoring.bounds:!authoring.volumes.some(v=>v.operation==='add'))} onClick={()=>void generate()}>{authoring.format==='glb'?'Generate collision GLB':'Generate paged collision'}</Button>{working&&<Button disabled={!state.cancellable} onClick={job.cancel}>{state.cancelling?'Cancelling…':'Cancel'}</Button>}</div>
  </div>;

@@ -148,6 +148,63 @@ export function clickedWalkingFeet(world,point,exclude,allowed=p=>true,tolerance
  return null;
 }
 
+/** Resolve a controller hit to a nearby standing landing on the same storey. */
+export function teleportWalkingFeet(world,point,normal,exclude,allowed=p=>true,tolerance=.25,searchRadius=.6){
+ if(!world||![point?.x,point?.y,point?.z,normal?.x,normal?.y,normal?.z].every(Number.isFinite))return null;
+ const normalLength=Math.hypot(normal.x,normal.y,normal.z);if(normalLength<1e-6)return null;
+ const n={x:normal.x/normalLength,y:normal.y/normalLength,z:normal.z/normalLength};
+ // The underside of an overhang is not an invitation to select its top floor.
+ if(n.y<-.05)return null;
+ tolerance=Number.isFinite(tolerance)?Math.max(.1,Math.min(.75,tolerance)):.25;
+ searchRadius=Number.isFinite(searchRadius)?Math.max(0,Math.min(.6,searchRadius)):.6;
+ const horizontal=Math.hypot(n.x,n.z),side=n.y<upNormal;
+ if(side&&horizontal<1e-6)return null;
+ const outward=horizontal>1e-6?{x:n.x/horizontal,z:n.z/horizontal}:{x:1,z:0};
+ const seed={x:point.x+(side?outward.x*.015:0),z:point.z+(side?outward.z*.015:0)};
+ const shape=new RAPIER.Capsule(.6,.25);
+ const clearShift=(x,z,floor)=>{
+  const dx=x-seed.x,dz=z-seed.z,length=Math.hypot(dx,dz);if(length<1e-6)return true;
+  // A short adjustment may bridge a normal step, but it must stay on this
+  // side of walls. Point rays tolerate the initial capsule grazing an edge;
+  // requiring a capsule sweep from that invalid starting placement would
+  // reject the very edge corrections this search is intended to provide.
+  for(const y of [point.y+tolerance+.025,Math.max(point.y,floor)+.87]){
+   const hit=world.castRay(new RAPIER.Ray({x:seed.x,y,z:seed.z},{x:dx/length,y:0,z:dz/length}),length,true,undefined,undefined,exclude);
+   if(hit&&hit.timeOfImpact<length-1e-4)return false;
+  }
+  // Nearby means a correction on this continuous piece of ground, not an
+  // accidental jump to an island across a hole beside the selected edge.
+  const samples=Math.max(1,Math.ceil(length/.075));
+  for(let i=0;i<samples;i++){
+   const origin={x:seed.x+dx*i/samples,y:point.y+tolerance,z:seed.z+dz*i/samples};
+   const hit=world.castRayAndGetNormal(new RAPIER.Ray(origin,{x:0,y:-1,z:0}),tolerance*2,true,undefined,undefined,exclude);
+   if(!hit||hit.normal.y<upNormal)return false;
+  }
+  return true;
+ };
+ const at=(x,z)=>{
+  const dx=x-point.x,dz=z-point.z;
+  if(side&&dx*outward.x+dz*outward.z<.01)return null;
+  const origin={x,y:point.y+tolerance,z},hit=world.castRayAndGetNormal(new RAPIER.Ray(origin,{x:0,y:-1,z:0}),tolerance*2,true,undefined,undefined,exclude);
+  if(!hit||hit.normal.y<upNormal)return null;
+  const floor=origin.y-hit.timeOfImpact,clearance=Math.max(.87,.6+.25/hit.normal.y+.02),center={x,y:floor+clearance,z};
+  if(!clearShift(x,z,floor)||!allowed(center)||world.intersectionWithShape(center,rotation,shape,undefined,undefined,exclude))return null;
+  return {x,y:floor+clearance-.87,z};
+ };
+ const exact=at(point.x,point.z);if(exact)return exact;
+ const angle=Math.atan2(outward.z,outward.x);
+ for(const radius of [.1,.2,.35,.5,.6]){
+  if(radius>searchRadius+1e-6)break;
+  // Start in the face's outward direction, then alternate equally close
+  // directions. A controller tremor therefore does not choose arbitrary sides.
+  for(let i=0;i<16;i++){
+   const offset=i===0?0:Math.ceil(i/2)*(i%2?1:-1)*Math.PI/8;
+   const feet=at(point.x+Math.cos(angle+offset)*radius,point.z+Math.sin(angle+offset)*radius);if(feet)return feet;
+  }
+ }
+ return null;
+}
+
 // Search only on mode changes. Keep horizontal position when a safe floor is below it.
 export function nearbyWalkingFeet(world,eye,eyeHeight,exclude,radius=3,allowed=p=>true){
  const shape=new RAPIER.Capsule(.6,.25),rotation={x:0,y:0,z:0,w:1};

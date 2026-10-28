@@ -17,7 +17,7 @@ import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import type { Project,TourScene,Hosting,Mode,Viewpoint,Hotspot,Page,Transform,Vec3,TourDestination,CollisionVolume,SceneLink } from './model';
 import {CollisionSelectionLayer} from './collision-selection';
 import {flyMovement,nearbyFlyPosition} from '../shared/flying.mjs';
-import { WalkingMotor,nearbyWalkingFeet,clickedWalkingFeet,configureWalkingController,normalizeStepHeight,DEFAULT_STEP_HEIGHT } from '../shared/walking.mjs';
+import { WalkingMotor,nearbyWalkingFeet,clickedWalkingFeet,teleportWalkingFeet,configureWalkingController,normalizeStepHeight,DEFAULT_STEP_HEIGHT } from '../shared/walking.mjs';
 import { WalkCamera } from '../shared/walk-camera.mjs';
 import {collisionVertices} from '../shared/collision-vertices.mjs';
 import { sceneUrl,colliderUrl } from '../shared/project.mjs';
@@ -73,7 +73,7 @@ export class TourRuntime {
  private colliderGeneration=0;private colliderSource='';private colliderVisible=false;private transformKey='';private colliderTransformKey='';colliderTransition:Promise<void>=Promise.resolve();private xrContent=new XRContent();
  private initialColliderLoad?:{generation:number;sceneId:string;promise:Promise<void>};private sceneResourcesReady=false;private colliderLoading=false;private colliderFailure='';private navigationFailure=false;private statusScope:'scene'|'navigation'|'xr'='scene';
  private get collisionMovementBlocked(){return !this.editing&&this.mode!=='jumps'&&!!this.active?.collider&&(this.colliderLoading||!this.world);}
- private pagedCollider?:PagedCollider;private colliderAbort?:AbortController;private modeRequest=0;private preparingMode=false;private modeTransition:Promise<void>=Promise.resolve();private fallbackNavigationDirty=false;private pagedNavigationAligned=true;private teleportPreparation='';private teleportRequest=0;private teleportLease?:{release():void};private teleportAimPending=false;private teleportAim?:{origin:THREE.Vector3;direction:THREE.Vector3;point?:THREE.Vector3;slope:boolean;retryAt:number};
+ private pagedCollider?:PagedCollider;private colliderAbort?:AbortController;private modeRequest=0;private preparingMode=false;private modeTransition:Promise<void>=Promise.resolve();private fallbackNavigationDirty=false;private pagedNavigationAligned=true;private teleportPreparation='';private teleportRequest=0;private teleportLease?:{release():void};private teleportAimPending=false;private teleportAim?:{origin:THREE.Vector3;direction:THREE.Vector3;point?:THREE.Vector3;landing?:THREE.Vector3;state:'pending'|'ready'|'invalid';retryAt:number};
  private headSafetyTrackingCleanup?:()=>void;
  constructor(readonly host:HTMLElement){
   this.cleanup.push(()=>this.headSafetyTrackingCleanup?.());
@@ -473,23 +473,40 @@ export class TourRuntime {
  private triggerStart(controller:THREE.XRTargetRaySpace){if(this.xrInputSuspended)return;this.audio.unlock();this.navigator?.takeControl();this.controllerRay(controller);const hit=this.hitUI();this.held.set(controller,hit||null);if(!hit&&this.mode!=='jumps'&&!this.status&&!this.blocked&&!this.collisionMovementBlocked){this.teleportController=controller;this.updateTeleport();}}
  private triggerEnd(controller:THREE.XRTargetRaySpace){if(this.xrInputSuspended||!this.held.has(controller))return;const pressed=this.held.get(controller);this.held.delete(controller);this.controllerRay(controller);if(pressed&&this.hitUI()===pressed){this.activate(pressed);}else if(!pressed&&this.teleportController===controller&&!this.status){this.updateTeleport();if(this.teleportPoint){this.routes.cancel();this.placeFeet(this.teleportPoint);this.currentViewpoint='';this.onViewpoint('');this.fadeUntil=performance.now()+220;}}this.cancelTeleport();}
  private updateTeleport(){if(!this.teleportController||this.mode==='jumps')return;this.controllerRay(this.teleportController);this.teleportPoint=undefined;this.teleportRing.visible=false;if(this.collisionMovementBlocked||this.hitUI()||this.ray.ray.direction.y>-.06){this.teleportAim=undefined;return;}if(this.mode==='explore'&&this.pagedCollider){this.updatePagedTeleport(this.teleportController,this.pagedCollider,this.ray.ray.clone());return;}const origin=this.ray.ray.origin,direction=this.ray.ray.direction;let point:THREE.Vector3|undefined,valid=true;
-  if(this.mode==='explore'&&this.world){const hit=this.world.castRayAndGetNormal(new RAPIER.Ray(origin,direction),25,true,undefined,undefined,this.capsule);if(hit){point=this.ray.ray.at(hit.timeOfImpact,new THREE.Vector3());valid=hit.normal.y>=Math.SQRT1_2&&!this.world.intersectionWithShape({x:point.x,y:point.y+.87,z:point.z},{x:0,y:0,z:0,w:1},new RAPIER.Capsule(.58,.24),undefined,undefined,this.capsule);}}else if(this.mesh){const hit=this.ray.intersectObject(this.mesh)[0];if(hit&&hit.distance<25)point=hit.point;}
+  if(this.mode==='explore'&&this.world){const hit=this.world.castRayAndGetNormal(new RAPIER.Ray(origin,direction),25,true,undefined,undefined,this.capsule);if(hit){point=this.ray.ray.at(hit.timeOfImpact,new THREE.Vector3());const feet=teleportWalkingFeet(this.world,point,hit.normal,this.capsule,p=>this.validWalkingPlacement(p),Math.max(.25,this.stepHeight),.6);valid=!!feet;if(feet)point=v([feet.x,feet.y,feet.z]);}}else if(this.mesh){const hit=this.ray.intersectObject(this.mesh)[0];if(hit&&hit.distance<25)point=hit.point;}
   if(this.pagedCollider){
    if(!point&&this.mesh){const hit=this.ray.intersectObject(this.mesh)[0];if(hit&&hit.distance<25){point=hit.point;valid=false;}}
    if(point){const paged=this.pagedCollider,center=point.clone().add(new THREE.Vector3(0,.87,0)),allowed=this.allowedPosition(center,.6,.24);valid=valid&&allowed;if(!allowed){const key=this.generation+':'+paged.toGeneration(point).toArray().map(value=>Math.floor(value*2)).join(',');if(key!==this.teleportPreparation){this.teleportPreparation=key;const controller=this.teleportController,request=++this.teleportRequest;this.focusCollision(paged);void paged.prepare(point,4).then(lease=>{if(request!==this.teleportRequest||controller!==this.teleportController||paged!==this.pagedCollider){this.focusCollision(paged);lease.release();return;}this.focusCollision(paged);this.teleportLease?.release();this.teleportLease=lease;this.updateTeleport();}).catch(()=>{}).finally(()=>{if(this.teleportPreparation===key)this.teleportPreparation='';});}}}
   }
   if(point){valid=valid&&this.clearXRFeetPosition(point,this.mode==='fly'?this.flyRadius:this.xrHeadRadius);this.teleportRing.visible=true;this.teleportRing.position.copy(point).add(new THREE.Vector3(0,.04*this.xrUnit,0));this.teleportRing.scale.setScalar(this.xrUnit);(this.teleportRing.material as THREE.MeshBasicMaterial).color.set(valid?0x9fffc8:0xff665e);if(valid)this.teleportPoint=point;}}
+ private showTeleport(point:THREE.Vector3,state:'pending'|'ready'|'invalid'){
+  this.teleportRing.visible=true;this.teleportRing.position.copy(point).add(new THREE.Vector3(0,.04*this.xrUnit,0));this.teleportRing.scale.setScalar(this.xrUnit);
+  (this.teleportRing.material as THREE.MeshBasicMaterial).color.set(state==='ready'?0x9fffc8:state==='pending'?0xc2d9e4:0xff665e);
+  if(state==='ready')this.teleportPoint=point;
+ }
+ private validTeleportLanding(feet:THREE.Vector3){
+  const center={x:feet.x,y:feet.y+.87,z:feet.z};return !!this.world&&this.validWalkingPlacement(center)&&!this.world.intersectionWithShape(center,{x:0,y:0,z:0,w:1},new RAPIER.Capsule(.6,.25),undefined,undefined,this.capsule);
+ }
  private updatePagedTeleport(controller:THREE.XRTargetRaySpace,paged:PagedCollider,ray:THREE.Ray){
   // Rapier closes cold page seams for movement. Aim against the authoritative
   // streamed boundary instead, so its temporary cap cannot hide a distant floor.
   // Ignore normal hand tremor while a cold page loads. Larger aim changes create
   // a new request identity, so a late floor can never replace a deliberate aim.
-  if(!this.teleportAim||this.teleportAim.origin.distanceToSquared(ray.origin)>.0025||this.teleportAim.direction.dot(ray.direction)<Math.cos(Math.PI/240))this.teleportAim={origin:ray.origin.clone(),direction:ray.direction.clone(),slope:false,retryAt:0};const aim=this.teleportAim;
-  if(aim.point){const center=aim.point.clone().add(new THREE.Vector3(0,.87,0)),valid=aim.slope&&this.validWalkingPlacement(center)&&!!this.world&&!this.world.intersectionWithShape(center,{x:0,y:0,z:0,w:1},new RAPIER.Capsule(.58,.24),undefined,undefined,this.capsule);this.teleportRing.visible=true;this.teleportRing.position.copy(aim.point).add(new THREE.Vector3(0,.04*this.xrUnit,0));this.teleportRing.scale.setScalar(this.xrUnit);(this.teleportRing.material as THREE.MeshBasicMaterial).color.set(valid?0x9fffc8:0xff665e);if(valid)this.teleportPoint=aim.point;}
+  const previous=this.teleportAim;
+  // Retain a verified landing through small release tremor only when the new
+  // controller ray still has a clear, known path. Proximity alone could keep
+  // a green destination behind a newly aimed post or wall.
+  const nearLanding=previous?.state==='ready'&&previous.point&&previous.origin.distanceToSquared(ray.origin)<=.01&&previous.direction.dot(ray.direction)>=Math.cos(Math.PI/90)&&ray.distanceSqToPoint(previous.point)<=.04;
+  const beforeSurface=nearLanding?ray.at(Math.max(0,ray.direction.dot(previous!.point!.clone().sub(ray.origin))-.03),new THREE.Vector3()):undefined;
+  const steadyLanding=!!beforeSurface&&paged.probeHeadMotion(ray.origin,beforeSurface,.003)==='clear';
+  if(!previous||(previous.state==='ready'?!steadyLanding:previous.origin.distanceToSquared(ray.origin)>.0025||previous.direction.dot(ray.direction)<Math.cos(Math.PI/240)))this.teleportAim={origin:ray.origin.clone(),direction:ray.direction.clone(),state:'pending',retryAt:0};const aim=this.teleportAim!;
+  if(aim.point){const valid=aim.state==='ready'&&!!aim.landing&&this.validTeleportLanding(aim.landing);this.showTeleport(valid?aim.landing!:aim.point,valid?'ready':aim.state==='pending'?'pending':'invalid');}
   if(this.teleportAimPending||performance.now()<aim.retryAt)return;this.teleportAimPending=true;const request=++this.teleportRequest,generation=this.generation,current=()=>!this.dead&&request===this.teleportRequest&&generation===this.generation&&this.teleportController===controller&&this.pagedCollider===paged&&this.mode==='explore'&&this.teleportAim===aim;
   this.focusCollision(paged);void(async()=>{let lease:{release():void}|undefined;
-   try{const hit=await paged.raycast(ray,current,{maxDistance:25,retryDelay:3000});if(!current())return;aim.retryAt=Infinity;if(!hit)return;aim.point=hit.point;aim.slope=hit.normal.y>=Math.SQRT1_2;if(!aim.slope)return;lease=await paged.prepare(hit.point,4);if(!current())return;this.focusCollision(paged);this.teleportLease?.release();this.teleportLease=lease;lease=undefined;const center=hit.point.clone().add(new THREE.Vector3(0,.87,0));if(!paged.allows(center,.6,.24))aim.retryAt=performance.now()+3000;
-   }catch(error){if(current()){aim.retryAt=performance.now()+3000;this.report('Nearby navigation data: '+String(error),true,'navigation');}}
+   try{const hit=await paged.raycast(ray,current,{maxDistance:25,retryDelay:3000});if(!current())return;aim.retryAt=Infinity;if(!hit){aim.state='invalid';return;}aim.point=hit.point;aim.state='pending';this.showTeleport(hit.point,'pending');lease=await paged.prepare(hit.point,4);if(!current())return;this.focusCollision(paged);this.teleportLease?.release();this.teleportLease=lease;lease=undefined;
+    const tolerance=Math.max(.25,this.stepHeight,paged.manifest.detail*paged.group.getWorldScale(new THREE.Vector3()).x+.05),feet=this.world&&teleportWalkingFeet(this.world,hit.point,hit.normal,this.capsule,p=>this.validWalkingPlacement(p),tolerance,.6);
+    aim.landing=feet?v([feet.x,feet.y,feet.z]):undefined;aim.state=aim.landing?'ready':'invalid';if(!feet)aim.retryAt=performance.now()+3000;
+   }catch(error){if(current()){aim.state='pending';aim.landing=undefined;aim.retryAt=performance.now()+3000;this.report('Nearby navigation data: '+String(error),true,'navigation');}}
    finally{this.focusCollision(paged);lease?.release();this.teleportAimPending=false;if(current())this.updateTeleport();}
   })();
  }

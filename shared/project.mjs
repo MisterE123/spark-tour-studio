@@ -1,6 +1,6 @@
 import {NavigationSettingsSchema} from './navigation-settings.mjs';
 import {BrandingSchema,brandingReferences,validateBrandingUrls} from './branding.mjs';
-import {normalizeBubbleContent,usedContent} from './authoring.mjs';
+import {normalizeBubbleContent,usedContent,generatedContentId} from './authoring.mjs';
 import {BubbleSettingsSchema,SceneBubbleSettingsSchema} from './bubbles.mjs';
 import {AppearanceSchema} from './appearance.mjs';
 import { z } from 'zod';
@@ -57,7 +57,7 @@ export function colliderUrl(scene,hosting,base){return new URL(scene.collider,ne
 export function collisionReference(source,hosting={}){if(!source)return '';const root='https://spark-tour.local/',url=new URL(source,new URL(hosting.collisionBaseUrl||'./',root));return url.origin===new URL(root).origin?decodeURIComponent(url.pathname.slice(1)):url.href;}
 // Resolve splat delivery exactly as the viewer does, independently of app/media URLs.
 export function splatReference(source,hosting={},override=false){if(!source)return '';const root='https://spark-tour.local/';const url=new URL(source,override?root:new URL(hosting.assetBaseUrl||'./',root));return url.origin===new URL(root).origin?decodeURIComponent(url.pathname.slice(1)):url.href;}
-export function allReferences(p,hosting={}){return [...brandingReferences(p),p.cover,...p.scenes.flatMap(s=>[splatReference(hosting.sceneUrls?.[s.id]||s.source,hosting,!!hosting.sceneUrls?.[s.id]),s.background?.type==='splat'?splatReference(s.background.source,hosting):s.background?.type==='panorama'?s.background.source:'',collisionReference(s.collider,hosting),s.thumbnailMode==='starting-view'?'':s.thumbnail,s.audio?.source,...s.viewpoints.flatMap(v=>[v.audio?.source,...(v.extendedDescription?richTextReferences(v.extendedDescription.richText).filter(r=>r.kind==='image'||(!/^https?:/i.test(r.ref)&&!r.ref.startsWith('#'))).map(r=>r.ref):[])])]),...usedContent(p).flatMap(pg=>pg.html?[pg.html]:pg.blocks.flatMap(b=>b.type==='text'?(b.richText?richTextReferences(b.richText).filter(r=>r.kind==='image'||(!/^https?:/i.test(r.ref)&&!r.ref.startsWith('#'))).map(r=>r.ref):[]):b.type==='image'||!/^https?:/i.test(b.url)?[b.url]:[]))].filter(Boolean);}
+export function allReferences(p,hosting={}){return [...brandingReferences(p),p.cover,...p.scenes.flatMap(s=>[splatReference(hosting.sceneUrls?.[s.id]||s.source,hosting,!!hosting.sceneUrls?.[s.id]),s.background?.type==='splat'?splatReference(s.background.source,hosting):s.background?.type==='panorama'?s.background.source:'',collisionReference(s.collider,hosting),s.thumbnailMode==='starting-view'?'':s.thumbnail,s.audio?.source,...s.viewpoints.flatMap(v=>[v.audio?.source,...(v.extendedDescription?richTextReferences(v.extendedDescription.richText).filter(r=>r.kind==='image'||(!/^https?:/i.test(r.ref)&&!r.ref.startsWith('#'))).map(r=>r.ref):[])])]),...usedContent(p).flatMap(pg=>pg.html?[pg.html]:pg.blocks.flatMap(b=>b.type==='text'?(b.richText?richTextReferences(b.richText).filter(r=>r.kind==='image'||(!/^https?:/i.test(r.ref)&&!r.ref.startsWith('#'))).map(r=>r.ref):[]):b.type==='image'||!/^https?:/i.test(b.url)?[b.url]:[]))].filter(ref=>ref&&!generatedContentId(p,ref));}
 export function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 export function renderPage(page){
  const esc=escapeHtml;

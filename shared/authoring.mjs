@@ -1,9 +1,44 @@
+import {richTextReferences} from './rich-text.mjs';
+
+// Only generated pages have a predictable project-relative address. Custom
+// HTML stays opaque: its scripts and links are not interpreted as tour actions.
+export function generatedContentId(project,reference){
+ if(typeof reference!=='string')return;
+ const match=/^(?:\.\/)?pages\/([^/?#]+)\.html(?:[?#].*)?$/.exec(reference);if(!match)return;
+ let id;try{id=decodeURIComponent(match[1]);}catch{return;}
+ if(!/^[a-zA-Z0-9_-]+$/.test(id))return;
+ return project.pages.some(page=>page.id===id&&!page.html)?id:undefined;
+}
+function richLinks(value){return value?richTextReferences(value).filter(ref=>ref.kind==='link').map(ref=>ref.ref):[];}
+function contentLinks(page){return page.html?[]:page.blocks.flatMap(block=>block.type==='text'?richLinks(block.richText):block.type==='link'||block.type==='embed'?[block.url]:[]);}
+function contentRoots(project){return project.scenes.flatMap(scene=>[
+ ...scene.hotspots.filter(bubble=>bubble.kind==='page').map(bubble=>bubble.target),
+ ...scene.viewpoints.flatMap(view=>richLinks(view.extendedDescription?.richText).map(ref=>generatedContentId(project,ref)))
+ ]).filter(Boolean);}
+function reachableContent(project,roots){
+ const pages=new Map(project.pages.map(page=>[page.id,page])),seen=new Set(),pending=[...roots];
+ while(pending.length){const id=pending.pop(),page=pages.get(id);if(!page||seen.has(id))continue;seen.add(id);for(const ref of contentLinks(page)){const next=generatedContentId(project,ref);if(next&&!seen.has(next))pending.push(next);}}
+ return seen;
+}
+function pruneContent(project,candidates){
+ // Keep unrelated legacy content, including its links into candidate pages.
+ // Deleting authoring records must never delete files from the project folder.
+ const keep=reachableContent(project,[...contentRoots(project),...project.pages.filter(page=>!candidates.has(page.id)).map(page=>page.id)]);
+ // Retained local HTML may contain ordinary links into generated pages. It is
+ // safer to retain records than guess at dependencies hidden in HTML/scripts.
+ const opaqueLink=ref=>{if(!ref||/^https?:\/\//i.test(ref)||ref.startsWith('#')||generatedContentId(project,ref))return false;try{return /\.html?$/i.test(decodeURIComponent(ref.split(/[?#]/)[0]));}catch{return true;}};
+ if(project.pages.some(page=>keep.has(page.id)&&(page.html||contentLinks(page).some(opaqueLink)))||project.scenes.some(scene=>scene.viewpoints.some(view=>richLinks(view.extendedDescription?.richText).some(opaqueLink))))return;
+ project.pages=project.pages.filter(page=>!candidates.has(page.id)||keep.has(page.id));
+}
 // Pure authoring operations keep IDs and inbound links consistent and undoable.
 export function deleteScene(project,id){
+ const deleted=project.scenes.find(scene=>scene.id===id);if(!deleted)return;
+ const candidates=new Set(deleted.hotspots.filter(bubble=>bubble.kind==='page').map(bubble=>bubble.target));
  project.scenes=project.scenes.filter(s=>s.id!==id);
  for(const scene of project.scenes)scene.hotspots=scene.hotspots.filter(h=>!(h.kind==='scene'&&h.target===id));
  for(const s of project.scenes)for(const v of s.viewpoints)if(v.extendedDescription)v.extendedDescription.links=v.extendedDescription.links.filter(link=>link.sceneId!==id);
  if(project.startScene===id)project.startScene=project.scenes[0]?.id||'';
+ pruneContent(project,candidates);
 }
 export function deleteViewpoint(project,sceneId,id){
  const scene=project.scenes.find(s=>s.id===sceneId);if(!scene||scene.viewpoints.length<2)return;
@@ -28,7 +63,7 @@ export function addContentBubble(project,sceneId,id,position){
 export function removeBubble(project,sceneId,id){
  const scene=project.scenes.find(s=>s.id===sceneId),bubble=scene?.hotspots.find(h=>h.id===id);if(!scene||!bubble)return;
  scene.hotspots=scene.hotspots.filter(h=>h.id!==id);
- if(bubble.kind==='page'&&!project.scenes.some(s=>s.hotspots.some(h=>h.kind==='page'&&h.target===bubble.target)))project.pages=project.pages.filter(p=>p.id!==bubble.target);
+ if(bubble.kind==='page')pruneContent(project,new Set([bubble.target]));
 }
 
 export function renameBubble(project,sceneId,id,label){
@@ -53,7 +88,7 @@ export function normalizeBubbleContent(project){
  }
  return project;
 }
-export function usedContent(project){const targets=new Set(project.scenes.flatMap(s=>s.hotspots.filter(h=>h.kind==='page').map(h=>h.target)));return project.pages.filter(p=>targets.has(p.id));}
+export function usedContent(project){const targets=reachableContent(project,contentRoots(project));return project.pages.filter(page=>targets.has(page.id));}
 
 // A conversion result only commits after it is complete. Re-import changes the
 // source on the current scene object, so edits made during conversion survive.

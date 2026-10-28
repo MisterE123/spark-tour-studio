@@ -228,8 +228,8 @@ references are rejected. See [HOSTING.md](HOSTING.md) for the naming details.
 ## Work in progress
 
 - Check the next combined feature-set CI run and fix genuine failures.
-- Assess overlapping panorama loading with RAD metadata only if it materially
-  helps without moving memory or failure handling outside existing bounds.
+- Panorama loading overlap with RAD metadata is now under source verification;
+  it is not yet included in the current packaged preview.
 - Continue reviewing consistency, incomplete features and avoidable work.
 
 ## Verified local checkpoint
@@ -275,6 +275,15 @@ preserves every occlusion assertion and the exact failed browser check passes.
 Its isolated Vite scan also avoids crawling generated test-site HTML. A new
 startup timing assertion waits for React's callback wiring before wrapping it;
 all original rendered-readiness assertions remain in place.
+
+Run `40647023148` reached all 414 unit tests and failed one new companion test
+that compared a canonical file path with the runner's short temp-directory
+spelling (`runneradmin` versus `RUNNER~1`). The source helper correctly returns
+the canonical path. Comparing both canonical forms repairs the test. A Windows
+junction reproduces the original mismatch; three complete filename-suite runs
+through that alias pass at
+`test-output/companion-canonical-ci-repair-1793171984714/`. This correction changes
+tests and documentation only; the verified `ce30c048` application is unchanged.
 
 ## Validation and handoff
 

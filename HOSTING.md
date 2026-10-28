@@ -10,6 +10,8 @@ RAD/RADC files, collision tiles, binary models, images, audio, video and byte-ra
 
 Local files use `Cache-Control: no-cache`, an ETag and Last-Modified. A repeat visit can reuse an unchanged cached body after a small `304 Not Modified` validation response. `no-cache` requires checking freshness; it does not mean every unchanged file must be downloaded again. Editing configuration or replacing a local file changes its validator, so the next validation receives the updated body. There is no long-lived immutable cache policy on editable project files.
 
+Local validators are weak. Requests with `If-Range` receive the full current file rather than appending bytes to an unverified older download. Ordinary byte-range streaming retains `206 Partial Content`; normal cache validation can still return `304`.
+
 Existing exported launchers need to be replaced by a newly built launcher to receive local server changes. Uploading an exported website to a VPS uses that VPS's HTTP configuration instead.
 
 ## VPS and static hosting

@@ -20,7 +20,10 @@ async function fileResponse(req,res,root,relative){
   const extension=path.extname(real).toLowerCase(),canCompress=stat.size>=1024&&compressibleExtensions.has(extension),identity=crypto.createHash('sha256').update(real).digest('hex').slice(0,16),etag=`W/"${identity}-${stat.size.toString(16)}-${Math.trunc(stat.mtimeMs*1000).toString(16)}"`;
   const headers={'Content-Type':types[extension]||'application/octet-stream','Accept-Ranges':'bytes','Cache-Control':'no-cache','X-Content-Type-Options':'nosniff',ETag:etag,'Last-Modified':stat.mtime.toUTCString()};if(canCompress)headers.Vary='Accept-Encoding';
   if(notModified(req,etag,stat.mtimeMs)){res.writeHead(304,headers).end();return;}
-  let range;try{range=rangeFor(req.headers.range,stat.size);}catch{res.writeHead(416,{'Content-Range':`bytes */${stat.size}`}).end();return;}
+  // Stat ETags are weak, and editable files cannot guarantee a strong date
+  // validator. Never join a conditional resume to an unproven older body.
+  const rangeHeader=req.headers['if-range']===undefined?req.headers.range:undefined;
+  let range;try{range=rangeFor(rangeHeader,stat.size);}catch{res.writeHead(416,{'Content-Range':`bytes */${stat.size}`}).end();return;}
   // Byte ranges always refer to original file offsets. RAD/RADC, collision data
   // and already compressed media never enter the text compression pipeline.
   const gzip=!range&&canCompress&&acceptsGzip(req.headers['accept-encoding']);

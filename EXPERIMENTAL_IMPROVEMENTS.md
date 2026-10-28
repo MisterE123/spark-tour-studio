@@ -72,6 +72,13 @@ first frame prepares. Scene links prepare their destination before it is painted
 Resource availability is separate from user-interaction readiness, avoiding a
 race that initially interfered with precision restoration during review.
 
+The broader sweep also found a short false-ready interval during asynchronous
+walking preparation and a missing parent UI notification after the cover closed.
+Readiness now requires completed resource preparation and a displayed first
+view. Independent loading subscribers update the cover, optional tour guide and
+movement help together. Start with **Show me around** on desktop and mobile:
+the guide should appear when preparation ends without opening Settings first.
+
 ### Identifiable experimental Studio builds
 
 The Studio header has a small **Experimental** badge. **Help → About & licenses**
@@ -81,13 +88,64 @@ Exported visitor code does not contain the badge or experimental branch details.
 `experimental-release/` folder with **Experimental** and a commit identifier in
 the executable name. Publishing is disabled and the stable release stays intact.
 
+### Faster local website delivery
+
+Export a fresh tour and use its launcher to share with a phone or Quest on Wi-Fi.
+Application text now streams with gzip when supported; an unchanged repeat
+request can validate with a zero-body `304` response. In the measured build,
+the shared JavaScript response fell from **8,270,888 to 2,923,284 bytes (64.7%)**.
+This reduces application transfer, not RAD chunk size or GPU work. Loopback
+compression adds CPU time; actual Wi-Fi speedup still needs device testing.
+
+Range responses and binary splat/collision/media files preserve original byte
+offsets. Editable files still revalidate; configuration edits are not hidden by
+a long-lived cache. Validators distinguish different project roots even when
+files have identical sizes and timestamps. Existing exported launchers need to
+be replaced to receive this behavior. [HOSTING.md](HOSTING.md) covers VPS
+compression separately; this change does not reconfigure the hosted VPS.
+
+### Safer scene cleanup and Preview authoring
+
+Delete a scene with information bubbles, then Undo. Its unused content records
+are removed while shared content, view-linked stories and unrelated legacy
+records remain. Undo restores the exact authoring data. No source files are
+deleted. Generated-page links in structured stories and view descriptions now
+carry their dependent pages and media into portable or referenced exports,
+including linked chains and cycles. Custom HTML/scripts remain opaque; cleanup
+conservatively retains content when it could contain untracked local links.
+
+In Preview, scene/view/bubble fields and destructive authoring actions are
+disabled, while visitor navigation and inspection remain available. A pending
+save or collision job also protects authoring and Undo. Delayed placement
+callbacks cannot add annotations after switching to Preview. Returning to Edit
+restores controls; opening another project starts in Edit. Native import/job
+results can still commit successfully. Idle settings inspector tabs retain
+Undo/Redo.
+
+### Keyboard-friendly information stories
+
+Open an information bubble on desktop. Focus enters its Close button; Tab and
+Shift-Tab stay within the story, including a scrollable content region and its
+links. Arrow keys scroll that region. Escape closes and restores the opener
+when it still exists. Keys used while a viewer overlay is blocking navigation
+do not move or take control of the authored view behind it. Local HTML actions
+must name a valid scene and, when supplied, a viewpoint in that scene.
+
+Embedded documents handle their own keyboard events, so Escape inside a
+sandboxed third-party iframe cannot always reach the viewer. The visible Close
+button remains available. This is a desktop browser/Studio improvement; XR
+continues to use the in-world content controls.
+
 ## Work in progress
 
-- Check the feature-set CI run after pushing the verified changes.
-- Review scene-deletion content cleanup and consistent busy/preview safeguards.
+- Check the next combined feature-set CI run and fix genuine failures.
+- Complete the broad native/browser verification of this follow-up batch.
 - Audit startup loading and the transition from a coarse scene to useful detail;
   any title-screen preparation must stay bounded and avoid audio or collision
   work before it is needed.
+- Assess deferring the eagerly compiled Rapier engine: the isolated physics
+  bundle is about 4.33 MB raw / 1.64 MB gzip of the initial shared application
+  payload. This is an audited candidate, not an implemented saving yet.
 - Continue reviewing consistency, incomplete features and avoidable work.
 
 ## Verified local checkpoint
@@ -105,9 +163,16 @@ unchanged (SHA-256 `c0cde256a9a0c0fea4ca01c778ce1e0fa348ae979c71a6c6507ce7c7d175
 Newer overnight checkpoints may supersede this preview; use the final handoff's
 build and keep this entry as the first verified comparison point.
 
-The setup-only branch CI at `27d4dab` passed. Feature-set CI for `79e6c412` is
-running at <https://github.com/MisterE123/spark-tour-studio/actions/runs/40628332289>.
-No experimental release or merge has been created.
+The setup-only branch CI at `27d4dab` passed. Feature runs at `79e6c412` and
+`8edeb2d` failed in the scene-navigation fixture: it stopped rendering and then
+expected display readiness immediately after resource preparation. The mode
+was preserved; the new first-view cover correctly waited for rendering. The
+corrected regression drives actual frames and preserves all original mode,
+failure/retry and fallback assertions. The same obsolete fixture pattern was
+corrected in walking, collision replacement and teleport checks. Replacement
+CI will validate the combined changes. Broader local checks additionally exposed
+and verified fixes for the asynchronous readiness gap and missing guide update
+described above. No experimental release or merge has been created.
 
 ## Validation and handoff
 
@@ -128,4 +193,17 @@ No experimental release or merge has been created.
 - Experimental build identity checks pass; viewer dependencies exclude that
   Studio-only metadata.
 - Actual Quest hardware comfort and slow-laptop performance require user testing.
+- Follow-up frozen unit/integration checkpoint: **380 tests passed**, including
+  content-reference and dynamic-project cache checks.
+- Follow-up walking step and 30/60/120 FPS camera checks preserve every physical
+  assertion while rendering each destination through first-view readiness.
+- Actual browser story focus, scrolling, Escape, navigation isolation and
+  invalid/valid local iframe action checks pass.
+- Broad native and browser checks pass for collision authoring/generation,
+  paging, walking, mobile layout, branding, WebGL fallback, preset persistence
+  and hemisphere backgrounds. Fresh readiness checks pass for certified air,
+  scene continuity/export, precision, viewpoint comfort and full stereo XR.
+- Real rebuilt launcher checks pass for cold local/HTTPS/mobile loading,
+  delayed walking pages, external requests blocked, no Node on PATH and clean
+  shutdown. No latency simulation was added to product code.
 - Stop overnight work around the review target and leave this branch unmerged.

@@ -1,4 +1,4 @@
-import RAPIER from '@dimforge/rapier3d-compat';
+import {physics as RAPIER} from './physics.mjs';
 import {DEFAULT_WALK_STEP_HEIGHT} from './navigation-settings.mjs';
 export const DEFAULT_STEP_HEIGHT=DEFAULT_WALK_STEP_HEIGHT;
 export function normalizeStepHeight(value){return Number.isFinite(value)?Math.max(0,Math.min(1,value)):DEFAULT_STEP_HEIGHT;}

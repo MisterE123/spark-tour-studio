@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d-compat';
+import type Rapier from '@dimforge/rapier3d-compat';
+import {physics as RAPIER} from '../shared/physics.mjs';
 import {CollisionStream,segmentBoxDistanceSquared} from '../shared/collision-stream.mjs';
 import {collisionTileKey} from '../shared/paged-collision.mjs';
 import {collisionPhysicsChunkConfig,localPhysicsChunks} from '../shared/collision-physics.mjs';
@@ -10,7 +11,7 @@ import {CollisionOverview} from './collision-overview';
 type Point={x:number;y:number;z:number};
 type Chunk={key:string;coord:number[];cells:number;bounds:{min:number[];max:number[]}};
 type Surface={key:string;positions:Float32Array;indices:Uint32Array;complete:boolean};
-type Resident={mesh:THREE.Mesh;collider:RAPIER.Collider;triangles:number};
+type Resident={mesh:THREE.Mesh;collider:Rapier.Collider;triangles:number};
 type FocusWindow={point:THREE.Vector3;body?:THREE.Vector3;samples?:THREE.Vector3[]};
 export type PhysicsLease={release():void};
 const MAX_TRIANGLES=600000,MAX_CHUNKS=2048,BATCH=4;
@@ -26,7 +27,7 @@ export class PagedCollider {
  private primary?:FocusWindow;private centers:THREE.Vector3[]=[];private primaryCenters:THREE.Vector3[]=[];private focusKey='';private planKey='';private revision=0;private sequence=0;private work?:Promise<void>;private buildAbort?:AbortController;
  private focusError?:Error;private coreSquared=1.5625;private config:{cells:number;size:number};private dead=false;private failure='';private lastUpdate=0;private updating?:Promise<void>;
  onError=(message:string)=>{};onChange=()=>{};
- constructor(readonly manifest:any,readonly url:string,readonly world:RAPIER.World){
+ constructor(readonly manifest:any,readonly url:string,readonly world:Rapier.World){
   this.config=collisionPhysicsChunkConfig(manifest.detail,manifest.tileCells);
   this.group.name='paged-collision';this.group.matrixAutoUpdate=false;this.group.matrix.copy(sceneMatrix(manifest.sourceTransform).invert());this.group.matrixWorldNeedsUpdate=true;
   this.overview=new CollisionOverview(manifest,this.group);

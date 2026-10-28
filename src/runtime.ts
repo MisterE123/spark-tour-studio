@@ -12,7 +12,9 @@ import {AdaptiveDetailController} from '../shared/adaptive-detail.mjs';
 import type {PerformanceSettings} from './model';
 import * as THREE from 'three';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
-import RAPIER from '@dimforge/rapier3d-compat';
+import type Rapier from '@dimforge/rapier3d-compat';
+import {physics as RAPIER} from '../shared/physics.mjs';
+import {loadPhysics} from '../shared/physics-loader.mjs';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import type { Project,TourScene,Hosting,Mode,Viewpoint,Hotspot,Page,Transform,Vec3,TourDestination,CollisionVolume,SceneLink } from './model';
@@ -35,7 +37,6 @@ import {ViewGeometry} from './view-geometry';
 import {WalkingRoutes} from './walking-routes';
 import type {IconName} from './material-symbols';
 
-const physicsReady=RAPIER.init();
 export interface SceneLoadState {sceneId:string;name:string;cover:string;fallbackCover:string;phase:string;completed:number;total:number}
 const v=(a:Vec3)=>new THREE.Vector3(...a);
 function apply(o:THREE.Object3D,t:Transform){o.position.fromArray(t.position);o.rotation.set(...t.rotation,'YXZ');o.scale.setScalar(t.scale);o.updateMatrixWorld(true);}
@@ -76,7 +77,7 @@ export class TourRuntime {
  subscribeLoading=(listener:()=>void)=>{this.loadingListeners.add(listener);return()=>{this.loadingListeners.delete(listener);};};
  getLoadingSnapshot=()=>this.loading;
  onStatus=(text:string,error=false)=>{};onScene=(id:string)=>{};onMode=(mode:Mode)=>{};onPage=(page:Page)=>{};onPick=(point:Vec3)=>{};onSelect=(id:string)=>{};onMove=(id:string,point:Vec3)=>{};
- private backgroundLayer=new BackgroundLayer(this.scene,message=>this.report(message,true));private mesh?:SplatMesh;private collider?:THREE.Group;private world?:RAPIER.World;private body?:RAPIER.RigidBody;private character?:RAPIER.KinematicCharacterController;private capsule?:RAPIER.Collider;private generation=0;private dead=false;private keys=new Set<string>();private observers:ResizeObserver;private cleanup:(()=>void)[]=[];private ray=new THREE.Raycaster();private touch=new THREE.Vector2();private pointerMove=new THREE.Vector3();private last=0;private crouched=false;private touchCrouch=false;private touchLift=0;private jumpRequested=false;private turnReady=true;private status='';private currentPage:Page|null=null;private selected?:THREE.Object3D;private fade:THREE.Mesh;private fadeUntil=0;private controllers:THREE.XRTargetRaySpace[]=[];private pendingPick=false;
+ private backgroundLayer=new BackgroundLayer(this.scene,message=>this.report(message,true));private mesh?:SplatMesh;private collider?:THREE.Group;private world?:Rapier.World;private body?:Rapier.RigidBody;private character?:Rapier.KinematicCharacterController;private capsule?:Rapier.Collider;private generation=0;private dead=false;private keys=new Set<string>();private observers:ResizeObserver;private cleanup:(()=>void)[]=[];private ray=new THREE.Raycaster();private touch=new THREE.Vector2();private pointerMove=new THREE.Vector3();private last=0;private crouched=false;private touchCrouch=false;private touchLift=0;private jumpRequested=false;private turnReady=true;private status='';private currentPage:Page|null=null;private selected?:THREE.Object3D;private fade:THREE.Mesh;private fadeUntil=0;private controllers:THREE.XRTargetRaySpace[]=[];private pendingPick=false;
  private colliderGeneration=0;private colliderSource='';private colliderVisible=false;private transformKey='';private colliderTransformKey='';colliderTransition:Promise<void>=Promise.resolve();private xrContent=new XRContent();
  private initialColliderLoad?:{generation:number;sceneId:string;promise:Promise<void>};private sceneResourcesReady=false;private colliderLoading=false;private colliderFailure='';private navigationFailure=false;private statusScope:'scene'|'navigation'|'xr'='scene';
  private get collisionMovementBlocked(){return !this.editing&&this.mode!=='jumps'&&!!this.active?.collider&&(this.colliderLoading||!this.world);}
@@ -225,7 +226,7 @@ export class TourRuntime {
  }
  private async loadColliderLoop(sceneId:string,token:number,progress:(phase:string)=>void){
   while(token===this.generation&&!this.dead&&this.active?.id===sceneId){
-   const scene=this.active,source=scene.collider;this.colliderLoading=!!source;
+   const scene=this.active,source=scene.collider;this.colliderLoading=!!source;this.colliderFailure='';
    try{if(source)await this.loadCollider(scene,token,progress);}catch(error){if(token!==this.generation||this.dead)return;if(this.active?.collider===source){this.clearCollider();this.colliderSource=source;this.colliderFailure=String(error);this.report('Navigation area: '+this.colliderFailure,true,'navigation');return;}}
    if(token!==this.generation||this.dead)return;this.colliderLoading=false;
    if(this.active?.collider===source)return;this.clearCollider();
@@ -233,17 +234,19 @@ export class TourRuntime {
  }
  private async loadCollider(s:TourScene,token:number,progress:(phase:string)=>void=()=>{}){
   const colliderToken=++this.colliderGeneration;this.colliderSource=s.collider;
-  await physicsReady;if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead)return;
+  // Engine initialization and collider I/O are independent. A stale scene drops
+  // its own result; it never aborts the engine shared by the next destination.
+  const initializingPhysics=loadPhysics();void initializingPhysics.catch(()=>{});
   const url=colliderUrl(s,this.hosting,this.base);
   if(isPagedCollision(s.collider)){
-   progress('Loading navigation coverage…');const abort=this.colliderAbort=new AbortController(),response=await fetch(url,{signal:abort.signal});if(!response.ok)throw Error(`Collision manifest request failed (${response.status}).`);const text=new TextDecoder().decode(await readCollisionResponse(response,32*1024*1024)),manifest=validatePagedCollisionManifest(JSON.parse(text));if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead)return;
+   progress('Loading navigation coverage…');const abort=this.colliderAbort=new AbortController(),response=await fetch(url,{signal:abort.signal});if(!response.ok)throw Error(`Collision manifest request failed (${response.status}).`);const text=new TextDecoder().decode(await readCollisionResponse(response,32*1024*1024)),manifest=validatePagedCollisionManifest(JSON.parse(text));await initializingPhysics;if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead)return;
    this.world=new RAPIER.World({x:0,y:-9.81,z:0});const root=new THREE.Group();apply(root,this.active!.colliderTransform);this.content.add(root);this.collider=root;root.visible=this.colliderVisible;
    const paged=this.pagedCollider=new PagedCollider(manifest,url,this.world);root.add(paged.group);this.overlay.add(paged.overview.group);paged.overview.setVisible(this.colliderVisible);this.createCharacter();paged.onError=message=>{this.report('Nearby navigation data: '+message,true,'navigation');};paged.onChange=()=>{this.bubbleOcclusion=new WeakMap();if(!this.pagedNavigationAligned)this.fallbackNavigationDirty=true;};
    const entry=s.viewpoints.find(view=>view.id===(this.pendingDestination?.id===s.id&&this.pendingDestination.viewpoint||s.entry));progress('Opening nearby navigation tiles…');if(this.editing&&entry)await paged.ensure(this.content.localToWorld(v(entry.position)),4);
    if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead)return;this.configurePagedNavigation();this.transformKey=JSON.stringify(s.transform);this.colliderTransformKey=JSON.stringify(s.colliderTransform);return;
   }
   progress('Loading collision mesh…');const gltf=await new GLTFLoader().loadAsync(url,event=>progress(event.lengthComputable?'Loading collision mesh · '+Math.round(event.loaded/event.total*100)+'%':'Loading collision mesh…'));if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead){release(gltf.scene);return;}
-  progress('Preparing collision physics…');await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead){release(gltf.scene);return;}
+  progress('Preparing collision physics…');try{await initializingPhysics;}catch(error){release(gltf.scene);throw error;}if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead){release(gltf.scene);return;}await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead){release(gltf.scene);return;}
   const root=gltf.scene;apply(root,this.active!.colliderTransform);this.content.add(root);this.collider=root;
   root.traverse(o=>{if(!(o instanceof THREE.Mesh))return;for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();o.material=new THREE.MeshBasicMaterial({color:0x77efd3,wireframe:true,transparent:true,opacity:.45});});root.visible=this.colliderVisible;this.rebuildPhysics();
  }

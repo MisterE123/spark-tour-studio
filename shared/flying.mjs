@@ -1,4 +1,4 @@
-import RAPIER from '@dimforge/rapier3d-compat';
+import {physics as RAPIER} from './physics.mjs';
 
 // Sweep the camera volume, then slide the remaining motion along contact surfaces.
 // No gravity or ground snapping: drone movement remains fully three-dimensional.

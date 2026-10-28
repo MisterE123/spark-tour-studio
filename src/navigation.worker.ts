@@ -1,3 +1,5 @@
+import RAPIER from '@dimforge/rapier3d-compat';
+import {initializePhysics} from '../shared/physics.mjs';
 import {buildNavigation,NavigationRefinements,refinedNavigationPath} from '../shared/navigation.mjs';
 import {navigationKey,cachedNavigation,cacheNavigation} from './navigation-cache';
 import {physicalWalkingPath} from '../shared/walking-route.mjs';
@@ -17,6 +19,9 @@ async function localWalkingPath(m:any){
  let local:Awaited<ReturnType<typeof buildNavigation>>|undefined,refined:NavigationRefinements|undefined;
  try{
   if(!m.validate){local=await buildNavigation(positions,indices,undefined,m.options||{});try{return local.path(m.start,m.end);}catch{refined=new NavigationRefinements(positions,indices,m.options||{});return await refined.path(m.start,m.end);}}
+  // Ordinary cached/native routes do not need a second physics engine. Keep
+  // worker initialization at the existing physical-shortcut validation boundary.
+  await initializePhysics(RAPIER);
   const direct=await physicalWalkingPath(m.parts,m.start,m.end,undefined,m.options?.stepHeight);
   const distance=Math.hypot(m.end.x-m.start.x,m.end.y-m.start.y,m.end.z-m.start.z);
   if(direct&&walkingPathLength(direct)<=distance*1.05+.1)return direct;

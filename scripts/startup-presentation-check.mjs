@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createRequire} from 'node:module';
-import {chromium} from '@playwright/test';
+import {chromium,expect} from '@playwright/test';
 import {blankProject,newScene} from '../shared/project.mjs';
 import {radPointsFixture} from '../tests/fixtures.mjs';
 
@@ -27,7 +27,10 @@ try{
  const chunkGate=new Promise(resolve=>releaseChunk=resolve),skyGate=new Promise(resolve=>releaseSky=resolve);let chunkRequested=false,skyRequested=false;
  await page.route('**/scene.radc',async route=>{chunkRequested=true;await chunkGate;await route.continue();});
  await page.route('**/sky.svg',async route=>{skyRequested=true;await skyGate;await route.continue();});
- await page.goto(url+'?diagnostics=1');await page.waitForFunction(()=>!!window.tourRuntime);
+ await page.goto(url+'?diagnostics=1');await expect(page.getByRole('button',{name:'Enter tour',exact:true})).toBeEnabled();
+ // The constructor exposes diagnostics before React wires viewer callbacks.
+ // Observe the settled viewer, so its startup effect cannot replace this probe.
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>setTimeout(resolve,0))));
  await page.evaluate(()=>{
   const r=window.tourRuntime,report=r.onStatus;window.readinessReports=[];window.loadingObservers=[[],[]];
   r.onStatus=(text,error)=>{if(!text)window.readinessReports.push({ready:r.ready,phase:r.loading?.phase});report(text,error);};

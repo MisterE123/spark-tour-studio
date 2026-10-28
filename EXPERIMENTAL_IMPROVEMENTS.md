@@ -113,6 +113,11 @@ deleted. Generated-page links in structured stories and view descriptions now
 carry their dependent pages and media into portable or referenced exports,
 including linked chains and cycles. Custom HTML/scripts remain opaque; cleanup
 conservatively retains content when it could contain untracked local links.
+Exports and file inventories now retain those records and their media as well,
+so a custom page's ordinary link into a generated story still works after its
+original bubble is deleted. Structured-only tours still omit unused stories.
+Active local HTML has opaque dependencies, so it conservatively carries the
+project's retained content; a missing required file prevents a complete export.
 
 In Preview, scene/view/bubble fields and destructive authoring actions are
 disabled, while visitor navigation and inspection remain available. A pending
@@ -121,6 +126,34 @@ callbacks cannot add annotations after switching to Preview. Returning to Edit
 restores controls; opening another project starts in Edit. Native import/job
 results can still commit successfully. Idle settings inspector tabs retain
 Undo/Redo.
+
+### Safer Save As and text histories
+
+Edit a scene or bubble, choose **File → Save as**, then cancel the folder picker.
+The current edits, Unsaved changes indicator, Undo/Redo, selected annotation and
+camera should remain exactly where they were. Canceling also leaves existing
+recovery data intact and must not show a recovery dialog. Ordinary Save and a
+completed Save As still persist the project and its external source mappings.
+
+Edit one bubble's rich text, select another, and press Ctrl+Z in its text box.
+Text Undo belongs to the current story; another bubble's words must never appear.
+Repeat between viewpoint descriptions and after removing or reordering blocks.
+Typing and image insertion retain local text Undo/Redo. Project Undo or an
+external authoring replacement starts a fresh text history for the replacement.
+
+### More reliable portable content and RAD companions
+
+Portable export checks common HTML resource attributes, including responsive
+image candidates and unquoted URLs. An external required resource keeps the
+export marked incomplete; ordinary outbound links remain available. Referenced
+exports can retain those remote resources. Arbitrary script execution is not a
+complete dependency scanner.
+
+A remote RAD's exported root filename now avoids its companion names, preserving
+their original byte ranges and references. Ambiguous remote companions that map
+different requests into one disk filename fail instead of silently using the
+wrong file. Local HTML reached through stories or view descriptions also carries
+its sibling assets into file history, matching folder export behavior.
 
 ### Keyboard-friendly information stories
 
@@ -140,9 +173,9 @@ continues to use the in-world content controls.
 
 Open a portable export with an empty browser cache and enter a Viewpoints scene.
 The collision engine now stays on disk until Walk, Drone with a collider, or
-collision authoring needs it. The initial visitor JavaScript graph is about
-3.97 MB raw / 1.29 MB gzip; a separate 4.33 MB raw / 1.64 MB gzip engine remains
-bundled locally. The shared UI chunk shrank about 52% raw / 56% compressed.
+collision authoring needs it. Title-screen JavaScript is about 623 KB raw /
+184 KB gzip; rendering code then warms automatically as described below.
+A separate 4.34 MB raw / 1.65 MB gzip engine remains bundled locally.
 This reduces startup transfer and compilation; it does not reduce RAD bytes or
 promise a particular time to sharp detail on the VPS.
 
@@ -154,6 +187,14 @@ failed download and WASM initialization retries in the same document, and a
 portable export served beneath `/museum/` with external origins blocked. The
 navigation worker keeps its existing static bundle and initializes physics
 only for physical shortcut validation. Worker code splitting is deferred.
+
+The first complete CI run on an older browser exposed its permanent cache of a
+failed module request. Physics now retries through a fresh URL for the same
+locally bundled engine after a rejected download. Successful module bytes are
+reused if only WASM initialization failed. The retry does not reload the tour
+or end XR; both installed browser versions pass actual request-failure tests
+with the real Three XR manager and stereo camera retained. Hosted sites must
+serve `.mjs` as JavaScript, as documented in `HOSTING.md` and exported READMEs.
 
 ### Imports keep their original destination
 
@@ -321,6 +362,15 @@ is available only before entering the tour. Studio's authoring page stays intact
 The test records the actual recovery path and keeps all download, renderer and
 offline assertions rather than extending timeouts or suppressing the failure.
 
+Run `40654226341` then passed the startup recovery check but exposed the same
+older-browser cache behavior in the deferred physics loader. Its assertion was
+correct: a live tour must recover without a page reload. The loader now emits
+the self-contained compatibility engine as a local asset and retries failed
+imports using a fresh query. Actual engine download/initialization failures,
+unchanged real XR/stereo state and offline/subdirectory requests pass on both
+Edge 155 and 156. The new CI checks retain these assertions; no timeout or
+success condition was weakened. The next combined source run must complete.
+
 ## Validation and handoff
 
 Latest verified local preview: compiled clean commit
@@ -468,3 +518,45 @@ this compiled checkpoint must state whether they affect application behavior.
   Mechanism probes are at `test-output/runtime import retry audit 1793173729569/`
   and `test-output/runtime import retry audit 1793173668062/`. WebGL guidance
   remains verified at `test-output/viewer webgl 1793174060727/`.
+- Authoring/export/physics recovery checkpoint: **433/433 unit and integration
+  tests passed** in 122.4 seconds at
+  `test-output/unit-experimental-authoring-physics-recovery-2026-10-28.log`.
+  Existing export fixtures now explicitly distinguish structured-only pruning
+  from retained opaque HTML dependencies; missing media is not silently ignored.
+- Real canceled Save As, dirty/clean state, selection, Undo/Redo, camera identity,
+  recovery bytes, normal Save and positive Save As pass at
+  `test-output/editor-save-cancel-1793175535787/`. The original error was
+  reproduced before fixing the native cancellation result.
+- Native rich-text histories pass nine checks at
+  `test-output/richtext-history-1793176489035/`: typing, formatting/link
+  normalization, separate bubbles/viewpoints/projects, project Undo, equal-content
+  block removal, imported image caret and Undo/Redo, and clean Preview.
+  External authoring snapshots intentionally clear local text history even
+  when their text matches; ordinary active text echoes keep it.
+- Portable responsive/unquoted/inline-style resource rejection and local/data
+  images with outbound links pass in a real browser at
+  `test-output/portable resources 1793176453549/`. Actual Spark loads both a
+  renamed remote RAD root and a true self-companion after the original server
+  is shut down at `test-output/remote RAD export 1793176333330/`.
+- Opaque content inventory/export tests include sibling CSS/images, encoded
+  filenames, private-file and symlink protections, and actual Git materialization
+  and cloning without the original source directory. The shared dependency graph
+  and inventory/export compatibility suites pass.
+- Real failed physics downloads recover in both exact browsers at
+  `test-output/lazy physics 1793176817761/` (155) and
+  `test-output/lazy physics 1793176837621/` (156). Each uses exactly two engine
+  requests, no page navigation, and the same real Three XR manager, session,
+  ArrayCamera and stereo eyes. Failed initialization reuses the one downloaded
+  module. Canceling scenes shares one pending request; worker-init failure still
+  leaves walking routes usable. Offline exports contain exactly the installed
+  4,340,292-byte main-thread module with embedded WASM and no duplicate vendor
+  chunk. The source bubble fixture also uses this production loader.
+- Fresh source precision continuity passes at
+  `test-output/extended-precision-1793176936335/`; full real stereo head-safety,
+  scaled clearance, cold coverage, relocation and OS-menu recovery pass at
+  `test-output/xr head collision 1793176936605/`.
+- Fresh full native import regression passes at
+  `test-output/editor-imports-1793176936638/`: held image/caret and Preview
+  changes, canceled/failed reads, globally visible errors, preset/audio/background
+  imports, native collider commit, clean Save As and physical portable export.
+  Every imported reference still serves the exact original bytes.

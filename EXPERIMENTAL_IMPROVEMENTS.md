@@ -136,6 +136,51 @@ sandboxed third-party iframe cannot always reach the viewer. The visible Close
 button remains available. This is a desktop browser/Studio improvement; XR
 continues to use the in-world content controls.
 
+### Less startup work for Viewpoints
+
+Open a portable export with an empty browser cache and enter a Viewpoints scene.
+The collision engine now stays on disk until Walk, Drone with a collider, or
+collision authoring needs it. The initial visitor JavaScript graph is about
+3.97 MB raw / 1.29 MB gzip; a separate 4.33 MB raw / 1.64 MB gzip engine remains
+bundled locally. The shared UI chunk shrank about 52% raw / 56% compressed.
+This reduces startup transfer and compilation; it does not reduce RAD bytes or
+promise a particular time to sharp detail on the VPS.
+
+Switch into Walk or Drone, then between scenes. Collider fetching overlaps the
+engine load. Canceling a destination does not cancel the engine needed by its
+replacement, and the camera, canvas, renderer and XR session remain intact.
+Real-browser checks cover cold Viewpoints without physics requests or compiles,
+failed download and WASM initialization retries in the same document, and a
+portable export served beneath `/museum/` with external origins blocked. The
+navigation worker keeps its existing static bundle and initializes physics
+only for physical shortcut validation. Worker code splitting is deferred.
+
+### Imports keep their original destination
+
+Choose or drop a picture into a bubble, then inspect another scene or enter
+Preview while the file is read. The result belongs to the original bubble and
+the original rich-text insertion point. Image, audio, background RAD and
+performance-preset imports now share the editor's operation lock, so Save,
+Save As and Open cannot interrupt them. Cancellation and failure release the
+lock. Existing scene-conversion and collider job results still apply, and
+performance tuning remains available in Preview. Failed imports also leave a
+visible status message when their original inspector has been closed.
+
+### Incomplete content stays lightweight
+
+Leave an image or embed unfinished, or reopen an older draft with whitespace
+around a URL. Empty, unsafe and self-referencing resources no longer create
+hidden nested tours or request the tour HTML as a photograph. Captions, link
+words and rich formatting stay readable. Valid local media, embedded pages,
+fragment links and generated-page chains remain usable in browser, Studio,
+XR and portable exports. Old malformed draft strings remain editable rather
+than preventing the project from reopening.
+
+Local downloads also handle conditional resumes conservatively: an `If-Range`
+request receives the complete current file because editable local assets have
+weak validators. Ordinary splat byte ranges, cache validation, gzip and HTTPS
+sharing retain their existing behavior.
+
 ## Work in progress
 
 - Check the next combined feature-set CI run and fix genuine failures.
@@ -143,9 +188,18 @@ continues to use the in-world content controls.
 - Audit startup loading and the transition from a coarse scene to useful detail;
   any title-screen preparation must stay bounded and avoid audio or collision
   work before it is needed.
-- Assess deferring the eagerly compiled Rapier engine: the isolated physics
-  bundle is about 4.33 MB raw / 1.64 MB gzip of the initial shared application
-  payload. This is an audited candidate, not an implemented saving yet.
+- Assess allowing the landing page/configuration to appear before the remaining
+  Spark module evaluation, and overlapping panorama loading with RAD metadata.
+  These are audited candidates, not implemented changes or measured VPS gains.
+- Integrate pending renderer imports with Close. A separate native audit found
+  that a clean project can close during a held image copy without a prompt.
+  Save/Open serialization is verified; Close needs its own bounded wait and
+  fresh saved-state checks, plus immutable main-process asset ownership.
+- Check chooser-imported filenames containing URL punctuation such as `#`.
+  Direct source resolution reproduces truncation of `Photo #1.png`, a URI error
+  for `100%.png`, and misresolution of literal `%20`. A chooser-only encoding
+  change is insufficient because export also decodes and reconstructs refs.
+  Compatible Save As/export and RAD companion handling remain follow-ups.
 - Continue reviewing consistency, incomplete features and avoidable work.
 
 ## Verified local checkpoint
@@ -233,4 +287,25 @@ all seven checks pass, with logs under
 - Real rebuilt launcher checks pass for cold local/HTTPS/mobile loading,
   delayed walking pages, external requests blocked, no Node on PATH and clean
   shutdown. No latency simulation was added to product code.
+- Deferred-physics/content checkpoint: **390 unit/integration tests passed**.
+- Real portable browser checks verify deferred physics, same-document download
+  and initialization retry, unchanged renderer/camera/XR and local dynamic
+  chunks beneath a subdirectory with external origins blocked. Forcing only
+  worker Rapier initialization to fail leaves native and paged routes usable;
+  actual walking still arrives. Successful legacy stairs, narrow-door walking
+  and canceled teleport targets also pass with the rebuilt worker.
+- Source precision continuity, full stereo WebXR head-safety and native/exported
+  scene navigation pass. Cold title/Viewpoints make no physics requests or
+  compiles. Results are in `test-output/lazy physics 1793165670207/` and
+  `test-output/final-physics-worker-regressions-1793165707995/`.
+- Native, visitor, generated-page and XR content resource checks pass at
+  `test-output/content-resources-1793165531223/`: no nested viewer or tour-HTML
+  image request; legitimate images, embeds, link labels and formatting remain.
+- The full native import transaction regression passes at
+  `test-output/editor-imports-1793166308822/`: original targets and caret,
+  Preview changes, cancel/error unlock, visible failure after inspector change,
+  native collider results, clean saves and exact preset metadata. Save As
+  preserves its external source mappings and serves the original bytes;
+  portable export contains physical copies. The saved-project/export distinction
+  and original source files remain intact.
 - Stop overnight work around the review target and leave this branch unmerged.

@@ -83,10 +83,31 @@ the executable name. Publishing is disabled and the stable release stays intact.
 
 ## Work in progress
 
-- Audit startup loading and the transition from a coarse scene to useful detail.
-- Package and smoke-test a separately labeled experimental executable.
-- Check the new branch CI after pushing this verified feature set.
+- Check the feature-set CI run after pushing the verified changes.
+- Review scene-deletion content cleanup and consistent busy/preview safeguards.
+- Audit startup loading and the transition from a coarse scene to useful detail;
+  any title-screen preparation must stay bounded and avoid audio or collision
+  work before it is needed.
 - Continue reviewing consistency, incomplete features and avoidable work.
+
+## Verified local checkpoint
+
+Compiled feature commit: `79e6c4127b5c2fb94937bb7d32d47461eacefc87`.
+
+Local preview: `experimental-release/3DGS Perspectives Studio 1.22.3 Experimental 79e6c412.exe`.
+SHA-256: `b75395b7c590094d7dbe3e75dcb9749e55df0c12403484bfcde418ce78df549a`.
+It was built from a clean source tree, launches through its actual portable EXE,
+shows the correct experimental identity and closes normally. The native packaged
+identity check confirms that Studio-only metadata is absent from visitor code.
+
+The stable `release/3DGS Perspectives Studio 1.22.3.exe` remains byte-for-byte
+unchanged (SHA-256 `c0cde256a9a0c0fea4ca01c778ce1e0fa348ae979c71a6c6507ce7c7d1759507`).
+Newer overnight checkpoints may supersede this preview; use the final handoff's
+build and keep this entry as the first verified comparison point.
+
+The setup-only branch CI at `27d4dab` passed. Feature-set CI for `79e6c412` is
+running at <https://github.com/MisterE123/spark-tour-studio/actions/runs/40628332289>.
+No experimental release or merge has been created.
 
 ## Validation and handoff
 

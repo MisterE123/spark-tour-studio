@@ -176,6 +176,18 @@ described above. No experimental release or merge has been created.
 
 ## Validation and handoff
 
+Latest verified local preview: compiled clean commit
+`289c6218aa55b5435b8dc76794b5edf601a20ec3`.
+
+`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental 289c6218.exe`  
+SHA-256: `c2381e8ed40725911ff0e8f82b14c2f9623edb96275278c85bafd8250f6753b8`.
+
+Its actual portable executable launches, identifies the compiled branch/commit
+and closes normally. The packaged identity check also confirms visitor code
+does not inherit the Studio's experimental badge. The stable executable and
+main/tag commit remain unchanged. The expanded native editor sweep is still
+running; subsequent checkpoints will record any additional fixes it requires.
+
 - Baseline: 347 unit/integration tests pass.
 - Baseline: packaged editor import dismissal, Mesh controls, export and reopen pass.
 - Baseline: packaged teleport recovery, step edges, release tremor, obstacle
@@ -199,6 +211,11 @@ described above. No experimental release or merge has been created.
   assertion while rendering each destination through first-view readiness.
 - Actual browser story focus, scrolling, Escape, navigation isolation and
   invalid/valid local iframe action checks pass.
+- Complete desktop/mobile onboarding passes after the readiness notification
+  repair, including guide replay, persistence, settings and bubble interruptions.
+- Fresh native authoring workflow passes conservative cleanup/Undo, busy and
+  Preview locks, native collider import, idle settings Undo/Redo and rich-text
+  Save/Preview cycles that remain clean without phantom edits.
 - Broad native and browser checks pass for collision authoring/generation,
   paging, walking, mobile layout, branding, WebGL fallback, preset persistence
   and hemisphere backgrounds. Fresh readiness checks pass for certified air,

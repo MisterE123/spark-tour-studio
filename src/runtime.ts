@@ -504,7 +504,7 @@ export class TourRuntime {
  }
  private triggerStart(controller:THREE.XRTargetRaySpace){if(this.xrInputSuspended||!controller.visible)return;this.audio.unlock();this.navigator?.takeControl();this.controllerRay(controller);const hit=this.hitUI();this.held.set(controller,hit||null);if(!hit&&this.mode!=='jumps'&&!this.loading&&!this.status&&!this.blocked&&!this.collisionMovementBlocked){if(this.teleportController&&this.teleportController!==controller)this.cancelTeleport();this.teleportController=controller;this.updateTeleport();}}
  private triggerEnd(controller:THREE.XRTargetRaySpace){if(!controller.visible){this.held.delete(controller);if(this.teleportController===controller)this.cancelTeleport();return;}if(this.xrInputSuspended||!this.held.has(controller))return;const pressed=this.held.get(controller);this.held.delete(controller);this.controllerRay(controller);if(pressed&&this.hitUI()===pressed){this.activate(pressed);}else if(!pressed&&this.teleportController===controller&&!this.status){this.updateTeleport();if(this.teleportPoint){this.routes.cancel();this.placeFeet(this.teleportPoint);this.currentViewpoint='';this.onViewpoint('');this.fadeUntil=performance.now()+220;}}if(this.teleportController===controller)this.cancelTeleport();}
- private updateTeleport(){if(!this.teleportController||this.mode==='jumps')return;if(!this.teleportController.visible){this.held.delete(this.teleportController);this.cancelTeleport();return;}this.controllerRay(this.teleportController);this.teleportPoint=undefined;this.teleportRing.visible=false;if(this.collisionMovementBlocked||this.hitUI()||this.ray.ray.direction.y>-.06){this.cancelTeleportQuery();this.teleportAim=undefined;return;}if(this.mode==='explore'&&this.pagedCollider){this.updatePagedTeleport(this.teleportController,this.pagedCollider,this.ray.ray.clone());return;}const origin=this.ray.ray.origin,direction=this.ray.ray.direction;let point:THREE.Vector3|undefined,valid=true;
+ private updateTeleport(){if(!this.teleportController||this.mode==='jumps')return;if(!this.teleportController.visible){this.held.delete(this.teleportController);this.cancelTeleport();return;}this.controllerRay(this.teleportController);this.teleportPoint=undefined;this.teleportRing.visible=false;if(this.xrInputSuspended||this.blocked||this.loading||this.status||this.menuOpen||this.collisionMovementBlocked||this.hitUI()||this.ray.ray.direction.y>-.06){this.cancelTeleportQuery();this.teleportAim=undefined;return;}if(this.mode==='explore'&&this.pagedCollider){this.updatePagedTeleport(this.teleportController,this.pagedCollider,this.ray.ray.clone());return;}const origin=this.ray.ray.origin,direction=this.ray.ray.direction;let point:THREE.Vector3|undefined,valid=true;
   if(this.mode==='explore'&&this.world){const hit=this.world.castRayAndGetNormal(new RAPIER.Ray(origin,direction),25,true,undefined,undefined,this.capsule);if(hit){point=this.ray.ray.at(hit.timeOfImpact,new THREE.Vector3());const feet=teleportWalkingFeet(this.world,point,hit.normal,this.capsule,p=>this.validWalkingPlacement(p),Math.max(.25,this.stepHeight),.6);valid=!!feet;if(feet)point=v([feet.x,feet.y,feet.z]);}}else if(this.mesh){const hit=this.ray.intersectObject(this.mesh)[0];if(hit&&hit.distance<25)point=hit.point;}
   if(this.pagedCollider){
    if(!point&&this.mesh){const hit=this.ray.intersectObject(this.mesh)[0];if(hit&&hit.distance<25){point=hit.point;valid=false;}}
@@ -530,7 +530,11 @@ export class TourRuntime {
   // a green destination behind a newly aimed post or wall.
   const nearLanding=previous?.state==='ready'&&previous.point&&previous.origin.distanceToSquared(ray.origin)<=.01&&previous.direction.dot(ray.direction)>=Math.cos(Math.PI/90)&&ray.distanceSqToPoint(previous.point)<=.04;
   const beforeSurface=nearLanding?ray.at(Math.max(0,ray.direction.dot(previous!.point!.clone().sub(ray.origin))-.03),new THREE.Vector3()):undefined;
-  const steadyLanding=!!beforeSurface&&paged.probeHeadMotion(ray.origin,beforeSurface,.003)==='clear';
+  // An unchanged ray was already checked against every crossed page. A thin
+  // pointer can graze a wall that a 3 mm retention capsule cannot fit beside;
+  // do not discard its verified hit merely because that thicker probe fails.
+  const sameRay=!!previous&&previous.origin.distanceToSquared(ray.origin)<=1e-12&&previous.direction.distanceToSquared(ray.direction)<=1e-16;
+  const steadyLanding=!!beforeSurface&&(sameRay||paged.probeHeadMotion(ray.origin,beforeSurface,.003)==='clear');
   if(!previous||(previous.state==='ready'?!steadyLanding:previous.origin.distanceToSquared(ray.origin)>.0025||previous.direction.dot(ray.direction)<Math.cos(Math.PI/240))){this.cancelTeleportQuery();this.teleportAim={origin:ray.origin.clone(),direction:ray.direction.clone(),state:'pending',retryAt:0};}const aim=this.teleportAim!;
   if(aim.point){const valid=aim.state==='ready'&&!!aim.landing&&this.validTeleportLanding(aim.landing);this.showTeleport(valid?aim.landing!:aim.point,valid?'ready':aim.state==='pending'?'pending':'invalid');}
   else if(aim.state==='pending'){
@@ -546,7 +550,17 @@ export class TourRuntime {
     const tolerance=Math.max(.25,this.stepHeight,paged.manifest.detail*paged.group.getWorldScale(new THREE.Vector3()).x+.05),feet=this.world&&teleportWalkingFeet(this.world,hit.point,hit.normal,this.capsule,p=>this.validWalkingPlacement(p),tolerance,.6);
     aim.landing=feet?v([feet.x,feet.y,feet.z]):undefined;aim.state=aim.landing?'ready':'invalid';if(!feet)aim.retryAt=performance.now()+3000;
    }catch(error){if(current()){aim.state='pending';aim.landing=undefined;aim.retryAt=performance.now()+3000;this.report('Nearby navigation data: '+String(error),true,'navigation');}}
-   finally{this.focusCollision(paged);lease?.release();const refresh=current();if(this.teleportQuery===query)this.teleportQuery=undefined;if(refresh)this.updateTeleport();}
+   finally{this.focusCollision(paged);lease?.release();const refresh=current();if(this.teleportQuery===query)this.teleportQuery=undefined;
+    // Publish this request's result. Re-running the query here can form an
+    // unbounded resolved-promise loop and prevent XR frames and trigger release
+    // from running. New controller poses are checked by the next XR frame.
+    if(refresh){this.teleportPoint=undefined;this.teleportRing.visible=false;
+     if(controller.visible&&!this.xrInputSuspended&&!this.blocked&&!this.loading&&!this.status&&!this.collisionMovementBlocked&&!this.menuOpen){
+      this.controllerRay(controller);const ray=this.ray.ray,unchanged=aim.origin.distanceToSquared(ray.origin)<=1e-12&&aim.direction.distanceToSquared(ray.direction)<=1e-16;
+      if(unchanged&&aim.point&&ray.direction.y<=-.06&&!this.hitUI()){const valid=aim.state==='ready'&&!!aim.landing&&this.validTeleportLanding(aim.landing);this.showTeleport(valid?aim.landing!:aim.point,valid?'ready':aim.state==='pending'?'pending':'invalid');}
+     }
+    }
+   }
   })();
  }
  private cancelTeleportQuery(){const query=this.teleportQuery;this.teleportQuery=undefined;query?.abort.abort();}

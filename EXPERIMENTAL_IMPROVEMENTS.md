@@ -3,7 +3,8 @@
 Branch: `codex/experimental-experience-2026-10-28`  
 Baseline: main commit `72c759b`, Studio **1.22.3**  
 Review target: **October 28, 2026, 7:00 AM America/New_York**  
-Follow-up: resolve the final CI failure and verify a fresh experimental executable.
+Follow-up: resolve the final CI failures and the reported VR Walk teleport freeze,
+then verify a fresh experimental executable.
 
 This branch is experimental. It runs GitHub CI and keeps changes in reviewable
 commits. It must not publish a release or merge into main without approval.
@@ -24,6 +25,66 @@ or change scenes while aiming: an old request must not cancel a newer target or
 move the visitor later. Current floor support and the existing XR session stay
 intact. In the controlled stalled-request regression, a new aim reached green
 in 49 ms; this is a test result, not a Quest hardware latency promise.
+
+### VR Walk teleport freeze follow-up
+
+The reported freeze has a concrete browser reproduction. A controller ray only
+1 mm inside an allowed-space wall can still hit a valid floor and resolve a safe
+nearby standing position. The thicker 3 mm aim-retention probe rejects that ray.
+The completed query then immediately starts another query against already cached
+collision data; their resolved promises can repeat without allowing another XR
+frame, timer or trigger release to run. A bounded before-fix probe stopped after
+501 queries: 499 repeated queries took 958 ms with no intervening animation frame
+or timer. Evidence: `test-output/teleport starvation 1793193921607/result.json`.
+This is event-loop starvation rather than a reported JavaScript exception.
+
+Completed queries now publish their result without starting another query.
+Exactly unchanged rays retain their already verified floor hit; changed rays
+still check occlusion and the destination still requires a safe standing/head
+position. Blocked UI, loading and lost tracking invalidate a held target.
+Trigger release checks the current ray before committing the move.
+
+The real Three WebXRManager regression reproduces the old freeze at
+`test-output/XR teleport liveness 1793194323224/before-fix.json`: 251 queries
+froze actual stereo frames and timers for 470 ms until a test-only safety cap.
+The corrected default test has no query cap. It keeps an external Node watchdog
+so a future freeze fails the check rather than wedging CI. The final source check
+passes at `test-output/XR teleport liveness 1793195199084/result.json`, including
+three actual Spark-raycast Drone teleports before switching to Walk, the first
+grazing Walk teleport, held-target frame/timer progress, eight alternating-hand
+teleports and three further Drone/Walk cycles. Late blocked/tracking-loss results
+stay inert; all renderer/camera/rig/stereo/session identities remain unchanged,
+and temporary mode leases return to zero. Only the physical XR platform boundary
+is emulated. This matches the user's clarified Drone → Walk sequence.
+
+The exact dated export `Downloads/tst_exp_out-10-28-26` contains the vulnerable
+completion loop and matches the clean `97202af0` packaged visitor bytes. Its
+East Inside Graveyard collision/navigation files match all 18 declared sizes
+and hashes and the originals in `Hungars_local_processing/Tourv3 - Copy`.
+The real scene also reproduces the geometry condition: a downward ray at
+`[0.899, 1.4, -10.55]` hits floor, the wider retention probe is blocked, and a
+valid nearby landing is still found. Configuration and file corruption were
+ruled out for this case. Read-only evidence:
+`test-output/quest-east-wall-graze-1793194834621/inspection.json`.
+
+On Quest, retest several Drone teleports followed by switching to Walk and its
+first teleport in **East Inside Graveyard**, matching the reported sequence.
+Also repeat nearby/distant Walk teleports along walls and gravestones, moving
+the pointer while holding the trigger and releasing at green targets. Movement
+and the browser must stay responsive. Physical Quest confirmation remains
+necessary; the user's original project/export is inspected read-only.
+
+The final source build passes TypeScript/bundling. All **436/436** local unit and
+integration tests pass at
+`test-output/unit-experimental-teleport-freeze-2026-10-28.log`. Existing collision
+failure/recovery, post occlusion and release tremor pass at
+`test-output/collision recovery 1793194439558/`; canceled/retargeted requests pass
+at `test-output/teleport cancellation 1793194443468/`; controller pose-loss and
+authored-view comfort checks pass at `test-output/xr controller tracking 1793194466514/`
+and `test-output/viewpoint comfort 1793194471815/`. Full actual Three stereo/head
+safety/scale/OS-menu checks pass at `test-output/xr head collision 1793194554923/`;
+precision/scene failure recovery preserves session and physical tracking at
+`test-output/extended-precision-1793194601754/`.
 
 ### Optional automatic detail adjustment
 
@@ -421,9 +482,13 @@ a CI capacity issue: the old complete run took 45.6 minutes; its stages from
 GitHub integration through packaging took 19.7 minutes. The expanded suite now
 reaches that point around minute 45, exceeding the inherited one-hour job budget.
 The Windows job allows 90 minutes so every existing test and artifact check can
-finish. No test, individual assertion or per-test deadline was removed. A new
-complete source run verifies this workflow correction. No application source
-changed during these follow-up fixture and CI-budget repairs.
+finish. No test, individual assertion or per-test deadline was removed. Complete
+source run [40687104692](https://github.com/MisterE123/spark-tour-studio/actions/runs/40687104692)
+at `d29f858` passed all 79 Windows steps, including every native/browser check,
+portable package and uploaded artifacts. Release publication was correctly
+skipped. No application source changed during these fixture/CI-budget repairs.
+The subsequently reported VR Walk teleport freeze requires another runtime
+checkpoint and replacement preview; the green run remains the pre-fix baseline.
 
 Full source CI for `134bd61` completed at
 [run 40659512940](https://github.com/MisterE123/spark-tour-studio/actions/runs/40659512940).

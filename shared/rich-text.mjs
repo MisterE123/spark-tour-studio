@@ -2,13 +2,24 @@ import {z} from 'zod';
 
 // Authored rich text is a small, versioned document, never stored HTML. The same
 // bounded schema and renderer run in the editor, exported pages and viewer.
-export function safeContentReference(value){
+// Preserve the accepted saved-document shape so older drafts remain reopenable.
+// Rendering and resource access always use the stricter normalized rule below.
+function legacyContentReference(value){
  if(typeof value!=='string'||!value||value.length>4096||/[\u0000-\u001f\\]/.test(value))return false;
  if(/^https?:\/\//i.test(value)){try{return ['http:','https:'].includes(new URL(value).protocol);}catch{return false;}}
  if(/^[a-z][a-z0-9+.-]*:/i.test(value)||value.startsWith('/'))return false;
  try{const decoded=decodeURIComponent(value.split(/[?#]/)[0]);return !decoded.includes('\\')&&!decoded.startsWith('/')&&!decoded.split('/').includes('..');}catch{return false;}
 }
-const reference=z.string().refine(safeContentReference,'Use a relative asset path or HTTP(S) URL');
+export function normalizeContentReference(value){
+ if(typeof value!=='string'||value.length>4096||/[\u0000-\u001f\u007f\\]/.test(value))return '';
+ const normalized=value.trim();if(!normalized||!legacyContentReference(normalized))return '';
+ if(!/^https?:\/\//i.test(normalized)){try{if(/[\u0000-\u001f\u007f\\]/.test(decodeURIComponent(normalized.split(/[?#]/)[0])))return '';}catch{return '';}}
+ return normalized;
+}
+export function safeContentReference(value){return !!normalizeContentReference(value);}
+export function isContentNavigationReference(value){const ref=normalizeContentReference(value);if(!ref||/^https?:\/\//i.test(ref))return false;const pathname=decodeURIComponent(ref.split(/[?#]/)[0]);return pathname.split('/').every(part=>!part||part==='.');}
+export function normalizeContentResource(value){const ref=normalizeContentReference(value);return ref&&!isContentNavigationReference(ref)?ref:'';}
+const reference=z.string().refine(legacyContentReference,'Use a relative asset path or HTTP(S) URL');
 const mark=z.discriminatedUnion('type',[
  ...['bold','italic','underline','strike','code'].map(type=>z.object({type:z.literal(type)})),
  z.object({type:z.literal('link'),attrs:z.object({href:reference})})
@@ -56,28 +67,29 @@ export function richTextPlainText(value){const text=[];const walk=n=>{if(n.type=
 // XR uses deliberate text/list/heading summaries and individual selectable
 // links/images rather than attempting to rasterize arbitrary page HTML.
 export function richTextToBlocks(value){
- const out=[],linkKeys=new Set();const links=n=>{for(const m of n.marks||[])if(m.type==='link'&&safeContentReference(m.attrs?.href)){const key=m.attrs.href+'\n'+inlineText(n);if(!linkKeys.has(key)){out.push({type:'link',text:inlineText(n)||m.attrs.href,url:m.attrs.href});linkKeys.add(key);}}for(const c of n.content||[])links(c);};
+ const out=[],linkKeys=new Set();const links=n=>{for(const m of n.marks||[])if(m.type==='link'){const url=normalizeContentReference(m.attrs?.href),key=url+'\n'+inlineText(n);if(url&&!linkKeys.has(key)){out.push({type:'link',text:inlineText(n)||url,url});linkKeys.add(key);}}for(const c of n.content||[])links(c);};
  const walk=(n,prefix='')=>{
-  if(n.type==='image'){out.push({type:'image',text:n.attrs?.alt||n.attrs?.title||'',url:n.attrs?.src||''});return;}
+  if(n.type==='image'){const url=normalizeContentResource(n.attrs?.src),text=n.attrs?.alt||n.attrs?.title||'';if(url)out.push({type:'image',text,url});else if(text)out.push({type:'text',text,url:''});return;}
   if(n.type==='paragraph'||n.type==='heading'){const text=prefix+inlineText(n);if(text)out.push({type:'text',text,url:''});links(n);return;}
   if(n.type==='horizontalRule')return;
   if(n.type==='bulletList'||n.type==='orderedList'){let i=n.attrs?.start||1;for(const item of n.content||[])walk(item,n.type==='bulletList'?'• ':`${i++}. `);return;}
   const children=n.content||[];for(let i=0;i<children.length;i++)walk(children[i],i===0?prefix:'');
  };walk(value.doc);return out;
 }
-export function richTextReferences(value){const out=[];const walk=n=>{if(n.type==='image'&&n.attrs?.src)out.push({ref:n.attrs.src,kind:'image'});for(const m of n.marks||[])if(m.type==='link'&&m.attrs?.href)out.push({ref:m.attrs.href,kind:'link'});for(const c of n.content||[])walk(c);};walk(value.doc);return out;}
-export async function mapRichTextReferences(value,map){const copy=structuredClone(value);const walk=async n=>{if(n.type==='image'&&n.attrs?.src)n.attrs.src=await map(n.attrs.src,'image');for(const m of n.marks||[])if(m.type==='link'&&m.attrs?.href)m.attrs.href=await map(m.attrs.href,'link');for(const c of n.content||[])await walk(c);};await walk(copy.doc);return copy;}
+export function richTextReferences(value){const out=[];const walk=n=>{const image=n.type==='image'?normalizeContentResource(n.attrs?.src):'';if(image)out.push({ref:image,kind:'image'});for(const m of n.marks||[]){const link=m.type==='link'?normalizeContentReference(m.attrs?.href):'';if(link)out.push({ref:link,kind:'link'});}for(const c of n.content||[])walk(c);};walk(value.doc);return out;}
+export async function mapRichTextReferences(value,map){const copy=structuredClone(value);const walk=async n=>{const image=n.type==='image'?normalizeContentResource(n.attrs?.src):'';if(image)n.attrs.src=await map(image,'image');for(const m of n.marks||[]){const link=m.type==='link'?normalizeContentReference(m.attrs?.href):'';if(link)m.attrs.href=await map(link,'link');}for(const c of n.content||[])await walk(c);};await walk(copy.doc);return copy;}
 const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 export function resolveRichReference(value,base=''){
- if(!safeContentReference(value))return '';if(/^https?:\/\//i.test(value)||value.startsWith('#'))return value;
- try{return base?new URL(value,base).href:value;}catch{return base+value;}
+ const ref=normalizeContentReference(value);if(!ref)return '';if(/^https?:\/\//i.test(ref)||/^[?#]/.test(ref))return ref;
+ try{if(!base)return ref;const url=new URL(ref,base);return ['http:','https:'].includes(url.protocol)?url.href:'';}catch{return /^[a-z][a-z0-9+.-]*:/i.test(base)||base.startsWith('//')?'':base+ref;}
 }
+export function resolveContentResource(value,base=''){return resolveRichReference(normalizeContentResource(value),base);}
 export function renderRichText(value,base=''){
  const parsed=RichTextSchema.safeParse(value);if(!parsed.success)return '';
  const render=n=>{
-  if(n.type==='text'){let html=esc(n.text||'');for(const m of n.marks||[]){const tag={bold:'strong',italic:'em',underline:'u',strike:'s',code:'code'}[m.type];if(tag)html=`<${tag}>${html}</${tag}>`;else if(m.type==='link')html=`<a href="${esc(resolveRichReference(m.attrs.href,base))}" target="_blank" rel="noopener noreferrer">${html}</a>`;}return html;}
+  if(n.type==='text'){let html=esc(n.text||'');for(const m of n.marks||[]){const tag={bold:'strong',italic:'em',underline:'u',strike:'s',code:'code'}[m.type];if(tag)html=`<${tag}>${html}</${tag}>`;else if(m.type==='link'){const url=resolveRichReference(m.attrs.href,base);if(url)html=`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${html}</a>`;}}return html;}
   if(n.type==='hardBreak')return '<br>';
-  if(n.type==='image')return `<figure><img src="${esc(resolveRichReference(n.attrs.src,base))}" alt="${esc(n.attrs.alt||'')}" title="${esc(n.attrs.title||'')}" loading="lazy"></figure>`;
+  if(n.type==='image'){const url=resolveContentResource(n.attrs.src,base),label=n.attrs.alt||n.attrs.title||'';return url?`<figure><img src="${esc(url)}" alt="${esc(n.attrs.alt||'')}" title="${esc(n.attrs.title||'')}" loading="lazy"></figure>`:label?`<p>${esc(label)}</p>`:'';}
   if(n.type==='horizontalRule')return '<hr>';
   const html=(n.content||[]).map(render).join('');if(n.type==='doc')return html;const tag={paragraph:'p',heading:'h'+n.attrs?.level,blockquote:'blockquote',bulletList:'ul',orderedList:'ol',listItem:'li'}[n.type],alignment=['paragraph','heading'].includes(n.type)&&n.attrs?.textAlign?` style="text-align:${n.attrs.textAlign}${n.attrs.textAlign==='justify'?';white-space:normal':''}"`:'';return tag?`<${tag}${alignment}${n.type==='orderedList'&&n.attrs?.start?` start="${n.attrs.start}"`:''}>${html}</${tag}>`:html;
  };return render(parsed.data.doc);

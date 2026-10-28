@@ -1,16 +1,16 @@
-import {richTextReferences} from './rich-text.mjs';
+import {richTextReferences,normalizeContentReference,normalizeContentResource} from './rich-text.mjs';
 
 // Only generated pages have a predictable project-relative address. Custom
 // HTML stays opaque: its scripts and links are not interpreted as tour actions.
 export function generatedContentId(project,reference){
- if(typeof reference!=='string')return;
+ reference=normalizeContentReference(reference);if(!reference)return;
  const match=/^(?:\.\/)?pages\/([^/?#]+)\.html(?:[?#].*)?$/.exec(reference);if(!match)return;
  let id;try{id=decodeURIComponent(match[1]);}catch{return;}
  if(!/^[a-zA-Z0-9_-]+$/.test(id))return;
- return project.pages.some(page=>page.id===id&&!page.html)?id:undefined;
+ return project.pages.some(page=>page.id===id&&!normalizeContentResource(page.html))?id:undefined;
 }
 function richLinks(value){return value?richTextReferences(value).filter(ref=>ref.kind==='link').map(ref=>ref.ref):[];}
-function contentLinks(page){return page.html?[]:page.blocks.flatMap(block=>block.type==='text'?richLinks(block.richText):block.type==='link'||block.type==='embed'?[block.url]:[]);}
+function contentLinks(page){return normalizeContentResource(page.html)?[]:page.blocks.flatMap(block=>block.type==='text'?richLinks(block.richText):block.type==='link'||block.type==='embed'?[normalizeContentReference(block.url)].filter(Boolean):[]);}
 function contentRoots(project){return project.scenes.flatMap(scene=>[
  ...scene.hotspots.filter(bubble=>bubble.kind==='page').map(bubble=>bubble.target),
  ...scene.viewpoints.flatMap(view=>richLinks(view.extendedDescription?.richText).map(ref=>generatedContentId(project,ref)))

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type {Page,SceneLink} from './model';
-import {richTextToBlocks} from '../shared/rich-text.mjs';
+import {richTextToBlocks,resolveRichReference,resolveContentResource} from '../shared/rich-text.mjs';
 import {imagePanel,panel} from './spatial-ui';
 
 type ContentMesh=THREE.Mesh<THREE.PlaneGeometry,THREE.MeshBasicMaterial>;
@@ -26,18 +26,18 @@ export class XRContent {
    const item={mesh,height,top:0};this.items.push(item);hud.add(mesh);return item;
   };
   const text=(value:string,caption=false)=>{for(const mesh of textSurfaces(value,this.width,caption?30:36))add(mesh);};
-  if(this.focus>=0&&blocks[this.focus]?.type!=='image')this.focus=-1;
+  if(this.focus>=0&&(blocks[this.focus]?.type!=='image'||!resolveContentResource(blocks[this.focus].url,base)))this.focus=-1;
   if(this.focus>=0){
-   const block=blocks[this.focus];let url='';try{url=new URL(block.url,base).href;}catch{}
+   const block=blocks[this.focus],url=resolveContentResource(block.url,base);
    const image=imagePanel(url,2.55,2.07,valid);image.position.set(0,.03,.025);image.userData.label='Photograph';image.userData.action=()=>{this.focus=-1;this.refresh();};hud.add(image);
    if(block.text){const caption=panel(block.text,2.55,.22,'rgba(0,0,0,0)');caption.position.set(0,-1.1,.03);hud.add(caption);}
    return;
   }
-  if(page.html)text('This custom page is available in the browser view.');
+  if(resolveContentResource(page.html,base))text('This custom page is available in the browser view.');
   else if(!blocks.length)text('No content');
   else for(const [index,block] of blocks.entries()){
    if(block.type==='image'){
-    let url='';try{url=new URL(block.url,base).href;}catch{}
+    const url=resolveContentResource(block.url,base);if(!url){if(block.text)text(block.text,true);continue;}
     let item:Item|undefined;
     const image=imagePanel(url,this.width,1.66,valid,loaded=>{
      if(!item||!this.items.includes(item))return;
@@ -46,8 +46,8 @@ export class XRContent {
     image.userData.imageIndex=index;image.userData.label='Enlarge image'+(block.text?': '+block.text:'');
     image.userData.action=()=>{this.focus=index;this.refresh();};item=add(image);
     if(block.text)text(block.text,true);
-   }else if(block.type==='embed')text((block.text?block.text+'\n':'')+'This external embed is available in the browser view.');
-   else if(block.type==='link')text(block.text+'\n'+block.url+'\nAvailable in the browser view.');
+   }else if(block.type==='embed')text(resolveContentResource(block.url,base)?(block.text?block.text+'\n':'')+'This external embed is available in the browser view.':block.text);
+   else if(block.type==='link')text(resolveRichReference(block.url,base)?block.text+'\n'+block.url+'\nAvailable in the browser view.':block.text);
    else text(block.text||'');
   }
   for(const link of page.sceneLinks||[]){const button=panel(link.label,this.width,.24,'rgba(255,255,255,.14)','image_arrow_up');button.userData.label=link.label;button.userData.action=()=>onSceneLink?.(link);add(button);}

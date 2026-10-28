@@ -279,10 +279,10 @@ all original rendered-readiness assertions remain in place.
 ## Validation and handoff
 
 Latest verified local preview: compiled clean commit
-`c24e179a34721f10392b768c9889acb2aa027cb7`.
+`ce30c0484962071ee9816fe0dc530ac8239dfa78`.
 
-`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental c24e179a.exe`  
-SHA-256: `670bd344d0afc6f588fd43a28aad9f2d3b63a83d4e14f52b0d94f45919ef003c`.
+`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental ce30c048.exe`  
+SHA-256: `629a91afaf48b9ea2e345988cda9ba5a90cae4f3a18bf445e471b3cb6fea4e07`.
 
 Its actual portable executable launches, identifies the compiled branch/commit
 and closes normally. The packaged identity check also confirms visitor code
@@ -290,9 +290,9 @@ does not inherit the Studio's experimental badge. The stable executable and
 main/tag commit remain unchanged. The expanded native editor sweep has completed:
 all seven checks pass, with logs under
 `test-output/editor-ci-sweep/1793162643805/`.
-The new actual portable launch/About/normal-close check passes at
-`test-output/portable smoke 1793167106880/`; packaged identity and visitor graph
-checks pass at `test-output/studio-build-1793167107054/`. Source commits after
+The current actual portable launch/About/normal-close check passes at
+`test-output/portable smoke 1793170577713/`; packaged identity and visitor graph
+checks pass at `test-output/studio-build-1793170597620/`. Source commits after
 this compiled checkpoint must state whether they affect application behavior.
 
 - Baseline: 347 unit/integration tests pass.

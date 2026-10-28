@@ -188,9 +188,12 @@ description, scene selector, search and settings can appear while the 3D engine
 prepares automatically. Enter and directory Visit buttons wait for the engine;
 choosing another scene does not enter it automatically. Preferences selected
 during preparation apply when it is ready. A failed engine download has a Retry
-action inside the same page, with the existing WebGL guidance where appropriate.
+action inside the same page. If that fails again, the visitor can explicitly
+Reload tour before entry; this handles browsers that cache failed imports.
+The existing WebGL guidance remains. Studio never automatically reloads unsaved
+authoring work.
 
-The initial static JavaScript graph is **622,967 bytes / 183,994 gzip**, compared
+The measured static JavaScript graph is **623,090 bytes / 184,041 gzip**, compared
 with the preceding **3,972,378 / 1,290,112** checkpoint (85.7% less compressed).
 Remaining runtime code still loads automatically. This improves paint ordering
 and UI availability; it does not reduce total runtime download or prove a shorter
@@ -253,8 +256,7 @@ isolated desktop CPU audit found only modest savings at 40–200 bubbles.
 ## Work in progress
 
 - Check the next combined feature-set CI run and fix genuine failures.
-- Verify and package the panorama and tracked-controller follow-ups; they are
-  not yet included in the current packaged preview.
+- Package the final panorama, tracked-controller and browser recovery follow-ups.
 - Continue reviewing consistency, incomplete features and avoidable work.
 
 ## Verified local checkpoint
@@ -309,6 +311,16 @@ junction reproduces the original mismatch; three complete filename-suite runs
 through that alias pass at
 `test-output/companion-canonical-ci-repair-1793171984714/`. This correction changes
 tests and documentation only; the verified `ce30c048` application is unchanged.
+
+Run `40649511781` then passed unit tests and the earlier browser checks but failed
+the new failed-module recovery check. This exposed actual browser behavior:
+installed Edge 155 retains a failed native module import without another request,
+while Edge 156 retries it. Five forced cases reproduce the difference, including
+root, dependency, held-response, HTTP failure and native import without preload.
+The visitor now gets an explicit Reload tour after a failed in-page Retry; this
+is available only before entering the tour. Studio's authoring page stays intact.
+The test records the actual recovery path and keeps all download, renderer and
+offline assertions rather than extending timeouts or suppressing the failure.
 
 ## Validation and handoff
 
@@ -448,3 +460,12 @@ this compiled checkpoint must state whether they affect application behavior.
   `test-output/runtime hotpath audit 1793172389800/`; its measurements exclude
   drawing and are not a Quest frame-rate claim. Only the demonstrated invalid
   controller behavior was changed; per-frame caching remains unchanged.
+- Final runtime recovery passes the complete three-layout offline warm-up suite
+  on both exact installed browsers: Edge 155 uses one explicit pre-entry reload
+  at `test-output/runtime warmup 1793174182384/`; Edge 156 recovers in the same
+  document at `test-output/runtime warmup 1793174200355/`. Each performs exactly
+  two actual runtime requests and creates one GPU context. Normal preparation
+  retains settings/scene choice and scene switches keep renderer/camera/rig.
+  Mechanism probes are at `test-output/runtime import retry audit 1793173729569/`
+  and `test-output/runtime import retry audit 1793173668062/`. WebGL guidance
+  remains verified at `test-output/viewer webgl 1793174060727/`.

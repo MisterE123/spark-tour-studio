@@ -9,7 +9,13 @@ async function safeParents(root,file){let current=file;while(contained(root,curr
 async function collectTourFiles({projectRoot,project,hosting={},sources={},resolveHosting=false,omitSplats=false}){
  const {allReferences,splatReference,collisionReference}=await import('../shared/project.mjs');const root=path.resolve(projectRoot),files=new Map(),missing=[],remoteRefs=new Set(),prefixes=new Set();
  const delivery=resolveHosting?hosting:{},radRefs=new Set(project.scenes.flatMap(s=>[splatReference(resolveHosting&&hosting.sceneUrls?.[s.id]||s.source,delivery,resolveHosting&&!!hosting.sceneUrls?.[s.id]),s.background?.type==='splat'?splatReference(s.background.source,delivery):'']).filter(Boolean));
- const {normalizeContentResource}=await import('../shared/rich-text.mjs');const htmlRefs=new Set(project.pages.map(p=>normalizeContentResource(p.html)).filter(Boolean));
+ const {normalizeContentResource,richTextReferences}=await import('../shared/rich-text.mjs'),{usedContent,generatedContentId}=await import('../shared/authoring.mjs');const htmlRefs=new Set();
+ const htmlReference=(value,custom=false)=>{const ref=normalizeContentResource(value);if(!ref||remote(ref)||generatedContentId(project,ref))return;try{if(custom||/\.html?$/i.test(localReference(ref).path))htmlRefs.add(ref);}catch{}};
+ const richHtml=value=>{if(value)for(const link of richTextReferences(value))if(link.kind==='link')htmlReference(link.ref);};
+ // Opaque local documents need their containing asset directory regardless of
+ // whether they open from a bubble page, a structured link/embed or a view.
+ for(const page of usedContent(project)){const html=normalizeContentResource(page.html);if(html){htmlReference(html,true);continue;}for(const block of page.blocks){if(block.type==='text')richHtml(block.richText);else if(block.type==='link'||block.type==='embed')htmlReference(block.url);}}
+ for(const scene of project.scenes)for(const view of scene.viewpoints)richHtml(view.extendedDescription?.richText);
  const collisionRefs=new Set(project.scenes.map(s=>collisionReference(s.collider,delivery)).filter(ref=>/\.collision\.json(?:[?#]|$)/i.test(ref)));
  const put=async(name,source)=>{assetPath(root,name);await safeParents(root,path.resolve(root,name));const stat=await fs.stat(source);if(!stat.isFile())throw Error('Asset is not a file: '+name);files.set(name,{path:name,source,bytes:stat.size});};
  const walk=async(dir,target)=>{for(const entry of await fs.readdir(dir,{withFileTypes:true})){const name=path.posix.join(target,entry.name);if(ignored(name))continue;const from=path.join(dir,entry.name);if(entry.isSymbolicLink())throw Error('Custom content contains a symbolic link: '+name);if(entry.isDirectory())await walk(from,name);else if(entry.isFile())await put(name,from);}};

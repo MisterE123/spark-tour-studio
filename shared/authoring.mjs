@@ -88,7 +88,16 @@ export function normalizeBubbleContent(project){
  }
  return project;
 }
-export function usedContent(project){const targets=reachableContent(project,contentRoots(project));return project.pages.filter(page=>targets.has(page.id));}
+export function usedContent(project){
+ const targets=reachableContent(project,contentRoots(project)),active=project.pages.filter(page=>targets.has(page.id));
+ const local=ref=>ref&&!/^https?:\/\//i.test(ref)&&!ref.startsWith('#');
+ const opaqueLink=ref=>{if(!local(ref)||generatedContentId(project,ref))return false;try{return /\.html?$/i.test(decodeURIComponent(ref.split(/[?#]/)[0]));}catch{return true;}};
+ // An active local HTML page may link to any generated page, including records
+ // deliberately retained by cleanup. Keep their data and media in exports and
+ // file inventories too; opaque HTML/scripts are not a complete dependency graph.
+ if(active.some(page=>local(normalizeContentResource(page.html))||contentLinks(page).some(opaqueLink))||project.scenes.some(scene=>scene.viewpoints.some(view=>richLinks(view.extendedDescription?.richText).some(opaqueLink))))return [...project.pages];
+ return active;
+}
 
 // A conversion result only commits after it is complete. Re-import changes the
 // source on the current scene object, so edits made during conversion survive.

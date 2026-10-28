@@ -8,6 +8,7 @@ import {blankProject,newScene,allReferences,ProjectSchema} from '../shared/proje
 import {deleteScene,removeBubble,usedContent,generatedContentId} from '../shared/authoring.mjs';
 import {radFixture} from './fixtures.mjs';
 const {exportTour}=createRequire(import.meta.url)('../desktop/export.cjs');
+const {collectTourFiles}=createRequire(import.meta.url)('../desktop/tour-files.cjs');
 const richLink=href=>({version:1,doc:{type:'doc',content:[{type:'paragraph',content:[{type:'text',text:'Read more',marks:[{type:'link',attrs:{href}}]}]}]}});
 const page=(id,urls=[])=>({id,title:id,html:'',blocks:urls.map(url=>({type:'link',text:'Continue',url}))});
 const bubble=(id,target)=>({id,label:id,position:[0,1,0],kind:'page',target});
@@ -47,11 +48,32 @@ test('cleanup conservatively retains candidates when remaining custom HTML could
  }
 });
 
-test('active content follows generated-page chains and cycles without treating custom HTML scripts as actions',()=>{
+test('active content follows generated-page chains and conservatively includes opaque local HTML dependencies',()=>{
  const p=fixture(),s=p.scenes[0];p.pages=[page('view-root',['pages/next.html?x=1#part']),page('next',['pages/view-root.html']),page('unused'),{...page('custom',['pages/unused.html']),html:'custom/index.html'}];
  s.viewpoints[0].extendedDescription={enabled:true,richText:richLink('pages/view-root.html'),links:[]};s.hotspots=[bubble('html','custom')];
- assert.deepEqual(usedContent(p).map(pg=>pg.id),['view-root','next','custom']);
+ assert.deepEqual(usedContent(p).map(pg=>pg.id),['view-root','next','unused','custom']);
  const refs=allReferences(p);assert.ok(refs.includes('custom/index.html'));assert.ok(!refs.some(ref=>ref.startsWith('pages/')),'generated pages are not missing project-disk assets');
+ p.pages[3].html='https://external.example/custom.html';assert.deepEqual(usedContent(p).map(pg=>pg.id),['view-root','next','custom'],'remote custom pages do not imply local dependencies');
+});
+
+test('active opaque local HTML links retain page records for inventories and both export modes after bubble deletion',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'perspectives-opaque-content-'));
+ try{
+  const projectRoot=path.join(root,'project'),dist=path.join(root,'dist');for(const dir of [path.join(projectRoot,'imports/story'),path.join(dist,'assets'),path.join(dist,'licenses')])await fs.mkdir(dir,{recursive:true});
+  await fs.writeFile(path.join(dist,'index.html'),'fixture');await fs.writeFile(path.join(projectRoot,'scene.rad'),radFixture().rad);await fs.writeFile(path.join(projectRoot,'details.jpg'),'retained image');await fs.writeFile(path.join(projectRoot,'imports/story/index.html'),'<a href="../../pages/details.html#photo">Read details</a>');
+  for(const kind of ['custom-page','block-link','block-embed','view-link']){
+   const p=fixture(),s=p.scenes[0];p.pages=[{...page('details'),blocks:[{type:'image',text:'History',url:'details.jpg'}]},page('story')];s.hotspots=[bubble('details','details'),bubble('story','story')];
+   const html='imports/story/index.html';if(kind==='custom-page')p.pages[1].html=html;else if(kind==='view-link')s.viewpoints[0].extendedDescription={enabled:true,richText:richLink(html),links:[]};else p.pages[1].blocks=[{type:kind==='block-link'?'link':'embed',text:'Story',url:html}];
+   removeBubble(p,s.id,'details');assert.deepEqual(p.pages.map(pg=>pg.id),['details','story']);assert.deepEqual(usedContent(p).map(pg=>pg.id),['details','story'],kind);
+   const inventory=await collectTourFiles({projectRoot,project:p});assert.deepEqual(inventory.missing,[]);assert.ok(inventory.files.some(file=>file.path==='details.jpg'),kind);assert.ok(inventory.files.some(file=>file.path===html),kind);
+   const original=structuredClone(p);
+   for(const portable of [true,false]){
+    const output=path.join(root,kind+'-'+portable);await exportTour({project:p,hosting:{assetBaseUrl:'./',sceneUrls:{}},projectRoot,sources:{},destination:output,dist,portable,omitSplats:false,websiteOnly:true});
+    const saved=ProjectSchema.parse(JSON.parse(await fs.readFile(path.join(output,'config/tour.json'),'utf8')));assert.deepEqual(saved.pages.map(pg=>pg.id),['details','story']);assert.equal(await fs.readFile(path.join(output,'details.jpg'),'utf8'),'retained image');assert.match(await fs.readFile(path.join(output,'pages/details.html'),'utf8'),/details\.jpg/);assert.match(await fs.readFile(path.join(output,html),'utf8'),/\.\.\/\.\.\/pages\/details\.html#photo/);await assert.rejects(fs.access(path.join(output,'EXPORT_INCOMPLETE.txt')));
+   }
+   assert.deepEqual(p,original);
+  }
+ }finally{await fs.rm(root,{recursive:true,force:true});}
 });
 
 test('portable and referenced export generate view-only page chains, retain URL suffixes and copy their media',async()=>{

@@ -1,4 +1,5 @@
 import {createContext,useContext} from 'react';
+export {createEditorOperations} from '../shared/editor-operations.mjs';
 
 export interface EditorImportTarget {sceneId?:string;viewpointId?:string;pageId?:string;bubbleId?:string}
 export type EditorImportTransaction=<T>(read:()=>Promise<T>,apply:(value:NonNullable<T>)=>void,target?:EditorImportTarget)=>Promise<boolean>;

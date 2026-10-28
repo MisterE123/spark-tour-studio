@@ -8,13 +8,14 @@ import {Button,Field,Vector} from './ui';
 import {IconButton,InspectorSection} from './icons';
 import './collision-editor.css';
 
-interface Props {scene:TourScene;runtime:TourRuntime|null;hosting:Hosting;base:string;disabled:boolean;onChange:(authoring:CollisionAuthoring)=>void;job:CollisionJob;onStatus:(text:string)=>void}
-export function CollisionEditor({scene,runtime,hosting,base,disabled,onChange,job,onStatus}:Props){
+interface Props {scene:TourScene;runtime:TourRuntime|null;hosting:Hosting;base:string;disabled:boolean;onChange:(authoring:CollisionAuthoring)=>void;job:CollisionJob;onStatus:(text:string)=>void;onSelection:(id:string)=>void;initialSelection:string}
+export function CollisionEditor({scene,runtime,hosting,base,disabled,onChange,job,onStatus,onSelection,initialSelection}:Props){
  const authoring=CollisionAuthoringSchema.parse(scene.collisionAuthoring||{}) as CollisionAuthoring;
- const [selected,setSelected]=useState(authoring.volumes[0]?.id||''),[operation,setOperation]=useState<'add'|'remove'>('add'),[shape,setShape]=useState<'ball'|'box'>('ball'),[gizmo,setGizmo]=useState<'translate'|'rotate'|'scale'>('translate'),[placing,setPlacing]=useState(false);
+ const [selected,setSelected]=useState(()=>authoring.volumes.some(volume=>volume.id===initialSelection)?initialSelection:authoring.volumes[0]?.id||''),[operation,setOperation]=useState<'add'|'remove'>('add'),[shape,setShape]=useState<'ball'|'box'>('ball'),[gizmo,setGizmo]=useState<'translate'|'rotate'|'scale'>('translate'),[placing,setPlacing]=useState(false);
  const state=useSyncExternalStore(job.subscribe,job.getSnapshot),working=state.working,progress=state.progress,result=state.sceneId===scene.id?state.result:'';
  const live=useRef({scene,onChange,onStatus});live.current={scene,onChange,onStatus};
  const volume=authoring.scope==='entire'?authoring.bounds:authoring.volumes.find(v=>v.id===selected);
+ useEffect(()=>{onSelection(working?'':volume?.id||'');},[onSelection,volume?.id,working]);
  const pageConfig=collisionPageConfig(authoring.options.detail,authoring.options.pageSize);
  const edit=(fn:(a:CollisionAuthoring)=>void)=>{const next=CollisionAuthoringSchema.parse(live.current.scene.collisionAuthoring||{}) as CollisionAuthoring;fn(next);live.current.onChange(next);};
  const patch=(changes:Partial<CollisionVolume>)=>edit(a=>{const v=a.scope==='entire'?a.bounds:a.volumes.find(v=>v.id===selected);if(v)Object.assign(v,changes);});

@@ -18,6 +18,18 @@
     "settings": {
       "type": "object",
       "properties": {
+        "adaptiveDetail": {
+          "type": "boolean",
+          "default": false,
+          "description": "Temporarily reduce the visible splat target on sustained slow frames, and restore it cautiously. Never exceeds the authored detail budget."
+        },
+        "adaptiveTargetFps": {
+          "type": "number",
+          "minimum": 30,
+          "maximum": 60,
+          "default": 60,
+          "description": "Desktop cadence goal. WebXR uses its session refresh rate, or 72 FPS if unavailable."
+        },
         "pixelRatio": {
           "default": 1.5,
           "type": "number",

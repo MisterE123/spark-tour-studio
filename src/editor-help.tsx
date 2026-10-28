@@ -2,6 +2,7 @@ import React from 'react';
 import {IconButton,InspectorSection} from './icons';
 import {ControlsHelp} from './ui';
 import {appVersion} from './version';
+import {studioBuild} from './studio-build';
 
 export type HelpTopic='controls'|'distribution'|'about';
 export function EditorHelp({topic,onClose}:{topic:HelpTopic;onClose:()=>void}){
@@ -36,6 +37,7 @@ export function EditorHelp({topic,onClose}:{topic:HelpTopic;onClose:()=>void}){
     <p>Guest Wi-Fi isolation can prevent devices from connecting. This shares the tour on your local network; use a website host for an Internet link.</p>
    </InspectorSection>
   </>:<p>MIT licensed. Google Material Symbols are included under Apache 2.0. Runtime dependencies and their license notices are bundled with the application and exports.</p>}
+  {topic==='about'&&studioBuild.experimental&&<section className="studio-build-details" aria-label="Experimental build details"><h3>Experimental preview</h3><p>For testing improvements before they join the main version.</p><dl><dt>Branch</dt><dd>{studioBuild.branch||'Not available'}</dd><dt>Commit</dt><dd><code>{studioBuild.shortCommit||'Not available'}</code>{studioBuild.dirty?' · includes local changes':''}</dd></dl></section>}
   <hr/><small className="muted">3DGS Perspectives Studio · Version {appVersion}</small>
  </section></div>;
 }

@@ -10,6 +10,8 @@ A portable preset is a UTF-8 JSON file, conventionally `name.performance.json`:
 
 | Setting | Range | Default | Meaning |
 | --- | --- | --- | --- |
+| adaptiveDetail | boolean | false | Opt in to temporary automatic detail reduction when visible frames stay slow. |
+| adaptiveTargetFps | 30–60 | 60 | Desktop frame-rate goal; XR uses the session refresh rate or 72 FPS if unavailable. |
 | pagedExtSplats | boolean | false | Use extended precision for the shared foreground/background streaming pool. 32 bytes per base splat instead of 16. |
 | pixelRatio | 0.5–2 | 1.5 | Desktop pixel-density cap, additionally capped by device pixel ratio. Does not resize the XR framebuffer. |
 | lodSplatCount | integer 0–8,000,000 | 0 | Base visible-splat target; 0 uses Spark's device defaults. |
@@ -29,6 +31,16 @@ A portable preset is a UTF-8 JSON file, conventionally `name.performance.json`:
 | xrFoveation | 0–1 | 1 | XR compositor foveation; browser/headset may ignore this hint. |
 
 Numeric settings apply live. Changing `pagedExtSplats` recreates Spark's streaming pool and reloads the current scene and its background, preserving the camera position, movement mode, and active WebXR session. The WebGL renderer and canvas are retained. The application keeps an 8,388,608-splat paging pool; extended precision uses more memory and bandwidth. Sort throttling and culling can introduce visible artifacts. Splat targets are not hard GPU-memory limits. SH rendering limits do not promise reduced streamed file size. FPS is observed frame cadence, not GPU timing; compare presets on the actual capture/device.
+
+## Automatic detail adjustment
+
+Automatic adjustment is off unless explicitly enabled in the editor or visitor settings. It temporarily scales the authored `lodSplatScale` between 25% and 100%, leaving the saved preset, source assets, SH degree, precision, render resolution, physics and XR session unchanged. The performance readout shows the current percentage. Disabling it or applying a preset restores the authored target immediately. This is a visible-splat target adjustment, not a memory-pool limit or a promise of reaching the requested frame rate.
+
+Both adaptive fields are optional. When absent, the runtime uses off and 60 FPS without writing those defaults into project or preset JSON. Merely opening and saving a legacy project therefore preserves the older strict preset format. Enabling the option adds explicit metadata that requires a build supporting automatic detail; earlier releases reject those new fields. Turning it off in the controls removes both fields from the current settings. Update or remove any other saved presets that still contain adaptive metadata before reopening the project in an earlier release. The same compatibility condition applies to exported preset files and tour configuration.
+
+Sampling begins only with a ready, visible scene containing rendered splats, after four seconds of settling. Loading covers, empty frames, hidden tabs, editor geometry work, transitions, content panels and XR focus loss do not count. Initial network waiting alone cannot lower detail. Continuous streaming does not disable adaptation: sustained slow frame cadence while detail arrives can still reduce work. This measures the overall viewing cadence rather than separating GPU, decoding and CPU costs.
+
+Sustained frame times more than 20% above budget reduce the target by 25%, with at least five seconds between reductions. An isolated interval above 250 ms restarts sampling; three comparable slow intervals establish actual low cadence, so devices running at 2–3 FPS still receive help. Gaps above one second and inactive intervals restart sampling. Healthy cadence for six seconds permits a ten-percentage-point recovery without restarting the settling window; recovery never exceeds the authored target. A healthy new scene can recover from 25% to its full target in roughly 52 seconds. Scene or desktop/XR changes restart observation while retaining the device's current percentage. Desktop targets stop at 60 FPS so a normal 60 Hz display is not asked to reach 90 or 120 FPS. VR uses the headset's refresh rate and never resizes its framebuffer or changes tracking, locomotion, session identity, SH or precision. Test on actual target devices; lowering detail can soften fine foliage or distant surfaces, and cannot cure all fill-rate or CPU bottlenecks.
 
 ExtSplats stores source coordinates as float32 rather than the compact pool's float16, reducing additional coordinate quantization while decoding RAD files. It cannot restore precision already lost when the source RAD was created. Spark's intermediate accumulator remains camera-relative and uses its normal compact encoding. See [Spark's precision and streaming documentation](https://sparkjs.dev/docs/lod-getting-started/#handling-huge-coordinates) and [ExtSplats encoding](https://sparkjs.dev/docs/ext-splats/).
 

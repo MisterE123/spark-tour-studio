@@ -48,7 +48,8 @@ function Viewer(){
  },[]);
  useEffect(()=>{if(!rt)return;rt.onStatus=(s,e)=>{setStatus(s);setError(!!e);};rt.onScene=id=>{setSceneId(id);setRequested(value=>value?.sceneId===id?value:null);};rt.onViewpoint=setViewpointId;rt.onSpeed=setSpeed;rt.onMode=setMode;rt.onPage=setPage;rt.onPointerCapture=setCaptured;setCaptured(rt.pointerCaptured);return()=>{rt.onPointerCapture=()=>{};};},[rt]);
  useEffect(()=>{if(rt)rt.speedMultiplier=speed;},[rt,speed]);
- useEffect(()=>{rt?.audio.setMuted(muted);},[rt,muted]);
+ useEffect(()=>{if(!rt)return;rt.audio.setMuted(muted);return rt.audio.subscribeMuted(setMuted);},[rt]);
+ useEffect(()=>{rt?.audio.setSuspended(!started);},[rt,started]);
  useEffect(()=>{if(rt){rt.snap=snap;rt.swapSticks=swapSticks;}},[rt,snap,swapSticks]);
  useEffect(()=>{if(rt&&project)rt.applyPerformance(tourPerformanceSettings(project.performance));},[rt,project]);
  useEffect(()=>{if(!rt)return;const syncBlocked=()=>{if(rt.renderer.xr.isPresenting)return;rt.blocked=!started||settings||!!page||tourControls;if(rt.blocked)rt.releasePointer();};syncBlocked();rt.renderer.xr.addEventListener('sessionend',syncBlocked);return()=>rt.renderer.xr.removeEventListener('sessionend',syncBlocked);},[rt,started,settings,page,tourControls]);
@@ -57,9 +58,9 @@ function Viewer(){
  const current=project?.scenes.find(s=>s.id===sceneId);
  const selectedView=current?.viewpoints.find(v=>v.id===viewpointId);
  const titleImage=project?.cover||(current?sceneThumbnail(current):'');
- const begin=(guided=false)=>{if(rt&&project){setRequested(null);setStarted(true);setSettings(false);setGuide(guided);if(guided)setGuideStep(0);rt.blocked=false;rt.audio.unlock();void rt.load(project,hosting,base,sceneId);}};
- const visit=(destination:TourDestination)=>{if(!rt||!project)return;setRequested(destination);setPage(null);setStarted(true);setSettings(false);rt.blocked=false;rt.project=project;rt.hosting=hosting;rt.base=base;if(!started&&rt.active?.id===destination.sceneId&&rt.ready){rt.audio.unlock();rt.audio.setScene(rt.active.audio,base);}void rt.visit(destination);};
- const goHome=()=>{setStarted(false);setSettings(false);setTourControls(false);setGuide(false);setPage(null);if(rt){rt.releasePointer();rt.blocked=true;rt.audio.stop();}};
+ const begin=(guided=false)=>{if(rt&&project){setRequested(null);setStarted(true);setSettings(false);setGuide(guided);if(guided)setGuideStep(0);rt.blocked=false;rt.audio.stop();rt.audio.setSuspended(false);rt.audio.unlock();void rt.load(project,hosting,base,sceneId);}};
+ const visit=(destination:TourDestination)=>{if(!rt||!project)return;setRequested(destination);setPage(null);setStarted(true);setSettings(false);rt.blocked=false;rt.project=project;rt.hosting=hosting;rt.base=base;if(rt.active?.id!==destination.sceneId)rt.audio.stop();rt.audio.setSuspended(false);rt.audio.unlock();void rt.visit(destination);};
+ const goHome=()=>{setStarted(false);setSettings(false);setTourControls(false);setGuide(false);setPage(null);if(rt){rt.releasePointer();rt.blocked=true;rt.audio.setSuspended(true);}};
  const closeGuide=()=>{setGuide(false);setGuideSeen(true);try{localStorage.setItem(guideKey,'done');}catch{}};
  const openGuide=()=>{rt?.releasePointer();setSettings(false);setGuideStep(0);setGuide(true);};
  const toggleSettings=()=>{rt?.releasePointer();setSettings(!settings);};

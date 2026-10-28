@@ -407,14 +407,19 @@ checks pass at `test-output/studio-build-1793179530567/`. Source commits after
 this compiled checkpoint must state whether they affect application behavior.
 The follow-up preview record changes documentation only.
 
-Full source CI for `134bd61` is running at
+Full source CI for `134bd61` completed at
 [run 40659512940](https://github.com/MisterE123/spark-tour-studio/actions/runs/40659512940).
-It includes the cross-browser physics recovery correction and four new native/
-offline authoring/export checks. Allow this complete run before the next push;
-the stable release and main branch remain unchanged.
-The later, locally verified focus/audio batch awaits its next source run after
-this one completes. Its native focus, real XR audio and exported website checks
-are included in the follow-up workflow.
+It passed all checks through native authoring, portable content, mobile,
+precision, startup, physics recovery and Git workflows, then stopped in the
+branding fixture. That test incorrectly treated an encoded asset URL as a disk
+filename. The repaired fixture resolves canonical local paths, compares exact
+original bytes, and also fetches each encoded logo/favicon/share-image URL in
+both actual exported websites. The full native/exported branding check passes
+at `test-output/branding 1793180463922/`, including metadata escaping, optional
+credit and four responsive layouts with no external requests or browser errors.
+This repair changes tests only; the verified preview's application is current.
+The next complete branch run includes this repair and the locally verified
+focus/audio batch. The stable release and main branch remain unchanged.
 
 - Baseline: 347 unit/integration tests pass.
 - Baseline: packaged editor import dismissal, Mesh controls, export and reopen pass.

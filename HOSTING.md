@@ -46,4 +46,8 @@ The asset host must honor byte-range requests with correct `206 Partial Content`
 
 Edit `config/hosting.json` to set `assetBaseUrl` or per-scene `sceneUrls`; bundled application resources remain on the website's origin. Set `collisionBaseUrl` separately when relocating paged collision. Preserve relative companion chunk and collision tile paths. An asset origin different from the tour must permit that tour through CORS. HTTPS is required for immersive WebXR outside localhost.
 
+Studio's file chooser encodes local filenames in asset URLs. A file named `Photo #1.png` is referenced as `Photo%20%231.png`; a literal `%20` in a filename becomes `%2520`. Keep these encoded references when editing configuration. A real URL query or fragment remains separate, for example `Photo%20%231.png?rev=2#detail`.
+
+RAD companion names inside RAD metadata follow Spark's URL rules too. For a physical chunk named `part #1.radc`, its metadata reference must be `part%20%231.radc`. A raw `#` is a URL fragment, and a raw `%20` means a space; encoding the main RAD filename cannot repair mismatched companion metadata. Studio validates and copies companions using those rules without rewriting the original RAD. Companion references must remain inside the scene's asset folder; traversal, private editor files and links escaping that folder are rejected.
+
 Compare first visits separately from repeat visits, using the same scene, camera, rendering preset and device. Network transfer and GPU frame rate can each limit perceived loading. Local-loopback compression timings do not predict performance over a visitor's Wi-Fi or Internet connection.

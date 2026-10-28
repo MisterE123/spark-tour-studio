@@ -457,6 +457,23 @@ now retain focus, disabled/inert/disclosure state, held keys and a screenshot.
 A package-directory override permits the exact experimental application to run
 this check without touching the stable build. No product changes were necessary.
 
+The complete follow-up late-check sweep also reproduced an older hemisphere
+fixture reading `tourRuntime.project` before asynchronous Stage preparation had
+created the runtime. It now waits for that actual runtime before its existing
+old-project snapshot; distinct-project/scene readiness and all native/exported
+color, mesh identity, horizon pixel, eye-offset, cleanup and cancellation checks
+remain unchanged. The repaired full test passes at
+`test-output/hemisphere-background-1793186984602/`. A package-directory override
+retains the CI default and allows safe testing of the experimental package.
+The initial failure remains in `test-output/late native sweep 1793186493130/`.
+
+All other late combined checks pass: website drafts, WebGL guidance, performance
+persistence and tour directory under that same sweep folder; XR polish, real
+stereo head safety and full advanced imports/conversion/export under
+`test-output/late-combined-audio-agent-1793186501595/`. Full source run
+`40678128228` is superseded by the corrected hemisphere fixture; this is a
+verified test readiness repair, with no application behavior change.
+
 - Baseline: 347 unit/integration tests pass.
 - Baseline: packaged editor import dismissal, Mesh controls, export and reopen pass.
 - Baseline: packaged teleport recovery, step edges, release tremor, obstacle

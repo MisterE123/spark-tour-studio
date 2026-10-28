@@ -1,4 +1,5 @@
 import {Icon,InspectorSection} from './icons';
+import {useEditorImport} from './editor-imports';
 import React,{useEffect,useState} from 'react';
 import type {PerformanceSettings,Project} from './model';
 import type {TourRuntime} from './runtime';
@@ -46,7 +47,7 @@ export function PerformanceControls({value,onChange}:{value:PerformanceSettings;
 function PerformanceStats({runtime}:{runtime:TourRuntime|null}){const [text,setText]=useState('');useEffect(()=>{const t=setInterval(()=>{if(runtime)setText(`${Math.round(1000/runtime.frameMs)} FPS · ${runtime.spark.display.numSplats.toLocaleString()} displayed splats${runtime.performanceSettings.adaptiveDetail?` · Auto detail ${Math.round(runtime.adaptiveDetailScale*100)}%`:''}`);},500);return()=>clearInterval(t);},[runtime]);return <p className="muted" aria-live="off">{text||'Load a scene to measure performance.'}</p>;}
 export interface PerformanceEditorSession {name:string;notice:string;source:string;}
 export function PerformanceEditor({project,change,runtime,session,setSession}:{project:Project;change:(fn:(p:Project)=>void)=>void;runtime:TourRuntime|null;session:PerformanceEditorSession|null;setSession:React.Dispatch<React.SetStateAction<PerformanceEditorSession|null>>}){
- const library=project.performance||defaultPerformance(),preset=library.presets.find(p=>p.id===library.defaultPresetId)!;
+ const transaction=useEditorImport(),library=project.performance||defaultPerformance(),preset=library.presets.find(p=>p.id===library.defaultPresetId)!;
  const draft=tourPerformanceSettings(library),source=JSON.stringify(preset);
  const initial:PerformanceEditorSession={name:preset.name,notice:'',source};
  const {name,notice}=session?.source===source?session:initial;
@@ -63,7 +64,7 @@ export function PerformanceEditor({project,change,runtime,session,setSession}:{p
    <option value="" disabled>Custom adjustments</option>{library.presets.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
   <label className="field"><span>Preset name</span><input maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label>
   <div className="actions"><button disabled={!name.trim()} onClick={()=>save(false)}><Icon name="save"/>Save preset</button><button disabled={!name.trim()||library.presets.length>=100} onClick={()=>save(true)}><Icon name="content_copy"/>Save as new preset</button><button title={`Delete preset: ${preset.name}`} disabled={library.presets.length===1} onClick={()=>change(p=>{const next=structuredClone(p.performance||defaultPerformance());next.presets=next.presets.filter(v=>v.id!==preset.id);next.defaultPresetId=next.presets[0].id;delete next.defaultSettings;p.performance=next;})}><Icon name="delete"/>Delete preset</button></div>
-  <div className="actions"><button disabled={library.presets.length>=100} onClick={async()=>{try{const file=await window.studio!.importPerformancePreset();if(!file)return;const id=crypto.randomUUID();change(p=>{p.performance=structuredClone(p.performance||defaultPerformance());p.performance.presets.push({id,name:file.name,settings:file.settings});p.performance.defaultPresetId=id;delete p.performance.defaultSettings;});}catch(e){setNotice(String(e));}}}><Icon name="folder_open"/>Import preset…</button><button disabled={!name.trim()} onClick={async()=>{try{const file=await window.studio!.exportPerformancePreset(presetFile({name,settings:draft}));if(file)setNotice('Preset file saved.');}catch(e){setNotice(String(e));}}}><Icon name="ios_share"/>Export preset…</button></div>
+  <div className="actions"><button disabled={library.presets.length>=100} onClick={async()=>{try{await transaction(()=>window.studio!.importPerformancePreset(),file=>{const id=crypto.randomUUID();change(p=>{p.performance=structuredClone(p.performance||defaultPerformance());p.performance.presets.push({id,name:file.name,settings:file.settings});p.performance.defaultPresetId=id;delete p.performance.defaultSettings;});});}catch(e){setNotice(String(e));}}}><Icon name="folder_open"/>Import preset…</button><button disabled={!name.trim()} onClick={async()=>{try{const file=await window.studio!.exportPerformancePreset(presetFile({name,settings:draft}));if(file)setNotice('Preset file saved.');}catch(e){setNotice(String(e));}}}><Icon name="ios_share"/>Export preset…</button></div>
   {notice&&<p role="status">{notice}</p>}<PerformanceControls value={draft} onChange={apply}/></>;
 }
 export function ViewerPerformance({project,runtime}:{project:Project|null;runtime:TourRuntime|null}){

@@ -169,6 +169,21 @@ sandboxed third-party iframe cannot always reach the viewer. The visible Close
 button remains available. This is a desktop browser/Studio improvement; XR
 continues to use the in-world content controls.
 
+### Focus and audio follow the active interface
+
+While moving in the editor, click a text or number field, slider, resize handle,
+inspector tab or editor menu. Held keyboard movement now stops; arrows and text
+keys belong to that control. Returning to the viewport permits fresh movement.
+Right-drag panning and touch/controller intent retain their existing behavior.
+
+Return to the landing page while a scene or its audio is still loading. Scene
+ambience and viewpoint narration stay paused when those requests finish. A
+directory visit can resume the prepared view and its existing audio; **Enter
+tour** retains its explicit authored-entry restart. Information/settings panels
+keep ambience playing. Edit pauses audio, and Preview uses the current scene
+and view settings. Muting in the XR menu is reflected in the desktop checkbox
+when leaving VR, so its next click works predictably.
+
 ### Less startup work for Viewpoints
 
 Open a portable export with an empty browser cache and enter a Viewpoints scene.
@@ -567,3 +582,24 @@ the stable release and main branch remain unchanged.
   changes, canceled/failed reads, globally visible errors, preset/audio/background
   imports, native collider commit, clean Save As and physical portable export.
   Every imported reference still serves the exact original bytes.
+- Focus/audio checkpoint: **436/436 unit and integration tests passed** in
+  116.7 seconds at `test-output/unit-experimental-focus-audio-2026-10-28.log`.
+  Native held-key focus regression passes at
+  `test-output/input-focus-1793178810889/`: fields, rich text, menus, tabs,
+  separators, ordinary typing and Save, fresh WASD/arrows, right-pan and preserved
+  touch/runtime identities. Actual prior movement under input/menu focus was
+  reproduced before changing the focus-entry listener.
+- Source audio lifecycle passes eight cases at
+  `test-output/audio lifecycle 1793178658569/`, including the real Three XR
+  manager's Options Audio action and the synchronized desktop checkbox. The
+  actual portable exported website passes both held RAD and held native audio
+  response orders, real play/pause events, prepared scene/view resume and local
+  asset requests at `test-output/audio export 1793178868361/`. The original
+  behind-title playback was reproduced before adding suspension. Enter tour
+  still reloads the authored entry; settings keep ambience; editing stays quiet.
+- The bounded thumbnail ownership audit found no stale callback failure. Rapid
+  scenes and related projects sharing scene/view IDs produced captures associated
+  with the correct project/generation. Source cancels pending capture before
+  scene identity changes and creates/delivers each image synchronously. No
+  speculative product change was made; corrected native proof is at
+  `test-output/thumbnail-capture-audit-1793178101637/corrected-result.json`.

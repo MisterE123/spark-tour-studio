@@ -182,6 +182,14 @@ jobs:
         env:
           SPARK_PACKAGED: '1'
         run: node scripts/richtext-history-check.mjs
+      - name: Check editor focus stops held movement without breaking controls
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/input-focus-check.mjs
+      - name: Check title, editor and XR audio lifecycle and mute state
+        run: node scripts/audio-lifecycle-check.mjs
+      - name: Check exported viewer audio stays silent behind its landing page
+        run: node scripts/audio-export-check.mjs
       - name: Check portable HTML resource completeness and ordinary links
         run: node scripts/portable-resources-check.mjs
       - name: Check remote RAD companion bytes load offline in Spark

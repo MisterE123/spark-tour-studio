@@ -453,11 +453,11 @@ success condition was weakened. The next combined source run must complete.
 ## Validation and handoff
 
 Latest verified local preview: compiled clean commit
-`97202af0a9f74da2d18dca222cfe71c841f867e1`.
+`b96a24258b58707c98d0cd17d1bd2b553dacf547`.
 
-`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental 97202af0.exe`
+`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental b96a2425.exe`
 
-SHA-256: `d5063e87b7124d4cb7b5b63e9d0031c24003dfcaa0dfae7185151668067afef0`.
+SHA-256: `a531348797c85f6f93f843664db935dab3b7f4591c9d296807723eae29306a3f`.
 
 Its actual portable executable launches, identifies the compiled branch/commit
 and closes normally. The packaged identity check also confirms visitor code
@@ -466,14 +466,32 @@ main/tag commit remain unchanged. The expanded native editor sweep has completed
 all seven checks pass, with logs under
 `test-output/editor-ci-sweep/1793162643805/`.
 The current actual portable launch/About/normal-close check passes at
-`test-output/portable smoke 1793187648756/`; packaged identity and visitor graph
-checks pass at `test-output/studio-build-1793187617615/`. Source commits after
+`test-output/portable smoke 1793195586851/`; packaged identity and visitor graph
+checks pass at `test-output/studio-build-1793195559385/`. Source commits after
 this compiled checkpoint must state whether they affect application behavior.
-The follow-up preview record changes documentation only.
-The actual packaged application passes the full keyboard-focus regression at
+The final follow-up preview record changes documentation only. The actual
+packaged visitor passes the complete Drone-to-Walk teleport/stereo liveness
+regression at `test-output/XR teleport liveness 1793195561705/`, using this
+experimental package explicitly rather than the stable viewer directory.
+Build log: `test-output/package-experimental-b96a242-2026-10-28.log`.
+
+Full source CI [40699713308](https://github.com/MisterE123/spark-tour-studio/actions/runs/40699713308)
+at this exact compiled commit **passed all 80 Windows checks/build steps**, with
+no failures, including the new VR freeze regression, 436 unit/integration tests,
+all native/browser checks, the portable package and uploaded artifacts. Release
+publication was correctly skipped. The original final CI failures are resolved.
+Main and the v1.22.3 tag remain `72c759b`; no release or merge was made.
+
+**Re-export the tour using this build before testing on Quest.** Existing exports
+retain their old runtime code; the dated test export and Tourv3 originals were
+not modified. Physical Quest confirmation, slow-laptop performance and hosted
+VPS time to sharp detail remain manual acceptance tests.
+
+The preceding clean `97202af0` preview passed the full keyboard-focus regression at
 `test-output/input-focus-1793187499859/` and all native/rendered/exported
 hemisphere assertions at `test-output/hemisphere-background-1793187548621/`.
-The build log is `test-output/package-experimental-97202af-2026-10-28-retry.log`.
+Its build log is `test-output/package-experimental-97202af-2026-10-28-retry.log`.
+Both checks also passed in the latest complete CI run above.
 Full source run
 [40680633294](https://github.com/MisterE123/spark-tour-studio/actions/runs/40680633294)
 passed the formerly failing focus check plus native Save/Undo, audio, offline
@@ -487,8 +505,10 @@ source run [40687104692](https://github.com/MisterE123/spark-tour-studio/actions
 at `d29f858` passed all 79 Windows steps, including every native/browser check,
 portable package and uploaded artifacts. Release publication was correctly
 skipped. No application source changed during these fixture/CI-budget repairs.
-The subsequently reported VR Walk teleport freeze requires another runtime
-checkpoint and replacement preview; the green run remains the pre-fix baseline.
+The subsequently reported VR Walk teleport freeze is fixed and verified in
+`b96a242`, including the exact Drone → Walk sequence and same-session stereo
+rendering. The newer green run and replacement preview above supersede this
+pre-fix baseline.
 
 Full source CI for `134bd61` completed at
 [run 40659512940](https://github.com/MisterE123/spark-tour-studio/actions/runs/40659512940).

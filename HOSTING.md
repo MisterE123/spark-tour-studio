@@ -18,6 +18,14 @@ Existing exported launchers need to be replaced by a newly built launcher to rec
 
 Enable compression for application text, particularly JavaScript and JSON. The example below belongs in the existing nginx HTTP/server configuration that serves the exported site. Keep the host's normal MIME type configuration and HTTPS setup.
 
+Serve both `.js` and `.mjs` files with a JavaScript MIME type such as
+`text/javascript`. The locally bundled physics module uses `.mjs`; a browser
+rejects it if the host returns `application/octet-stream` or an HTML fallback.
+If an older MIME map omits `mjs`, add it to the existing JavaScript entry while
+preserving the other type mappings. The bundled local launcher already handles
+both extensions. Retrying a failed physics request may add a query parameter;
+serve the same asset bytes when that parameter is present.
+
 ```nginx
 gzip on;
 gzip_comp_level 5;

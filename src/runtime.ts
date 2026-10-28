@@ -14,7 +14,7 @@ import * as THREE from 'three';
 import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
 import type Rapier from '@dimforge/rapier3d-compat';
 import {physics as RAPIER} from '../shared/physics.mjs';
-import {loadPhysics} from '../shared/physics-loader.mjs';
+import {loadPhysics} from './physics-loader';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import type { Project,TourScene,Hosting,Mode,Viewpoint,Hotspot,Page,Transform,Vec3,TourDestination,CollisionVolume,SceneLink } from './model';

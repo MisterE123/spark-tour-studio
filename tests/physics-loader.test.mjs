@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {physics} from '../shared/physics.mjs';
-import {loadPhysics} from '../shared/physics-loader.mjs';
+import {loadPhysics,createPhysicsLoader} from '../shared/physics-loader.mjs';
 import {WalkingMotor} from '../shared/walking.mjs';
 import {flyMovement} from '../shared/flying.mjs';
 
@@ -28,6 +28,24 @@ test('a failed initialization is retryable without exposing a partially initiali
  const failed=provider.initializePhysics(engine);await assert.rejects(failed,/compile failed/);assert.equal(provider.physics,undefined);
  const retried=provider.initializePhysics(engine);assert.notEqual(retried,failed);assert.equal(await retried,engine);
  assert.equal(provider.physics,engine);assert.equal(calls,2);
+});
+
+test('a rejected download advances only the next shared import attempt',async()=>{
+ let current,release,calls=0;const attempts=[],engine={init:async()=>{}};
+ const loader=createPhysicsLoader(async attempt=>{attempts.push(attempt);if(++calls===1)throw Error('network unavailable');await new Promise(resolve=>release=resolve);return {default:engine};},{current:()=>current,initialize:async engine=>{await engine.init();return current=engine;}});
+ const failed=loader();assert.equal(loader(),failed);await assert.rejects(failed,/network unavailable/);assert.equal(current,undefined);
+ const retry=loader();assert.equal(loader(),retry);await Promise.resolve();assert.deepEqual(attempts,[0,1]);release();assert.equal(await retry,engine);assert.equal(await loader(),engine);assert.equal(calls,2);
+});
+
+test('initialization retries reuse the successful module and never advance its URL',async()=>{
+ let current,imports=0,initializations=0;const attempts=[],engine={init:async()=>{if(++initializations===1)throw Error('WASM interrupted');}};
+ const loader=createPhysicsLoader(async attempt=>{imports++;attempts.push(attempt);return {default:engine};},{current:()=>current,initialize:async engine=>{await engine.init();return current=engine;}});
+ await assert.rejects(loader(),/WASM interrupted/);assert.equal(current,undefined);const retry=loader();assert.equal(loader(),retry);assert.equal(await retry,engine);assert.equal(await loader(),engine);assert.equal(imports,1);assert.equal(initializations,2);assert.deepEqual(attempts,[0]);
+});
+
+test('an already published engine prevents imports and replacement',async()=>{
+ const engine={};const loader=createPhysicsLoader(()=>{throw Error('must not import a replacement');},{current:()=>engine,initialize:()=>{throw Error('must not initialize a replacement');}});
+ assert.equal(await loader(),engine);
 });
 
 test('the actual lazy loader and all synchronous shape helpers share the initialized engine',async()=>{

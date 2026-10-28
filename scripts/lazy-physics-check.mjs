@@ -19,19 +19,22 @@ const manifest=JSON.parse(await fs.readFile(path.join(dist,'.vite/manifest.json'
 let engineFile=Object.values(manifest).find(entry=>/rapier/i.test(entry.file))?.file;
 if(!engineFile)engineFile='assets/'+(await fs.readdir(path.join(dist,'assets'))).find(file=>/^rapier-[\w-]+\.(?:m?js)$/.test(file));
 assert.ok(engineFile&&!engineFile.endsWith('undefined'),'build contains a separate engine module');await fs.access(path.join(output,engineFile));
+const engineAssets=(await fs.readdir(path.join(dist,'assets'))).filter(file=>/^rapier-[\w-]+\.(?:m?js)$/.test(file));assert.equal(engineAssets.length,1,'the browser emits one engine asset without a duplicate transformed package chunk');
+assert.deepEqual(await fs.readFile(path.join(output,engineFile)),await fs.readFile('node_modules/@dimforge/rapier3d-compat/dist/rapier.mjs'),'the offline asset contains the complete self-contained compatibility module and embedded WASM');
 await fs.access(path.join(output,'licenses/@dimforge_rapier3d-compat.txt'));
 const staticFiles=new Set();function collect(key){const entry=manifest[key];if(!entry||staticFiles.has(entry.file))return;staticFiles.add(entry.file);for(const dep of entry.imports||[])collect(dep);}collect('index.html');
 assert.ok(!staticFiles.has(engineFile),'the physics engine is not a title-screen dependency');
 const size=async files=>{let bytes=0,gzip=0;for(const file of files){const contents=await fs.readFile(path.join(dist,file));bytes+=contents.length;gzip+=gzipSync(contents).length;}return {bytes,gzip};};
 const sizes={initial:await size(staticFiles),engine:await size([engineFile])};
 const {server,url}=await startServer({root:output,resolve:file=>file.startsWith('museum/')?{root:output,relative:file.slice(7)||'index.html'}:undefined}),base=url+'museum/';
-const browser=await chromium.launch({channel:'msedge',headless:true,args:['--enable-webgl','--use-angle=swiftshader','--enable-unsafe-swiftshader']}),reports={sizes,engineFile};
+const browser=await chromium.launch({...(process.env.SPARK_BROWSER_EXECUTABLE?{executablePath:process.env.SPARK_BROWSER_EXECUTABLE}:{channel:'msedge'}),headless:true,args:['--enable-webgl','--use-angle=swiftshader','--enable-unsafe-swiftshader']}),reports={sizes,engineFile,browser:browser.version()};
 async function fixture(){
- const context=await browser.newContext({viewport:{width:1100,height:750}}),page=await context.newPage(),requests=[],errors=[],external=[];page.setDefaultTimeout(20000);
+ const context=await browser.newContext({viewport:{width:1100,height:750}}),page=await context.newPage(),requests=[],errors=[],external=[],navigations=[];page.setDefaultTimeout(20000);
  await context.route('**/*',route=>{const request=route.request(),target=new URL(request.url());if(target.origin!==new URL(base).origin){external.push(request.url());return route.abort();}return route.continue();});
- page.on('request',request=>requests.push({url:request.url(),time:Date.now()}));page.on('pageerror',error=>errors.push(error.message));
+ page.on('request',request=>requests.push({url:request.url(),time:Date.now()}));page.on('pageerror',error=>errors.push(error.message));page.on('framenavigated',frame=>{if(frame===page.mainFrame())navigations.push(frame.url());});
+ await page.addInitScript(()=>{Object.defineProperty(window,'XRWebGLBinding',{configurable:true,value:undefined});window.XRWebGLLayer=class{constructor(){this.framebufferWidth=1000;this.framebufferHeight=750;this.framebuffer=null;this.ignoreDepthValues=true;}getViewport(view){return {x:view.eye==='left'?0:500,y:0,width:500,height:750};}};});
  await page.addInitScript(()=>{window.wasmCalls=[];for(const method of ['instantiate','instantiateStreaming','compile','compileStreaming']){const original=WebAssembly[method];if(original)WebAssembly[method]=function(...args){window.wasmCalls.push({method,stack:new Error().stack});return Reflect.apply(original,this,args);};}});
- await page.goto(base+'?diagnostics=1');return {context,page,requests,errors,external};
+ await page.goto(base+'?diagnostics=1');return {context,page,requests,errors,external,navigations};
 }
 const ready=page=>page.waitForFunction(()=>{const r=window.tourRuntime;if(r?.mesh?.parent)r.frame(r.last+20);return r?.ready;});
 const engineRequests=fixture=>fixture.requests.filter(request=>new URL(request.url).pathname.endsWith('/'+engineFile));
@@ -43,12 +46,23 @@ try{
   let attempts=0;await retry.page.route('**/'+path.basename(engineFile)+'*',route=>++attempts===1?route.abort('failed'):route.continue());
   await retry.page.getByRole('button',{name:'Enter tour',exact:true}).click();await ready(retry.page);
   assert.equal(engineRequests(retry).length,0);assert.equal((await engineCompiles(retry.page)).length,0);
+  const navigationCount=retry.navigations.length;await retry.page.evaluate(async()=>{
+   const r=window.tourRuntime,xr=r.renderer.xr;r.renderer.setAnimationLoop(null);r.renderer.getContext().makeXRCompatible=async()=>{};
+   class Session extends EventTarget{inputSources=[];enabledFeatures=[];environmentBlendMode='opaque';visibilityState='visible';referenceSpace=new EventTarget();renderState={};callback;requestAnimationFrame(callback){this.callback=callback;return 1;}cancelAnimationFrame(){}updateRenderState(state){Object.assign(this.renderState,state);}async requestReferenceSpace(){return this.referenceSpace;}end(){throw Error('An engine retry must preserve XR');}}
+   const session=window.physicsRetrySession=new Session(),V=r.rig.position.constructor,M=r.camera.matrix.constructor,Q=r.rig.quaternion.constructor,head=new V(0,1.7,0),orientation=new Q(),unit=new V(1,1,1);let time=performance.now();
+   r.renderer.setAnimationLoop((time,frame)=>r.frame(time,frame));await xr.setSession(session);
+   window.physicsRetryTick=()=>{time+=1000/72;const near=session.renderState.depthNear||.05,far=session.renderState.depthFar||20000,projection=new M().makePerspective(-near,near,near,-near,near,far),views=['left','right'].map((eye,index)=>({eye,transform:{matrix:new M().compose(head.clone().add(new V(index?.032:-.032,0,0)),orientation,unit).elements},projectionMatrix:projection.elements})),pose={views,transform:{matrix:new M().compose(head,orientation,unit).elements,position:{x:head.x,y:head.y,z:head.z,w:1},orientation:{x:0,y:0,z:0,w:1}}},frame={session,getViewerPose:()=>pose,getPose:()=>null},callback=session.callback;session.callback=null;callback(time,frame);const stereo=xr.getCamera(),eyes=stereo.cameras.map(camera=>new V().setFromMatrixPosition(camera.matrixWorld));return {eyes:eyes.length,eyeError:eyes[0].clone().add(eyes[1]).multiplyScalar(.5).distanceTo(r.rig.localToWorld(head.clone())),determinants:stereo.cameras.map(camera=>camera.matrixWorld.determinant())};};
+   window.physicsRetryTick();window.physicsRetryIdentities={document,renderer:r.renderer,canvas:r.renderer.domElement,camera:r.camera,rig:r.rig,manager:xr,stereo:xr.getCamera()};
+  });
   await retry.page.evaluate(async()=>{const r=window.tourRuntime;r.setMode('fly');await r.modeTransition;});
   const failed=await retry.page.evaluate(()=>{const r=window.tourRuntime;return {mode:r.mode,world:!!r.world,failure:r.colliderFailure};});assert.equal(failed.mode,'jumps');assert.equal(failed.world,false);assert.ok(failed.failure);
   await retry.page.evaluate(async()=>{const r=window.tourRuntime;r.setMode('fly');await r.modeTransition;});
   const recovered=await retry.page.evaluate(()=>{const r=window.tourRuntime;return {mode:r.mode,world:!!r.world,failure:r.colliderFailure};});
-  reports.retry={attempts,failed,recovered,requests:engineRequests(retry)};await fs.writeFile(path.join(root,'retry.json'),JSON.stringify(reports.retry,null,2));
+  const identities=await retry.page.evaluate(()=>{const r=window.tourRuntime,p=window.physicsRetryIdentities;return {document:document===p.document,renderer:r.renderer===p.renderer,canvas:r.renderer.domElement===p.canvas,camera:r.camera===p.camera,rig:r.rig===p.rig,manager:r.renderer.xr===p.manager,stereo:r.renderer.xr.getCamera()===p.stereo,session:r.renderer.xr.getSession()===window.physicsRetrySession};}),stereo=await retry.page.evaluate(()=>window.physicsRetryTick());
+  reports.retry={attempts,failed,recovered,requests:engineRequests(retry),identities,stereo,navigations:retry.navigations.length-navigationCount};await fs.writeFile(path.join(root,'retry.json'),JSON.stringify(reports.retry,null,2));
   assert.equal(recovered.mode,'fly','a failed engine fetch can retry without refreshing the tour');assert.ok(recovered.world);assert.equal(recovered.failure,'');assert.equal(attempts,2);assert.deepEqual(retry.errors,[]);assert.deepEqual(retry.external,[]);
+  for(const [name,same] of Object.entries(identities))assert.equal(same,true,name);assert.equal(reports.retry.navigations,0,'engine recovery never reloads a live tour/XR document');assert.equal(new URL(engineRequests(retry)[0].url).searchParams.has('physics-retry'),false);assert.equal(new URL(engineRequests(retry)[1].url).searchParams.get('physics-retry'),'1','the second real request bypasses a browser-cached failed module');
+  assert.equal(stereo.eyes,2);assert.ok(stereo.eyeError<1e-6,'real WebXRManager stereo eyes still track the rig after recovery');assert.ok(stereo.determinants.every(value=>Math.abs(value-1)<1e-6),'real stereo view matrices remain rigid');
  }finally{await retry.context.close();}
  const compile=await fixture();try{
   await compile.page.getByRole('button',{name:'Enter tour',exact:true}).click();await ready(compile.page);

@@ -2,7 +2,7 @@ name: Build 3DGS Perspectives Studio
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/experimental-*']
     tags: ['v*']
   pull_request:
     branches: [main]

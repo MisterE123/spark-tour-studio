@@ -136,6 +136,8 @@ jobs:
         run: node scripts/adaptive-detail-check.mjs
       - name: Check authored entry paging and first-frame loading presentation
         run: node scripts/startup-presentation-check.mjs
+      - name: Check story keyboard focus and validated local content actions
+        run: node scripts/content-dialog-check.mjs
       - name: Check selection-safe editor actions and in-queue imports
         env:
           SPARK_PACKAGED: '1'

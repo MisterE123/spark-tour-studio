@@ -27,7 +27,14 @@ try{
  const chunkGate=new Promise(resolve=>releaseChunk=resolve),skyGate=new Promise(resolve=>releaseSky=resolve);let chunkRequested=false,skyRequested=false;
  await page.route('**/scene.radc',async route=>{chunkRequested=true;await chunkGate;await route.continue();});
  await page.route('**/sky.svg',async route=>{skyRequested=true;await skyGate;await route.continue();});
- await page.goto(url+'?diagnostics=1');await page.getByRole('button',{name:'Enter tour',exact:true}).click();
+ await page.goto(url+'?diagnostics=1');await page.waitForFunction(()=>!!window.tourRuntime);
+ await page.evaluate(()=>{
+  const r=window.tourRuntime,report=r.onStatus;window.readinessReports=[];window.loadingObservers=[[],[]];
+  r.onStatus=(text,error)=>{if(!text)window.readinessReports.push({ready:r.ready,phase:r.loading?.phase});report(text,error);};
+  window.removeFirstLoadingObserver=r.subscribeLoading(()=>window.loadingObservers[0].push({phase:r.loading?.phase||null,ready:r.ready}));
+  r.subscribeLoading(()=>window.loadingObservers[1].push({phase:r.loading?.phase||null,ready:r.ready}));
+ });
+ await page.getByRole('button',{name:'Enter tour',exact:true}).click();
  const deadline=Date.now()+10000;while(!chunkRequested||!skyRequested){if(Date.now()>deadline)throw Error('Expected normal scene and background requests');await page.waitForTimeout(20);}
  const early=await page.evaluate(()=>{const r=window.tourRuntime;return {position:r.camera.getWorldPosition(r.rig.position.clone()).toArray(),loading:r.loading?.phase,display:r.spark.display.numSplats};});
  assert.ok(Math.abs(early.position[0]-30)<.001&&Math.abs(early.position[2]-10)<.001,'first paging uses the authored camera before background preparation finishes');
@@ -37,14 +44,19 @@ try{
  await page.waitForTimeout(200);
  assert.deepEqual(await page.evaluate(()=>window.tourRuntime.rig.position.toArray()),held.position,'authored orbit waits while the initial view is covered');
  assert.equal(held.loading,true);assert.equal(held.display,0);assert.ok(await page.locator('.scene-loading-cover').isVisible());
+ const observersBefore=await page.evaluate(()=>{window.removeFirstLoadingObserver();return window.loadingObservers.map(events=>events.length);});
  await page.screenshot({path:path.join(root,'preparing.png')});
  releaseChunk();await page.waitForFunction(()=>!window.tourRuntime.loading&&window.tourRuntime.spark.display.numSplats>0);
  assert.equal(await page.locator('.scene-loading').count(),0);
  const revealed=await page.evaluate(()=>{const r=window.tourRuntime;return {position:r.rig.position.toArray(),display:r.spark.display.numSplats,first:!!r.firstDisplay};});
  assert.equal(revealed.first,false);assert.ok(revealed.display>0);
+ const readiness=await page.evaluate(()=>({reports:window.readinessReports,observers:window.loadingObservers,ready:window.tourRuntime.ready}));
+ assert.ok(readiness.reports.length>0&&readiness.reports.every(report=>!report.ready),'resource/status callbacks cannot advertise readiness during opening');
+ assert.equal(readiness.ready,true);assert.equal(readiness.observers[0].length,observersBefore[0],'unsubscribed loading observers stop receiving updates');
+ assert.ok(readiness.observers[1].length>observersBefore[1]);assert.deepEqual(readiness.observers[1].at(-1),{phase:null,ready:true},'independent loading observers see the first displayed view');
  await page.waitForFunction(position=>window.tourRuntime.rig.position.distanceTo({x:position[0],y:position[1],z:position[2]})>.001,revealed.position);
  assert.deepEqual(errors,[]);await page.screenshot({path:path.join(root,'revealed.png')});
- await fs.writeFile(path.join(root,'result.json'),JSON.stringify({early,held,revealed,errors},null,2));
- console.log('PASS entry camera before paging, visible loading cover during actual cold data, paused authored animation and first-frame reveal. '+root);
+ await fs.writeFile(path.join(root,'result.json'),JSON.stringify({early,held,revealed,readiness,errors},null,2));
+ console.log('PASS entry camera before paging, cold loading cover, paused animation, gap-free display readiness and independent loading observers. '+root);
 }catch(error){if(page){await page.screenshot({path:path.join(root,'failure.png')}).catch(()=>{});console.error(await page.evaluate(()=>({text:document.body.innerText,ready:!!window.tourRuntime})).catch(()=>({})));}console.error(errors);throw error;}
 finally{releaseChunk();releaseSky();await browser.close();await new Promise(resolve=>server.close(resolve));}

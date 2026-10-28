@@ -9,7 +9,7 @@ import {glassVariables} from '../shared/appearance.mjs';
 import {guideStorageKey} from '../shared/onboarding.mjs';
 import React,{useState,useEffect} from 'react';
 import {createRoot} from 'react-dom/client';
-import {TourRuntime} from './runtime';import {SceneLoading} from './scene-loading';
+import {TourRuntime} from './runtime';import {SceneLoading,useSceneLoading} from './scene-loading';
 import type {Project,Hosting,Mode,Page,TourDestination} from './model';
 import {validateProject,ProjectSchema,HostingSchema} from '../shared/project.mjs';
 import {Button,Field,Stage,ControlsHelp,TouchPad,ContentModal,useMobileControls,MobileControlSetting} from './ui';
@@ -30,6 +30,7 @@ function Viewer(){
  const [viewpointId,setViewpointId]=useState('');
  const [project,setProject]=useState<Project|null>(null),[hosting,setHosting]=useState(homeHosting);
  const [rt,setRt]=useState<TourRuntime|null>(null),[sceneId,setSceneId]=useState(''),[started,setStarted]=useState(false);
+ const loading=useSceneLoading(rt),ready=!!rt?.ready&&!loading;
  const [startupError,setStartupError]=useState('');
  const [status,setStatus]=useState(''),[error,setError]=useState(false),[mode,setMode]=useState<Mode>('jumps');
  const [settings,setSettings]=useState(false),[page,setPage]=useState<Page|null>(null),[loadError,setLoadError]=useState('');
@@ -91,8 +92,8 @@ function Viewer(){
    </>}
    {project&&<ViewpointStory initiallyCollapsed={compact} hidden={settings||!!page||guide||tourControls} project={project} scene={current} view={selectedView} runtime={rt} base={base}/>}
    <TouchPad runtime={rt} enabled={mobile.enabled&&!settings&&!page&&!guide&&!tourControls} mode={mode}/>
-   {!compact&&!settings&&!page&&!guide&&<NavigationCoach mode={mode} touch={mobile.enabled} captured={captured} ready={!!rt?.ready&&!rt?.loading} onCapture={()=>{void rt?.capturePointer();}} onRelease={()=>rt?.releasePointer()} onGuide={openGuide}/>}
-   {guide&&!settings&&!page&&rt?.ready&&!rt?.loading&&<ViewerGuide mode={mode} touch={mobile.enabled} captured={captured} step={guideStep} onStep={setGuideStep} onCapture={()=>{void rt?.capturePointer();}} onClose={closeGuide}/>}
+   {!compact&&!settings&&!page&&!guide&&<NavigationCoach mode={mode} touch={mobile.enabled} captured={captured} ready={ready} onCapture={()=>{void rt?.capturePointer();}} onRelease={()=>rt?.releasePointer()} onGuide={openGuide}/>}
+   {guide&&!settings&&!page&&ready&&<ViewerGuide mode={mode} touch={mobile.enabled} captured={captured} step={guideStep} onStep={setGuideStep} onCapture={()=>{void rt?.capturePointer();}} onClose={closeGuide}/>}
   </>}
   {status&&started&&!rt?.loading&&<div role="status" className={'status '+(error?'error':'')}><Icon name={error?'error':'schedule'}/>{status}{mode==='explore'&&!error&&<Button onClick={()=>{rt?.routes.cancel();setStatus('');}}><Icon name="close"/>Stop walking</Button>}{error&&<><Button onClick={()=>requested?void rt?.visit(requested):void rt?.selectScene(sceneId)}><Icon name="refresh"/>Retry</Button><Button onClick={goHome}><Icon name="menu"/>Choose scene</Button></>}</div>}
   {settings&&<section className="settings floating" role="dialog" aria-label="Viewing settings"><header><h3><Icon name="settings"/>Viewing settings</h3><IconButton icon="close" label="Close settings" onClick={()=>setSettings(false)}/></header>

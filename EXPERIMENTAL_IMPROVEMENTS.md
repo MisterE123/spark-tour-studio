@@ -2,7 +2,8 @@
 
 Branch: `codex/experimental-experience-2026-10-28`  
 Baseline: main commit `72c759b`, Studio **1.22.3**  
-Review target: **October 28, 2026, 7:00 AM America/New_York**
+Review target: **October 28, 2026, 7:00 AM America/New_York**  
+Follow-up: resolve the final CI failure and verify a fresh experimental executable.
 
 This branch is experimental. It runs GitHub CI and keeps changes in reviewable
 commits. It must not publish a release or merge into main without approval.
@@ -433,6 +434,28 @@ the last complete snapshot. All six actual native Close scenarios pass at
 Cancel, failed/canceled imports, discard and ordinary exit. The next full source
 run includes this test-only repair. The stable release, main branch and verified
 preview remain unchanged.
+
+Run `40671548454` passed the repaired Close check, encoded assets, ownership,
+canceled Save As and rich-text histories, then failed the numeric-focus fixture.
+That fixture used the dirty flag as its only Save completion fence and assumed
+that `locator.focus()` successfully focused the field. A real native clean Save
+held at its atomic rename proves that dirty can be false while authoring inputs
+are still disabled: the focus attempt leaves the canvas focused and ArrowUp
+held, producing exactly the observed 0.4 m movement over ten real frames.
+After Save finishes and the same input is enabled, actual focus clears movement.
+The navigation section stays open. Evidence:
+`test-output/input-focus-1793185770283/held-save-result.json`.
+The repaired fixture waits for enabled authoring controls and verifies actual
+focus before testing movement. All original camera, held-key and release
+assertions remain. The corrected native suite passes at
+`test-output/input-focus-1793185820277/`. A test-only negative control suppresses
+exactly the numeric field's runtime focus reset: the visible, enabled input is
+actually focused, yet the unchanged movement assertion fails with the same
+0.4 m drift at `test-output/input-focus-1793185886400/failure.json`. This confirms
+that the readiness fence does not conceal a missing runtime behavior. Failures
+now retain focus, disabled/inert/disclosure state, held keys and a screenshot.
+A package-directory override permits the exact experimental application to run
+this check without touching the stable build. No product changes were necessary.
 
 - Baseline: 347 unit/integration tests pass.
 - Baseline: packaged editor import dismissal, Mesh controls, export and reopen pass.

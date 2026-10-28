@@ -14,10 +14,11 @@ await fs.writeFile(path.join(folder,'scene.rad'),radFixture().rad);
 await fs.writeFile(path.join(folder,'config','tour.json'),JSON.stringify(project));
 await fs.writeFile(path.join(folder,'config','hosting.json'),JSON.stringify({assetBaseUrl:'./',sceneUrls:{}}));
 const args=['--disable-background-timer-throttling','--disable-renderer-backgrounding'];
-const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.resolve('release/win-unpacked/3DGS Perspectives Studio.exe'),args}:{args:['.',...args]},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(output,'profile')},timeout:60000});
-const report={checks:[]};
+const packageRoot=path.resolve(process.env.SPARK_PACKAGE_DIR||'release/win-unpacked');
+const app=await electron.launch({...process.env.SPARK_PACKAGED?{executablePath:path.join(packageRoot,'3DGS Perspectives Studio.exe'),args}:{args:['.',...args]},env:{...process.env,SPARK_TEST:'1',SPARK_TEST_PROFILE:path.join(output,'profile')},timeout:60000});
+const report={checks:[]};let page,currentCheck='startup',phase='startup';
 try{
- const page=await app.firstWindow(),errors=[];page.setDefaultTimeout(25000);page.on('pageerror',error=>errors.push(error.message));
+ page=await app.firstWindow();const errors=[];page.setDefaultTimeout(25000);page.on('pageerror',error=>errors.push(error.message));
  await page.waitForSelector('.studio');await page.goto(page.url()+'?diagnostics=1');
  await app.evaluate(({dialog},folder)=>{dialog.showOpenDialog=async()=>({filePaths:[folder],canceled:false});},folder);
  await page.locator('.empty-state').getByRole('button',{name:'Open project',exact:true}).click();
@@ -27,34 +28,37 @@ try{
  const frames=()=>page.evaluate(()=>{for(let i=0;i<10;i++)window.tourRuntime.frame(window.tourRuntime.last+20);});
  const viewport=async()=>{const bounds=await page.locator('.canvas-wrap').boundingBox();await page.mouse.click(bounds.x+bounds.width*.45,bounds.y+bounds.height*.4);await expect(canvas).toBeFocused();};
  const menu=async(group,item)=>{await page.getByRole('navigation',{name:'Editor menu',exact:true}).getByRole('button',{name:group,exact:true}).click();if(item)await page.getByRole('menuitem',{name:item,exact:true}).click();};
- const stopped=async(name,focus,key='w')=>{
-  await viewport();await page.keyboard.down(key);await frames();const before=await position();await focus();
+ const stopped=async(name,target,focus,key='w')=>{
+  currentCheck=name;phase='waiting for the authoring control';await expect(target).toBeVisible();await expect(target).toBeEnabled();
+  await target.scrollIntoViewIfNeeded();await viewport();await page.keyboard.down(key);await frames();const before=await position();
+  phase='focusing the authoring control';await focus();await expect(target).toBeFocused();phase='checking movement after real focus';
   const focused=await position();await frames();assert.deepEqual(await position(),focused,name+' clears previously held movement');
   assert.deepEqual(await page.evaluate(()=>[...window.tourRuntime.keys]),[],name+' clears the held keyboard set');
   await page.keyboard.up(key);await frames();assert.deepEqual(await position(),focused,name+' stays stopped after release');
   report.checks.push({name,before,focused,after:await position()});
  };
 
- await stopped('Scene name',()=>page.getByLabel('Name',{exact:true}).click());
+ await stopped('Scene name',page.getByLabel('Name',{exact:true}),()=>page.getByLabel('Name',{exact:true}).click());
  await page.keyboard.type(' amended');await frames();await expect(page.getByLabel('Name',{exact:true})).toHaveValue('Garden amended');
  await page.keyboard.press('Control+s');await expect.poll(()=>page.evaluate(()=>window.__studioCloseState().dirty)).toBe(false);
+ await expect(page.locator('.studio-header').getByRole('button',{name:'Save',exact:true})).toBeEnabled();
  report.checks.push({name:'Typing and Save shortcut stay available'});
- await stopped('Numeric speed input',()=>page.getByLabel('Scene speed multiplier',{exact:true}).focus(),'ArrowUp');
+ await stopped('Numeric speed input',page.getByLabel('Scene speed multiplier',{exact:true}),()=>page.getByLabel('Scene speed multiplier',{exact:true}).focus(),'ArrowUp');
  const number=page.getByLabel('Scene speed multiplier',{exact:true}),numberBefore=Number(await number.inputValue());
  await page.keyboard.press('ArrowUp');await expect(number).toHaveValue(String(Number((numberBefore+.05).toFixed(2))));
- await stopped('Walking height slider',()=>page.getByLabel('Walking view height',{exact:true}).focus());
+ await stopped('Walking height slider',page.getByLabel('Walking view height',{exact:true}),()=>page.getByLabel('Walking view height',{exact:true}).focus());
  const slider=page.getByLabel('Walking view height',{exact:true}),sliderBefore=Number(await slider.inputValue());
  await page.keyboard.press('ArrowRight');assert.ok(Number(await slider.inputValue())>sliderBefore,'slider arrows still change the slider');
- await stopped('Editor menu button',()=>menu('Edit'),'ArrowUp');
+ await stopped('Editor menu button',page.getByRole('navigation',{name:'Editor menu',exact:true}).getByRole('button',{name:'Edit',exact:true}),()=>menu('Edit'),'ArrowUp');
  await page.keyboard.press('ArrowDown');await expect(page.getByRole('menuitem',{name:'Undo',exact:true})).toBeFocused();await page.keyboard.press('Escape');
- await stopped('Browser tab list',()=>page.getByRole('tab',{name:'Scenes',exact:true}).focus());
- await stopped('Panel resize separator',()=>page.getByRole('separator',{name:'Resize browser panel',exact:true}).focus(),'ArrowRight');
+ await stopped('Browser tab list',page.getByRole('tab',{name:'Scenes',exact:true}),()=>page.getByRole('tab',{name:'Scenes',exact:true}).focus());
+ await stopped('Panel resize separator',page.getByRole('separator',{name:'Resize browser panel',exact:true}),()=>page.getByRole('separator',{name:'Resize browser panel',exact:true}).focus(),'ArrowRight');
  const separator=page.getByRole('separator',{name:'Resize browser panel',exact:true}),widthBefore=Number(await separator.getAttribute('aria-valuenow'));
  await page.keyboard.press('ArrowRight');assert.ok(Number(await separator.getAttribute('aria-valuenow'))>widthBefore,'panel resize arrows still work');
 
  await page.getByRole('tab',{name:'Bubbles',exact:true}).click();await page.locator('.object-row strong').getByText('A garden story',{exact:true}).click();
  const rich=page.locator('.bubble-content [contenteditable="true"]');
- await stopped('Rich story text',()=>rich.click());await page.keyboard.type(' Text');await expect(rich).toContainText('Text');
+ await stopped('Rich story text',rich,()=>rich.click());await page.keyboard.type(' Text');await expect(rich).toContainText('Text');
  await viewport();await page.keyboard.down('w');await frames();await menu('Tools','Tour settings');const settings=await position();await frames();
  assert.deepEqual(await position(),settings,'settings suspend movement');await page.keyboard.up('w');await page.getByRole('button',{name:'Close settings',exact:true}).click();await frames();assert.deepEqual(await position(),settings,'settings close does not restart released movement');
  report.checks.push({name:'Settings block and release'});
@@ -71,6 +75,10 @@ try{
  assert.ok(await page.evaluate(()=>{const r=window.tourRuntime,i=window.inputIdentity;return r.renderer===i.renderer&&r.renderer.domElement===i.canvas&&r.camera===i.camera&&r.rig===i.rig;}),'the runtime identity is unchanged');
  assert.deepEqual(errors,[]);await page.screenshot({path:path.join(output,'focus-controls.png')});await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));
  console.log('PASS held movement clears on actual input, rich text, menu, tab and resize focus; typing/Save, slider and menu keys, settings, fresh WASD/arrows, right pan and touch intent remain. '+output);
+}catch(error){
+ const diagnostics=await page?.evaluate(()=>{const runtime=window.tourRuntime,control=document.querySelector('[aria-label="Scene speed multiplier"]');return{activeElement:document.activeElement?.outerHTML,number:control&&{html:control.outerHTML,disabled:control.matches(':disabled'),visible:!!control.getClientRects().length,fieldsetDisabled:control.closest('fieldset')?.disabled},details:[...document.querySelectorAll('details')].map(element=>({title:element.querySelector('summary')?.textContent,open:element.open})),inert:document.querySelector('.studio')?.inert,keys:runtime?[...runtime.keys]:[],blocked:runtime?.blocked,position:runtime?.rig.position.toArray(),close:window.__studioCloseState?.()&&{dirty:window.__studioCloseState().dirty,pending:window.__studioCloseState().pending}};}).catch(failure=>({diagnosticError:String(failure)}));
+ await fs.writeFile(path.join(output,'failure.json'),JSON.stringify({error:String(error),currentCheck,phase,diagnostics,checks:report.checks},null,2));
+ await page?.screenshot({path:path.join(output,'failure.png')}).catch(()=>{});throw error;
 }finally{
  await app.evaluate(({BrowserWindow})=>{for(const win of BrowserWindow.getAllWindows())win.destroy();}).catch(()=>{});await app.close();
 }

@@ -17,6 +17,8 @@ npm run editor
 
 For web development, `npm run dev` serves the viewer. The desktop editor uses the production build; run `npm run build` before reopening it. `editor.html` in a regular browser explains how to launch the desktop application.
 
+See [hosting and loading performance](HOSTING.md) for local gzip delivery, repeat-request validation, VPS configuration and separate splat/collision hosting.
+
 ## Author a tour
 
 1. **File → New project**: choose an empty project directory, or **File → Open project** to reopen a project/export. Save, Preview and Export remain one-click actions.

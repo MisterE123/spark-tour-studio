@@ -19,7 +19,9 @@ jobs:
   windows:
     name: Windows x64 checks and package
     runs-on: windows-2025
-    timeout-minutes: 60
+    # Native/browser checks now exceed the former one-hour budget. Keep the
+    # complete suite and its individual assertions/timeouts enabled.
+    timeout-minutes: 90
     defaults:
       run:
         shell: pwsh

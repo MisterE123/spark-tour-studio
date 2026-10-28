@@ -392,11 +392,11 @@ success condition was weakened. The next combined source run must complete.
 ## Validation and handoff
 
 Latest verified local preview: compiled clean commit
-`6dd5d9e5ed70a02e1db3654d2990551ad9942dc0`.
+`97202af0a9f74da2d18dca222cfe71c841f867e1`.
 
-`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental 6dd5d9e5.exe`
+`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental 97202af0.exe`
 
-SHA-256: `23363346c054f4075065ed27ddd295610c138a4642aa3fd78eb8e8c870f75fb9`.
+SHA-256: `d5063e87b7124d4cb7b5b63e9d0031c24003dfcaa0dfae7185151668067afef0`.
 
 Its actual portable executable launches, identifies the compiled branch/commit
 and closes normally. The packaged identity check also confirms visitor code
@@ -405,10 +405,25 @@ main/tag commit remain unchanged. The expanded native editor sweep has completed
 all seven checks pass, with logs under
 `test-output/editor-ci-sweep/1793162643805/`.
 The current actual portable launch/About/normal-close check passes at
-`test-output/portable smoke 1793179509928/`; packaged identity and visitor graph
-checks pass at `test-output/studio-build-1793179530567/`. Source commits after
+`test-output/portable smoke 1793187648756/`; packaged identity and visitor graph
+checks pass at `test-output/studio-build-1793187617615/`. Source commits after
 this compiled checkpoint must state whether they affect application behavior.
 The follow-up preview record changes documentation only.
+The actual packaged application passes the full keyboard-focus regression at
+`test-output/input-focus-1793187499859/` and all native/rendered/exported
+hemisphere assertions at `test-output/hemisphere-background-1793187548621/`.
+The build log is `test-output/package-experimental-97202af-2026-10-28-retry.log`.
+Full source run
+[40680633294](https://github.com/MisterE123/spark-tour-studio/actions/runs/40680633294)
+passed the formerly failing focus check plus native Save/Undo, audio, offline
+resources, precision and network regressions. Its remaining-stage timing exposed
+a CI capacity issue: the old complete run took 45.6 minutes; its stages from
+GitHub integration through packaging took 19.7 minutes. The expanded suite now
+reaches that point around minute 45, exceeding the inherited one-hour job budget.
+The Windows job allows 90 minutes so every existing test and artifact check can
+finish. No test, individual assertion or per-test deadline was removed. A new
+complete source run verifies this workflow correction. No application source
+changed during these follow-up fixture and CI-budget repairs.
 
 Full source CI for `134bd61` completed at
 [run 40659512940](https://github.com/MisterE123/spark-tour-studio/actions/runs/40659512940).
@@ -480,8 +495,6 @@ verified test readiness repair, with no application behavior change.
   retargeting and unchanged XR session pass.
 - Baseline: actual portable Windows executable launches and closes normally;
   release archive checksums verified.
-- Add completed experimental improvements, exact user-test steps, measured
-  results and known limitations here as each item is verified.
 - Reviewed combined experimental unit run: **368 tests passed**.
 - Real-request startup presentation, responsive teleport cancellation, adaptive
   detail, portrait/landscape/small-phone UI, editor workflow and native preset

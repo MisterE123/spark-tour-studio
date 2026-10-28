@@ -1,16 +1,39 @@
 import React,{useState,useEffect,useRef} from 'react';import {createRoot} from 'react-dom/client';
-import {TourRuntime} from './runtime';import type {Project,Hosting,TourScene,Mode,Page,Snapshot,Transform,Vec3} from './model';import {uid,emptyTransform} from './model';
+import type {TourRuntime} from './runtime';import {loadTourRuntime} from './runtime-loader';import type {Project,Hosting,TourScene,Mode,Page,Snapshot,Transform,Vec3} from './model';import {uid,emptyTransform} from './model';
 import {blankProject,newScene,validateProject,renderPage,ProjectSchema,HostingSchema} from '../shared/project.mjs';
 import {renderRichText,resolveRichReference,resolveContentResource,normalizeContentReference} from '../shared/rich-text.mjs';
 import {Icon,IconButton,type IconName} from './icons';
 import './style.css';
 import './rich-text.css';
+import './runtime-startup.css';
 
 export function Button({children,onClick,primary=false,disabled=false,title}:React.PropsWithChildren<{onClick:()=>void;primary?:boolean;disabled?:boolean;title?:string}>){return <button title={title} className={primary?'primary':''} onClick={onClick} disabled={disabled}>{children}</button>;}
 export function Field({label,children}:React.PropsWithChildren<{label:string}>){return <label className="field"><span>{label}</span>{React.Children.map(children,child=>{if(!React.isValidElement(child)||!['input','select','textarea'].includes(String(child.type)))return child;const control=child as React.ReactElement<{'aria-label'?:string}>;return React.cloneElement(control,{'aria-label':control.props['aria-label']||label});})}</label>;}
 export function Vector({label,value,onChange}: {label:string;value:Vec3;onChange:(v:Vec3)=>void}){return <Field label={label}><div className="vector">{value.map((n,i)=><label key={i}><small>{'XYZ'[i]}</small><input aria-label={`${label} ${'XYZ'[i]}`} type="number" step="0.1" value={n} onChange={e=>{const next=[...value] as Vec3;next[i]=Number(e.target.value);onChange(next);}}/></label>)}</div></Field>;}
 export function TransformForm({value,onChange}: {value:Transform;onChange:(v:Transform)=>void}){return <><Vector label="Position · meters" value={value.position} onChange={position=>onChange({...value,position})}/><Vector label="Rotation · degrees" value={value.rotation.map(x=>Math.round(x*180/Math.PI*100)/100) as Vec3} onChange={r=>onChange({...value,rotation:r.map(x=>x*Math.PI/180) as Vec3})}/><Field label="Uniform scale"><input type="number" min="0.0001" step="0.1" value={value.scale} onChange={e=>onChange({...value,scale:Math.max(.0001,Number(e.target.value))})}/></Field></>;}
-export function Stage({onReady,onError}:{onReady:(r:TourRuntime)=>void;onError?:(message:string)=>void}){const host=useRef<HTMLDivElement>(null);const [error,setError]=useState('');useEffect(()=>{let r:TourRuntime;try{r=new TourRuntime(host.current!);onReady(r);}catch(e){const message=String(e);setError(message);onError?.(message);}return()=>r?.dispose();},[]);return <div className="stage" data-guide="scene" ref={host}>{error&&!onError&&<div className="stage-error">WebGL2 could not start.<br/>{error}</div>}</div>;}
+export function Stage({onReady,onError,retryKey=0}:{onReady:(r:TourRuntime|null)=>void;onError?:(message:string)=>void;retryKey?:number}){
+ const host=useRef<HTMLDivElement>(null),callbacks=useRef({onReady,onError});callbacks.current={onReady,onError};
+ const [error,setError]=useState(''),[preparing,setPreparing]=useState(true),[attempt,setAttempt]=useState(0);
+ useEffect(()=>{
+  let canceled=false,started=false,runtime:TourRuntime|undefined,afterPaint:ReturnType<typeof setTimeout>|undefined;
+  setError('');setPreparing(true);callbacks.current.onError?.('');callbacks.current.onReady(null);
+  const warm=()=>{
+   if(canceled||started)return;started=true;clearTimeout(fallback);
+   void loadTourRuntime().then(({TourRuntime})=>{
+    if(canceled||!host.current)return;
+    runtime=new TourRuntime(host.current);setPreparing(false);callbacks.current.onReady(runtime);
+   }).catch(error=>{
+    if(canceled)return;runtime?.dispose();runtime=undefined;callbacks.current.onReady(null);
+    const message=String(error);setError(message);setPreparing(false);callbacks.current.onError?.(message);
+   });
+  };
+  // React's title/config effects run immediately. Yield a visible frame before
+  // evaluating Spark or allocating a GPU context; hidden windows still warm up.
+  const frame=requestAnimationFrame(()=>{afterPaint=setTimeout(warm,0);}),fallback=setTimeout(warm,100);
+  return()=>{canceled=true;cancelAnimationFrame(frame);clearTimeout(afterPaint);clearTimeout(fallback);runtime?.dispose();callbacks.current.onReady(null);};
+ },[retryKey,attempt]);
+ return <div className="stage" data-guide="scene" ref={host}>{!onError&&(error||preparing)&&<div className="stage-startup" role={error?'alert':'status'}>{error?<><span>{/webgl|graphics context/i.test(error)?'WebGL 2 could not start. Use a device and browser that support WebGL 2.':'The 3D viewer could not load.'}</span><Button onClick={()=>setAttempt(value=>value+1)}>Retry 3D viewer</Button></>:'Preparing 3D viewer…'}</div>}</div>;
+}
 function ControlHint({icon,title,keys,children}:{icon:IconName;title:string;keys?:string;children:React.ReactNode}){return <div className="control-hint"><Icon name={icon} size={22}/><div><strong>{title}</strong>{keys&&<kbd>{keys}</kbd>}<span>{children}</span></div></div>;}
 export function ControlHints({mode,touch=false}:{mode:Mode;touch?:boolean}){return <div className="control-hints">
  <ControlHint icon="visibility" title="Look around" keys={touch?'Drag':'Left drag'}>{touch?'Drag the scene to look.':'Drag the scene with the cursor free.'}</ControlHint>

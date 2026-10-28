@@ -1,0 +1,4 @@
+.viewer-startup-status{margin:14px 0 0;color:var(--muted);font-size:12px;line-height:1.6}
+.viewer-startup-error{flex-wrap:wrap}.viewer-startup-error>span{flex:1;min-width:180px}.viewer-startup-error>button{flex:none}
+.stage-startup{position:absolute;left:calc(var(--sidebar-width, 0px) + 16px);bottom:85px;max-width:calc(100% - var(--sidebar-width, 0px) - var(--inspector-width, 0px) - 32px);padding:12px 15px;border:1px solid var(--border);border-radius:12px;background:var(--glass-strong);backdrop-filter:var(--blur);color:var(--muted);font-size:12px;line-height:1.6;pointer-events:auto;overflow-wrap:anywhere}
+.stage-startup button{margin-left:10px}

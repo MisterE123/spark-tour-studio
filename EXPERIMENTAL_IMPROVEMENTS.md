@@ -311,8 +311,10 @@ isolated desktop CPU audit found only modest savings at 40–200 bubbles.
 
 ## Work in progress
 
-- Check the next combined feature-set CI run and fix genuine failures.
-- Continue reviewing consistency, incomplete features and avoidable work.
+- Feature work is frozen for the morning handoff; only demonstrated verification
+  failures are being repaired.
+- Complete the latest combined branch CI run. Physical Quest comfort, slow-device
+  performance and hosted time to sharp detail remain user acceptance checks.
 
 ## Verified local checkpoint
 
@@ -418,8 +420,19 @@ both actual exported websites. The full native/exported branding check passes
 at `test-output/branding 1793180463922/`, including metadata escaping, optional
 credit and four responsive layouts with no external requests or browser errors.
 This repair changes tests only; the verified preview's application is current.
-The next complete branch run includes this repair and the locally verified
-focus/audio batch. The stable release and main branch remain unchanged.
+Combined run `40666693048` passed its unit/integration, collision, startup,
+physics recovery, content and pending-import checks, then stopped in the Close
+fixture: the test read its prompt JSON between truncation and rewrite. Prompt
+publication now writes a sibling temporary file and atomically renames it; the
+reader still parses strictly and all exact dialog/save/discard assertions remain.
+The failure is reproduced deterministically at
+`test-output/close prompt publication 1793182855247/`: a held old-style write
+produces the same parse error, while a partial temporary file leaves readers on
+the last complete snapshot. All six actual native Close scenarios pass at
+`test-output/editor-close-1793182825986/`, including pending Save, repeated X,
+Cancel, failed/canceled imports, discard and ordinary exit. The next full source
+run includes this test-only repair. The stable release, main branch and verified
+preview remain unchanged.
 
 - Baseline: 347 unit/integration tests pass.
 - Baseline: packaged editor import dismissal, Mesh controls, export and reopen pass.

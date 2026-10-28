@@ -225,11 +225,36 @@ work; a raw `#` in metadata is a fragment, not a guessed literal filename. Studi
 does not rewrite original RAD files. Companion traversal and private-file
 references are rejected. See [HOSTING.md](HOSTING.md) for the naming details.
 
+### Panorama preparation overlaps scene metadata
+
+Open a scene with an equirectangular background. Its panorama now downloads and
+decodes while the foreground RAD metadata is read, removing the preceding
+serial wait. The loading cover still waits for the image and the first displayed
+splat view. Splat backgrounds keep their existing sequencing. This does not
+change total asset size or establish a measured VPS/device speedup.
+
+Switch scenes while loading a panorama, or change that background in Studio.
+A late success is disposed and a late failure cannot affect the replacement.
+An actual panorama failure gives a readable error rather than `[object Event]`.
+
+### Controller tracking loss cannot keep an old pointer active
+
+In VR, point one controller at a bubble while the other loses tracking. Only
+the tracked hand should highlight content; both untracked hands leave no stale
+caption. A hidden controller cannot select content or complete a teleport from
+its last matrix. Losing pose cancels that hand's held selection/aim, and recovery
+requires a fresh trigger press. The other tracked hand's active aim remains.
+
+The real-runtime regression reproduced both wrong-hand hover and movement from
+an untracked release before the correction. Actual headset tracking recovery
+still needs a Quest test. No speculative per-frame cache was introduced: an
+isolated desktop CPU audit found only modest savings at 40–200 bubbles.
+
 ## Work in progress
 
 - Check the next combined feature-set CI run and fix genuine failures.
-- Panorama loading overlap with RAD metadata is now under source verification;
-  it is not yet included in the current packaged preview.
+- Verify and package the panorama and tracked-controller follow-ups; they are
+  not yet included in the current packaged preview.
 - Continue reviewing consistency, incomplete features and avoidable work.
 
 ## Verified local checkpoint
@@ -401,3 +426,25 @@ this compiled checkpoint must state whether they affect application behavior.
   unit checks also pass (9/9). Main-process-only follow-up; renderer build is
   unchanged. Fresh complete native authoring workflow passes at
   `test-output/editor-workflow-1793169795659/`.
+- Canonical-path/panorama full suite: **414/414 passed** in 120.3 seconds at
+  `test-output/unit-experimental-panorama-2026-10-28.log`.
+  Both real panorama/metadata completion orders, cover readiness, early failure,
+  edited/unloaded/canceled images, stale success/failure, foreground failure,
+  unchanged splat-background sequencing and persistent real stereo XR pass at
+  `test-output/panorama loading 1793172306556/`. The rebuilt exported viewer's
+  authored camera/readiness check passes at
+  `test-output/startup presentation 1793172437292/`.
+- Hidden-controller selection and stale teleport were reproduced at
+  `test-output/xr controller tracking 1793172647110/`; the corrected positive
+  tracked-hand controls and loss/recovery cases pass at
+  `test-output/xr controller tracking 1793172765014/`.
+  Authored-view comfort passes with an explicit tracked trigger positive control
+  at `test-output/viewpoint comfort 1793172808844/`.
+- Combined rebuilt runtime preserves canceled/stalled teleport ownership and
+  floor support at `test-output/teleport cancellation 1793172902280/` and the
+  full real stereo/head-safety/scale/OS-menu regression at
+  `test-output/xr head collision 1793172907000/`.
+  The isolated CPU audit is at
+  `test-output/runtime hotpath audit 1793172389800/`; its measurements exclude
+  drawing and are not a Quest frame-rate claim. Only the demonstrated invalid
+  controller behavior was changed; per-frame caching remains unchanged.

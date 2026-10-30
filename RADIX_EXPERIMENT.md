@@ -444,3 +444,16 @@ pending preparation cancellation and repeated Stop/Run checks pass. Nothing has
 been posted or uploaded to upstream. Runtime/vendor code is unchanged by this
 diagnostic; a scratch-allocation performance improvement remains an upstream or
 future integration task rather than a claimed fix in this build.
+
+Verified local preview: `experimental-release/3DGS Perspectives Studio 1.23.0
+Experimental de76b6f4.exe`, compiled from clean source
+`de76b6f4aa22baa40fa7f6e17778827849787632`. SHA-256:
+`1a636b08182257a80fd673ed45c63310b37251e34eae68e9a3c2a6b5f7e0cb30`.
+Actual portable launch, About and normal close pass at
+`test-output/portable smoke 1793396476708/result.json`; packaged experimental
+identity and the visitor dependency graph pass at
+`test-output/studio-build-1793396475821/result.json`. The stable 1.23.0 executable
+remains unchanged (`c25903f082020a619e9c3e09705931051cff1b32c4269241d95f2e754c7fbd2b`).
+No original project was saved or source asset changed by these checks; the
+existing Studio was left open and returned to the Aerial Front preview. Imports
+were never stopped, paused or canceled by the performance investigation.

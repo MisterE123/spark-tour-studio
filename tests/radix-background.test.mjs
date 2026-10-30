@@ -51,6 +51,14 @@ test('failed initial background is disposed and the same URL can be retried',asy
  const retry=layer.load(value,'https://tour.test/',{assetBaseUrl:'./'},3);assert.equal(assets.length,2);assets[1].pending.resolve({lod:true});await retry;assert.equal(assets[1].parent,scene);layer.clear();
 });
 
+test('unsupported splat backgrounds never allocate renderer assets and remain replaceable',async()=>{
+ const {layer,assets}=fixture();
+ await assert.rejects(layer.load({type:'splat',source:'retained.rad',transform:transform()},'https://tour.test/',{assetBaseUrl:'./'},3),/RAD rendering is unavailable/);
+ assert.equal(assets.length,0);assert.equal(layer.mesh,undefined);
+ const replacing=layer.load({type:'splat',source:'lod-meta.json',transform:transform()},'https://tour.test/',{assetBaseUrl:'./'},3);
+ assert.equal(assets.length,1);assets[0].pending.resolve({lod:true});await replacing;layer.clear();
+});
+
 test('two-color sky uses a node material, stays camera centered and releases both resources',async()=>{
  const {layer,scene}=fixture();await layer.load({type:'solid',color:'#224466',topColor:'#224466',bottomColor:'#886644'},'https://tour.test/',{assetBaseUrl:'./'},3);
  const shell=layer.hemisphere;assert.ok(shell);assert.equal(shell.material.isMeshBasicNodeMaterial,true);assert.ok(shell.material.colorNode);assert.equal(shell.material.depthTest,false);assert.equal(shell.material.depthWrite,false);assert.equal(shell.material.side,THREE.BackSide);

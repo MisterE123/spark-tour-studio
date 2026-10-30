@@ -1,8 +1,10 @@
 import React,{useState,useSyncExternalStore} from 'react';
-import type {TourRuntime,SceneLoadState} from './runtime';
+import type {TourRuntime,SceneLoadState,SceneRenderIssue} from './runtime';
 
 const noSubscription=()=>()=>{},noLoading=():SceneLoadState|null=>null;
 export function useSceneLoading(runtime:TourRuntime|null){return useSyncExternalStore(runtime?.subscribeLoading||noSubscription,runtime?.getLoadingSnapshot||noLoading);}
+const noIssue=():SceneRenderIssue|null=>null;
+export function useSceneRenderIssue(runtime:TourRuntime|null){return useSyncExternalStore(runtime?.subscribeLoading||noSubscription,runtime?.getRenderIssueSnapshot||noIssue);}
 
 export function SceneLoading({runtime}:{runtime:TourRuntime|null}){
  const loading=useSceneLoading(runtime),[failedCovers,setFailedCovers]=useState<string[]>([]);

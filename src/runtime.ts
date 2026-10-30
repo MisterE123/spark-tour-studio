@@ -25,6 +25,7 @@ import { WalkingMotor,nearbyWalkingFeet,clickedWalkingFeet,teleportWalkingFeet,c
 import { WalkCamera } from '../shared/walk-camera.mjs';
 import {collisionVertices} from '../shared/collision-vertices.mjs';
 import { sceneUrl,colliderUrl } from '../shared/project.mjs';
+import {radixSourceIssue} from '../shared/radix-source.mjs';
 import {isPagedCollision,validatePagedCollisionManifest} from '../shared/paged-collision.mjs';
 import {PagedCollider} from './paged-collider';
 import {readCollisionResponse} from '../shared/collision-stream.mjs';
@@ -38,6 +39,7 @@ import {WalkingRoutes} from './walking-routes';
 import type {IconName} from './material-symbols';
 
 export interface SceneLoadState {sceneId:string;name:string;cover:string;fallbackCover:string;phase:string;completed:number;total:number}
+export interface SceneRenderIssue {sceneId:string;message:string;unsupported:boolean}
 const v=(a:Vec3)=>new THREE.Vector3(...a);
 function apply(o:THREE.Object3D,t:Transform){o.position.fromArray(t.position);o.rotation.set(...t.rotation,'YXZ');o.scale.setScalar(t.scale);o.updateMatrixWorld(true);}
 function release(o:THREE.Object3D){o.traverse(c=>{if(c instanceof THREE.Mesh){c.geometry.dispose();for(const m of Array.isArray(c.material)?c.material:[c.material]){(m as THREE.MeshBasicMaterial).map?.dispose();m.dispose();}}});o.removeFromParent();}
@@ -76,6 +78,8 @@ export class TourRuntime {
  private loadingListeners=new Set<()=>void>();
  subscribeLoading=(listener:()=>void)=>{this.loadingListeners.add(listener);return()=>{this.loadingListeners.delete(listener);};};
  getLoadingSnapshot=()=>this.loading;
+ renderIssue:SceneRenderIssue|null=null;
+ getRenderIssueSnapshot=()=>this.renderIssue;
  onStatus=(text:string,error=false)=>{};onScene=(id:string)=>{};onMode=(mode:Mode)=>{};onPage=(page:Page)=>{};onPick=(point:Vec3)=>{};onSelect=(id:string)=>{};onMove=(id:string,point:Vec3)=>{};
  private backgroundLayer:BackgroundLayer;private mesh?:SplatAssetGroup;private collider?:THREE.Group;private world?:Rapier.World;private body?:Rapier.RigidBody;private character?:Rapier.KinematicCharacterController;private capsule?:Rapier.Collider;private generation=0;private dead=false;private keys=new Set<string>();private observers:ResizeObserver;private cleanup:(()=>void)[]=[];private ray=new THREE.Raycaster();private touch=new THREE.Vector2();private pointerMove=new THREE.Vector3();private last=0;private crouched=false;private touchCrouch=false;private touchLift=0;private jumpRequested=false;private turnReady=true;private status='';private currentPage:Page|null=null;private selected?:THREE.Object3D;private fade:THREE.Mesh;private fadeUntil=0;private controllers:THREE.XRTargetRaySpace[]=[];private pendingPick=false;
  private colliderGeneration=0;private colliderSource='';private colliderVisible=false;private transformKey='';private colliderTransformKey='';colliderTransition:Promise<void>=Promise.resolve();private xrContent=new XRContent();
@@ -176,14 +180,20 @@ export class TourRuntime {
  unload(){this.pendingDestination=undefined;++this.generation;this.clearScene();this.active=null;this.status='';this.scene.getObjectByName('empty-grid')!.visible=true;}
  private setLoading(value:SceneLoadState|null){this.loading=value;this.onLoading(value);for(const listener of this.loadingListeners)listener();if(this.renderer.xr.isPresenting)this.refreshHud();}
  private report(text:string,error=false,scope:'scene'|'navigation'|'xr'='scene'){this.statusScope=scope;if(scope==='navigation'){this.navigationFailure=error;this.onStatus(text,false);if(this.renderer.xr.isPresenting)this.refreshHud();return;}if(error){this.firstDisplay=undefined;this.setLoading(null);}this.status=text;this.onStatus(text,error);if(this.renderer.xr.isPresenting){if(error)this.menuOpen=true;this.refreshHud(error);}}
- private clearScene(){this.pendingPick=false;this.firstDisplay=undefined;this.sceneResourcesReady=false;this.releasePointer();this.keys.clear();this.collisionPick=undefined;this.cancelViewGeometryPick();this.walkMotion.reset();this.collisionSelection.clear();this.setLoading(null);this.backgroundLayer.clear();this.navigator=undefined;this.thumbnailPending=undefined;this.viewGeometry.clear();this.crouched=false;this.jumpRequested=false;this.touchCrouch=false;this.touchLift=0;this.setTouch(0,0);this.pointerMove.set(0,0,0);this.flight=undefined;this.fadeUntil=0;this.audio.stop();this.descriptionLabel&&releaseUI(this.descriptionLabel);this.descriptionLabel=undefined;this.lastSafeHead=undefined;this.clearCollider();this.transformKey='';this.colliderTransformKey='';this.cancelTeleport();this.held.clear();this.currentViewpoint='';this.onViewpoint('');for(const c of [...this.viewMarkers.children])releaseUI(c);this.gizmo.detach();this.selected=undefined;if(this.mesh){this.mesh.removeFromParent();this.mesh.dispose();this.mesh=undefined;}for(const c of [...this.bubbles.children])release(c);}
+ private clearScene(){this.pendingPick=false;this.firstDisplay=undefined;this.sceneResourcesReady=false;this.renderIssue=null;this.releasePointer();this.keys.clear();this.collisionPick=undefined;this.cancelViewGeometryPick();this.walkMotion.reset();this.collisionSelection.clear();this.setLoading(null);this.backgroundLayer.clear();this.navigator=undefined;this.thumbnailPending=undefined;this.viewGeometry.clear();this.crouched=false;this.jumpRequested=false;this.touchCrouch=false;this.touchLift=0;this.setTouch(0,0);this.pointerMove.set(0,0,0);this.flight=undefined;this.fadeUntil=0;this.audio.stop();this.descriptionLabel&&releaseUI(this.descriptionLabel);this.descriptionLabel=undefined;this.lastSafeHead=undefined;this.clearCollider();this.transformKey='';this.colliderTransformKey='';this.cancelTeleport();this.held.clear();this.currentViewpoint='';this.onViewpoint('');for(const c of [...this.viewMarkers.children])releaseUI(c);this.gizmo.detach();this.selected=undefined;if(this.mesh){this.mesh.removeFromParent();this.mesh.dispose();this.mesh=undefined;}for(const c of [...this.bubbles.children])release(c);}
  /** Prepare destination resources; ready also waits for its first rendered view. */
  async selectScene(id:string,viewpoint?:string,preservePrecision=false){
   this.pendingDestination={id,viewpoint};
   const s=this.project?.scenes.find(x=>x.id===id);if(!s){this.report('Choose a scene to begin.',true);return;}
-  const previousMode=this.mode,token=++this.generation;this.clearScene();this.active=s;this.mode=s.modes.includes(previousMode)?previousMode:s.modes.includes('jumps')?'jumps':s.modes[0]||'fly';const walkingDefaults=walkingSettings(this.project,s);this.setViewHeight(walkingDefaults.height);this.setStepHeight(walkingDefaults.stepHeight);this.onMode(this.mode);this.currentPage=null;this.report(`Loading ${s.name}…`);this.onScene(id);const total=2+(s.background?.type&&s.background.type!=='solid'?1:0)+(s.collider?1:0);let completed=0;const progress=(phase:string)=>{if(token!==this.generation||this.dead)return;const reference=sceneThumbnail(s)||this.project?.cover||'',fallback=this.project?.cover||'',resolve=(value:string)=>{try{return value?new URL(value,this.base).href:'';}catch{return '';}};this.setLoading({sceneId:id,name:s.name,cover:resolve(reference),fallbackCover:resolve(fallback),phase,completed,total});};progress('Reading scene…');this.scene.getObjectByName('empty-grid')!.visible=false;apply(this.content,s.transform);this.bubbles.position.copy(this.content.position);this.bubbles.quaternion.copy(this.content.quaternion);this.bubbles.scale.copy(this.content.scale);this.viewMarkers.position.copy(this.content.position);this.viewMarkers.quaternion.copy(this.content.quaternion);this.viewMarkers.scale.copy(this.content.scale);
+  const previousMode=this.mode,token=++this.generation;this.clearScene();this.active=s;this.mode=s.modes.includes(previousMode)?previousMode:s.modes.includes('jumps')?'jumps':s.modes[0]||'fly';this.onMode(this.mode);this.currentPage=null;this.report(`Loading ${s.name}…`);this.onScene(id);const total=2+(s.background?.type&&s.background.type!=='solid'?1:0)+(s.collider?1:0);let completed=0;const progress=(phase:string)=>{if(token!==this.generation||this.dead)return;const reference=sceneThumbnail(s)||this.project?.cover||'',fallback=this.project?.cover||'',resolve=(value:string)=>{try{return value?new URL(value,this.base).href:'';}catch{return '';}};this.setLoading({sceneId:id,name:s.name,cover:resolve(reference),fallbackCover:resolve(fallback),phase,completed,total});};progress('Reading scene…');this.scene.getObjectByName('empty-grid')!.visible=false;apply(this.content,s.transform);this.bubbles.position.copy(this.content.position);this.bubbles.quaternion.copy(this.content.quaternion);this.bubbles.scale.copy(this.content.scale);this.viewMarkers.position.copy(this.content.position);this.viewMarkers.quaternion.copy(this.content.quaternion);this.viewMarkers.scale.copy(this.content.scale);
+  let unsupported=false;
   try{
-   if(!s.source)throw new Error('Choose a SOGS file or LoD manifest for this scene.');
+   // Opening a project never requires every retained source to be renderable.
+   // Reject before allocating assets, starting background/collider I/O or
+   // applying a camera; the authored scene remains selected and replaceable.
+   const issue=radixSourceIssue(this.hosting.sceneUrls?.[s.id]||s.source);
+   if(issue){unsupported=true;throw new Error(issue);}
+   const walkingDefaults=walkingSettings(this.project,s);this.setViewHeight(walkingDefaults.height);this.setStepHeight(walkingDefaults.stepHeight);
    const mesh=this.backend.createAsset(sceneUrl(s,this.hosting,this.base),{maxSh:this.performanceSettings.maxSh,onProgress:(_fraction,stage)=>progress(stage),onError:error=>{if(token===this.generation&&!this.dead)this.onStatus('SOGS detail: '+error.message,true);}});this.mesh=mesh;
    // LoD selection starts at the authored camera, with the asset attached while
    // coarsest coverage streams. Navigation, transforms and physics stay shared.
@@ -214,7 +224,7 @@ export class TourRuntime {
     }
    }else throw new Error('No usable navigation mode for this scene.');
    this.sceneResourcesReady=true;this.updateScene(this.active!);this.refreshCollisionSelection();if(this.editing)this.setLoading(null);else{completed=total-1;progress('Preparing first view…');this.firstDisplay={mesh};}
-  }catch(e){if(token===this.generation&&!this.dead){this.clearScene();this.report(`${s.name}: ${e instanceof Error?e.message:e}`,true);}}
+  }catch(e){if(token===this.generation&&!this.dead){this.clearScene();const message=e instanceof Error?e.message:String(e);this.renderIssue={sceneId:id,message,unsupported};this.scene.getObjectByName('empty-grid')!.visible=this.editing;this.report(`${s.name}: ${message}`,true);}}
  }
  get vrScale(){return vrWorldScale(this.active,this.active?.viewpoints.find(view=>view.id===this.currentViewpoint));}
  private get xrUnit(){return this.rig.scale.x;}
@@ -318,7 +328,7 @@ export class TourRuntime {
   this.updateScene(scene);await this.colliderTransition;
   if(this.active?.id!==scene.id||!this.sceneResourcesReady||this.colliderLoading||this.colliderSource!==scene.collider||!this.world||!this.collider||isPagedCollision(scene.collider)&&!this.pagedCollider)throw Error('Collision saved, but could not be activated: '+(this.colliderFailure||'the scene is not ready. Retry loading the scene.'));
  }
- setBackground(value:TourScene['background']){return this.backgroundLayer.load(value,this.base,this.hosting,this.performanceSettings.maxSh);}
+ setBackground(value:TourScene['background']){if(this.renderIssue)return Promise.resolve();return this.backgroundLayer.load(value,this.base,this.hosting,this.performanceSettings.maxSh);}
  showCollider(show:boolean){this.colliderVisible=show;if(this.collider)this.collider.visible=show;this.pagedCollider?.overview.setVisible(show);if(show)this.pagedCollider?.updateOverview(this.camera,this.host.clientHeight);}
  private facePoint(target:THREE.Vector3){
   const eye=this.camera.getWorldPosition(new THREE.Vector3()),rotation=new THREE.Euler().setFromRotationMatrix(new THREE.Matrix4().lookAt(eye,target,new THREE.Vector3(0,1,0)),'YXZ');
@@ -342,7 +352,7 @@ export class TourRuntime {
  setQuality(q:number){const settings=radixPerformanceSettings(this.performanceSettings),factor=THREE.MathUtils.clamp(q,.25,2);this.applyPerformance({...this.performanceSettings,radix:{...settings,selectedSplatBudget:Math.max(50000,Math.min(settings.residentSplatBudget,Math.round(settings.selectedSplatBudget*factor/this.quality)))}});this.quality=factor;}
  setTouch(x:number,y:number){if(Math.abs(x)+Math.abs(y)>.01)this.navigator?.takeControl();this.touch.set(THREE.MathUtils.clamp(x,-1,1),THREE.MathUtils.clamp(y,-1,1));}
  private get walkEyeHeight(){return this.viewHeight-(this.crouched?.6:0);}
- setViewHeight(value:number){if(!Number.isFinite(value))return;const next=THREE.MathUtils.clamp(value,1,2.4),delta=next-this.viewHeight;this.viewHeight=next;if(this.mode==='explore'&&!this.renderer.xr.isPresenting){this.rig.position.y+=delta;this.walkCamera.reset(this.rig.position.y);}}
+ setViewHeight(value:number){if(!Number.isFinite(value))return;const next=THREE.MathUtils.clamp(value,1,2.4),delta=next-this.viewHeight;this.viewHeight=next;if(!this.renderIssue&&this.mode==='explore'&&!this.renderer.xr.isPresenting){this.rig.position.y+=delta;this.walkCamera.reset(this.rig.position.y);}}
  setStepHeight(value?:number){const height=normalizeStepHeight(value);if(height===this.stepHeight)return;this.stepHeight=height;this.walking.reset();if(this.character)configureWalkingController(this.character);if(this.pagedCollider)this.configurePagedNavigation();else if(this.collider){this.content.updateMatrixWorld(true);const parts:{positions:Float32Array;indices:Uint32Array}[]=[];this.collider.traverse(o=>{if(o instanceof THREE.Mesh){const position=o.geometry.getAttribute('position');if(position)parts.push({positions:collisionVertices(position,o.matrixWorld),indices:o.geometry.index?new Uint32Array(o.geometry.index.array):Uint32Array.from({length:position.count},(_,i)=>i)});}});this.routes.build(parts,{stepHeight:height});}}
  setTouchLift(value:number){this.touchLift=value;}
  setTouchCrouch(value:boolean){this.touchCrouch=value;}
@@ -424,6 +434,7 @@ export class TourRuntime {
  pickNext(){this.cancelViewGeometryPick();this.cancelCollisionShapePick();this.pendingPick=true;this.gizmo.enabled=false;}
  selectHotspot(id:string){this.selected=this.bubbles.children.find(c=>c.userData.id===id);if(this.selected&&this.editing)this.attachGizmo(this.selected,'translate');else this.gizmo.detach();}
  syncHotspots(){
+  if(this.renderIssue)return;
   const existing=new Map(this.bubbles.children.map(object=>[object.userData.id,object]));
   for(const hotspot of this.active?.hotspots||[]){
    const appearance=bubbleAppearance(resolveBubbleSettings(this.project,this.active),hotspot.size),symbol=hotspot.kind==='page'?'info':hotspot.kind==='scene'?'scene':'viewpoint',title=bubbleLabel(hotspot,this.project,this.active);

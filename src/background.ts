@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import {MeshBasicNodeMaterial} from 'three/webgpu';
 import {color,mix,normalize,positionGeometry,smoothstep} from 'three/tsl';
 import {solidBackgroundColors} from '../shared/background.mjs';
+import {radixSourceIssue} from '../shared/radix-source.mjs';
 import type {SceneBackground,Hosting} from './model';
 import type {SplatAssetGroup,SplatAssetOptions} from './rendering/backend';
 export type BackgroundAssetFactory=(url:string,options:SplatAssetOptions)=>SplatAssetGroup;
@@ -23,6 +24,7 @@ export class BackgroundLayer {
  load(value:SceneBackground|undefined,base:string,hosting:Hosting,maxSh:number){const key=JSON.stringify([value?.type,value?.type==='solid'?solidBackgroundColors(value):value?.source,base,hosting.assetBaseUrl]);if(key===this.key){const version=this.version;return this.pending.then(()=>{if(version===this.version)this.align(value);});}this.clear();this.key=key;const token=this.version;
   this.pending=(async()=>{if(!value)return;if(value.type==='solid'){this.solid(value);return;}if(!value.source)return;
    if(value.type==='panorama'){const texture=await new THREE.TextureLoader().loadAsync(new URL(value.source,base).href).catch(cause=>{throw new Error('The panorama background image could not be loaded.',{cause});});if(token!==this.version){texture.dispose();return;}texture.mapping=THREE.EquirectangularReflectionMapping;texture.colorSpace=THREE.SRGBColorSpace;this.texture=texture;this.scene.background=texture;this.scene.backgroundRotation.y=THREE.MathUtils.degToRad(value.yawDegrees);return;}
+   const issue=radixSourceIssue(value.source);if(issue)throw new Error('Splat background: '+issue);
    const mesh=this.createAsset(new URL(value.source,new URL(hosting.assetBaseUrl||'./',base)).href,{maxSh,onError:error=>{if(token!==this.version)return;if(this.mesh)this.mesh.visible=false;this.onError('Background streaming failed: '+error.message);}});this.mesh=mesh;mesh.position.fromArray(value.transform.position);mesh.rotation.set(...value.transform.rotation,'YXZ');mesh.scale.setScalar(value.transform.scale);
    this.scene.add(mesh);await mesh.initialized;if(token!==this.version)return;
   })().catch(error=>{if(token!==this.version)return;this.clear();throw error;});return this.pending;

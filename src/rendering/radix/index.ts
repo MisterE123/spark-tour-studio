@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type {WebGPURenderer} from 'three/webgpu';
 import {selectionTextureData} from '../../../shared/collision-selection.mjs';
+import {radixSourceIssue} from '../../../shared/radix-source.mjs';
 import {SplatAssetGroup,type SplatAssetMetadata,type SplatAssetOptions,type SplatAssetStats,type SplatBackend,type SplatBackendStats,type RadixBackendOptions,type RadixRenderSettings} from '../backend';
 import {createRenderer,getGpuCaps,SplatRenderer,SplatCollection,WorkerPool,type AnySplatObject} from './vendor/radix.module.js';
 import {openSogInput} from './sog/sog';
@@ -73,8 +74,7 @@ class RadixAsset extends SplatAssetGroup {
  private async load(){
   try{
    const parsed=new URL(this.url,location.href);
-   if(/\.(?:rad|radc)(?:$)/i.test(parsed.pathname))throw new Error('RAD loading is disabled in this Radix experiment. Re-import this scene as a SOG LoD manifest or SOG file.');
-   if(!['https:','http:'].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error('SOG scenes must use an HTTP or HTTPS address without credentials.');
+   const issue=radixSourceIssue(parsed.href);if(issue)throw new Error(issue);
    const opened=await openSogInput(parsed.href,{signal:this.abort.signal,onProgress:this.options.onProgress});
    this.abort.signal.throwIfAborted();
    if(opened.kind==='lod'){

@@ -32,6 +32,11 @@ Two compatibility details are backed by regression cases rather than assumed ren
 ## Current experiment limits
 
 - SOG v2 `.sog`, SOGS v1 ZIP, unbundled `meta.json`, and streamed `lod-meta.json` are supported. RAD scene import is intentionally disabled even though the underlying library has a nonpaged RAD codec.
+- Rendering support is centralized in `shared/radix-source.mjs`, independently
+  of project-schema validity. A retained unsupported scene stays editable and
+  replaceable; the runtime checks its effective hosting/source reference before
+  allocating assets or applying its entry camera. Backgrounds and direct adapter
+  callers use the same capability policy.
 - Selected/resident LoD budgets are **per asset**. A foreground scene and splat background can each consume their budget. Statistics sum both. LoD distance settings are normalized scene meters and are converted to source-local units for transformed assets.
 - Pending LoD preparation is limited to four file jobs and an estimated 128 MiB of decoded channel images. A single oversized chunk is rejected with an instruction to export smaller chunks. Existing resident resources remain alive while an old CPU sort uses them.
 - Radix has no public splat raycast API. Surface picking uses an approximate ellipsoid proxy sampled from coarse resident coverage, with at most 12,000 splats per asset. Walking uses the actual collision mesh. This approximation is not a source of full-resolution collision geometry.

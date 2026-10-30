@@ -99,8 +99,8 @@ size, network, texture decode and GPU memory can dominate independently of sort
 speed. Software GPU tests prove behavior, not hardware performance.
 
 No measured Quest/VPS frame-rate or time-to-photorealism improvement is claimed
-until those comparisons run on real hardware. Validation evidence and the tested
-experimental executable will be recorded below after integration checks finish.
+until those comparisons run on real hardware. Completed validation and the tested
+experimental executable are recorded below.
 
 ## Validation record
 
@@ -127,7 +127,7 @@ Local source checkpoint (Windows x64, Node 24.21.0):
 - Native chooser/queue, failed and canceled jobs, canceled and successful
   SOGS/PLY replacement, five-level default conversion, true running cancellation,
   private-view story, save/reopen and offline three-scene export pass:
-  `test-output/radix-authoring-1793336391495/result.json`.
+  `test-output/radix-authoring-1793337661010/result.json` (7/7 phases).
   Original authoring survives exact round trips. Exported full World Labs MIT
   notice/provenance and bundled converter file hashes are checked. The cold
   exported viewer runs beneath `/tour/` with originals unavailable and external
@@ -143,8 +143,7 @@ Both corrections have before/after evidence and remain covered in CI.
 The dedicated `Radix SOGS experimental builds` workflow packages the same tools,
 runs all four browser/native checks, verifies the actual portable executable and
 dependency graph, then publishes an experimental prerelease with checksums.
-Portable packaging and the branch's first GitHub run are the final delivery
-checks; their executable/run links will accompany the handoff. This remains an
+Portable packaging and the complete branch CI have passed. This remains an
 experiment, not a claim of complete Spark API parity.
 
 Clean-source local preview: `experimental-release/3DGS Perspectives Studio
@@ -163,4 +162,31 @@ The test now reads the existing renderer rather than requesting another adapter.
 Only the exact driver performance notice is classified and retained separately;
 graphics validation errors, deleted textures and unknown warnings remain failures.
 This repair changes tests and documentation only; the compiled application above
-remains current. The complete packaged workflow and repaired CI are being rerun.
+remains current.
+
+Final delivery verification:
+
+- Full branch [CI 41007920729](https://github.com/MisterE123/spark-tour-studio/actions/runs/41007920729)
+  passed at `dcb13f9fc3bf0a6e9ed8ae820e9701dd2a996094`, including all 462 tests,
+  converter packaging, backend/selectors, both meshers, persistent XR, actual
+  packaged queue/replacement/offline authoring, portable launch/close and
+  experimental identity checks. The gated publishing job also passed.
+- Published [experimental prerelease](https://github.com/MisterE123/spark-tour-studio/releases/tag/radix-sogs-experiment-2-1-dcb13f9f)
+  includes the portable Studio, standalone tour launcher, web runtime, notices,
+  build identity and checksums. Its Studio is compiled at `dcb13f9f`; the local
+  `b7e028db` executable above has identical application source, with the later
+  commit changing only tests and this document. The stable latest release is
+  unchanged.
+- The actual exported SEA launcher works with Node absent from PATH, serves
+  byte-exact compressed `.sog` data and correct 206 ranges, renders the archive
+  in the offline browser, serves the complete adapter MIT notice and shuts down
+  cleanly: `test-output/radix-launcher-1793338431673/result.json`.
+- Final packaged offline authoring reports no page, graphics, HTTP or external
+  resource errors. Local NVIDIA WebGPU rendering is verified; physical Quest
+  comfort, controller behavior and comparative device/VPS performance remain
+  user-test boundaries.
+
+No Hungars project originals were changed. Main remains at the released
+`bd7707805a82645200fc774b547485f931c94499`; this branch has not been merged.
+The stable local `release/3DGS Perspectives Studio 1.23.0.exe` SHA-256 remains
+`c25903f082020a619e9c3e09705931051cff1b32c4269241d95f2e754c7fbd2b`.

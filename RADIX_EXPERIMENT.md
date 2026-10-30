@@ -146,3 +146,21 @@ dependency graph, then publishes an experimental prerelease with checksums.
 Portable packaging and the branch's first GitHub run are the final delivery
 checks; their executable/run links will accompany the handoff. This remains an
 experiment, not a claim of complete Spark API parity.
+
+Clean-source local preview: `experimental-release/3DGS Perspectives Studio
+1.23.0 Experimental b7e028db.exe`, compiled from
+`b7e028dbebaa4693fe298716b7920a8f138c8823`, `dirty=false`.
+SHA-256: `b04f913f80b9d929bc519e034ab8600b102a2048e6b38315e8248d9a407c711d`.
+Actual portable launch/About/normal close and packaged Studio/visitor identity
+checks pass in `test-output/portable smoke 1793337086364` and
+`test-output/studio-build-1793337121995`.
+
+The first branch CI run, `41006504011`, passed units, packaging, rendering,
+collision generation and XR. Its final native check completed the real product
+operations, then failed on its own unused WebGPU diagnostic request in a forced
+WebGL fixture and ordinary software-driver ReadPixels performance notices.
+The test now reads the existing renderer rather than requesting another adapter.
+Only the exact driver performance notice is classified and retained separately;
+graphics validation errors, deleted textures and unknown warnings remain failures.
+This repair changes tests and documentation only; the compiled application above
+remains current. The complete packaged workflow and repaired CI are being rerun.

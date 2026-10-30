@@ -93,8 +93,14 @@
           "worker.mjs",
           "webp.wasm",
           "dependencies.json",
-          "node_modules/webgpu/**/*",
           "licenses/**/*"
+        ]
+      },
+      {
+        "from": "sogs-tools/node_modules/webgpu",
+        "to": "sogs-tools/node_modules/webgpu",
+        "filter": [
+          "**/*"
         ]
       }
     ],

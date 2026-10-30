@@ -258,6 +258,11 @@ an NVIDIA RTX 3090; hosted CI may honestly report CPU when hardware is absent.
 Device-loss/validation/OOM and fresh-process CPU retry policies also have focused
 tests. These checks do not promise a particular conversion speed on other GPUs.
 
+Packaging uses a separate resource mapping rooted at the native package itself:
+Electron Builder skips a source-root `node_modules` before applying positive
+globs. A regression uses its actual copy implementation, and CI reruns the
+conversion checks against the completed package, including dependency hashes.
+
 Local follow-up checkpoint: 490/490 unit/integration tests pass in
 `test-output/sogs-gpu-final-unit.log`. The real offline hardware/CPU check passes
 in `test-output/sogs-conversion-1793365938726/result.json`: both paths produce

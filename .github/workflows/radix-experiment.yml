@@ -41,6 +41,10 @@ jobs:
         run: node scripts/sogs-conversion-check.mjs
       - name: Build separate experimental editor and launcher
         run: npm run package:experimental
+      - name: Check conversion with the exact packaged native GPU and CPU tools
+        env:
+          SPARK_SOGS_TOOLS: experimental-release/win-unpacked/resources/sogs-tools
+        run: node scripts/sogs-conversion-check.mjs
       - name: Check actual SOGS LoD rendering, selectors and cancellation
         run: node scripts/radix-backend-check.mjs
       - name: Check finest SOGS selection and both collision meshers

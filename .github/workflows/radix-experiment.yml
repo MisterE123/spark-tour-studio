@@ -49,6 +49,10 @@ jobs:
         env:
           SPARK_RADIX_EDITOR_EXE: experimental-release/win-unpacked/3DGS Perspectives Studio.exe
         run: node scripts/radix-authoring-check.mjs
+      - name: Check retained unsupported scenes, source replacement and retry
+        env:
+          SPARK_RADIX_EDITOR_EXE: experimental-release/win-unpacked/3DGS Perspectives Studio.exe
+        run: node scripts/radix-invalid-scenes-check.mjs
       - name: Check packaged experimental identity and visitor dependency graph
         env:
           SPARK_PACKAGED: '1'
@@ -60,7 +64,7 @@ jobs:
           $env:SPARK_PORTABLE_EXE = Join-Path (Resolve-Path experimental-release) $build.artifactName
           node scripts/portable-smoke-check.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - name: Prepare experimental downloads and checksums
+      - name: Build and verify full Windows experimental ZIP and downloads
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/Experiemental-Radix-SOGS'
         run: node scripts/radix-artifacts.mjs
       - name: Upload tested experimental artifacts
@@ -101,7 +105,22 @@ jobs:
         run: |
           $short = $env:GITHUB_SHA.Substring(0, 8)
           $tag = "radix-sogs-experiment-$env:GITHUB_RUN_NUMBER-$env:GITHUB_RUN_ATTEMPT-$short"
-          $files = @(Get-ChildItem -LiteralPath experimental-artifacts -File | Where-Object Name -ne 'RELEASE_NOTES.md' | ForEach-Object FullName)
+          $build = Get-Content experimental-artifacts/studio-build.json | ConvertFrom-Json
+          if (!$build.experimental -or $build.dirty -or $build.commit -ne $env:GITHUB_SHA) { throw 'Experimental build identity does not match this run' }
+          $bundle = "3DGS-Perspectives-Studio-$($build.version)-Radix-SOGS-Experimental-$short-windows-x64.zip"
+          if (!(Test-Path -LiteralPath (Join-Path experimental-artifacts $bundle) -PathType Leaf)) { throw 'Missing complete experimental Windows ZIP' }
+          $verified = @{}
+          foreach ($line in Get-Content experimental-artifacts/SHA256SUMS.txt) {
+            if ($line -notmatch '^([a-f0-9]{64})  ([^\\/:]+)$') { throw 'Invalid experimental download checksum' }
+            $expected = $Matches[1]
+            $name = $Matches[2]
+            if ($verified.ContainsKey($name)) { throw 'Duplicate experimental checksum' }
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath (Join-Path experimental-artifacts $name)).Hash.ToLowerInvariant()
+            if ($actual -ne $expected) { throw "Experimental checksum mismatch: $name" }
+            $verified[$name] = $true
+          }
+          if (!$verified.ContainsKey($bundle)) { throw 'Complete experimental ZIP is absent from checksums' }
+          $files = @(Get-ChildItem -LiteralPath experimental-artifacts -File | ForEach-Object FullName)
           if ($files.Count -lt 4) { throw 'Incomplete experimental artifacts' }
           gh release create $tag @files --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --prerelease --latest=false --title "Radix SOGS experiment $short" --notes-file experimental-artifacts/RELEASE_NOTES.md
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

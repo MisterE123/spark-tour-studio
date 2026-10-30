@@ -7,6 +7,12 @@ GitHub publishes a clearly labeled **experimental prerelease**, with a unique
 `radix-sogs-experiment-*` tag and checksums. It does not change the stable latest
 release or use a `v*` release tag.
 
+Downloads include a complete **Windows x64 experimental ZIP** containing the
+portable editor, local tour launcher, web-runtime ZIP, instructions, build
+identity, full component notices and checksums. The standalone EXE and runtime
+ZIP remain separate downloads as well. CI verifies the complete archive before
+uploading it; a missing editor bundle fails publication.
+
 ## Scope and provenance
 
 The shared viewer uses **Radix 0.0.1** behind `src/rendering/backend.ts`.
@@ -63,6 +69,14 @@ Supported entry points are `.sog`, loose `meta.json` and streamed
 streamed scene. New RAD imports are disabled, while their original implementation
 and existing project references are retained for replacement and future support.
 Existing RAD scenes show guidance until replaced; they are not silently converted.
+
+Unsupported or missing scene data does not prevent opening, editing or saving a
+project. The viewport shows **Rendering unavailable** with **Replace scene
+splat**; a missing or malformed supported SOGS source also offers **Retry scene**.
+The effective source includes hosting overrides. Unsupported scenes allocate no
+splat, background or collision resources and do not apply an entry camera.
+Camera-dependent placement/capture tools wait until a supported scene is ready;
+numeric settings, views, stories, links and source replacement remain available.
 
 ## Renderer and headset limits
 
@@ -190,3 +204,20 @@ No Hungars project originals were changed. Main remains at the released
 `bd7707805a82645200fc774b547485f931c94499`; this branch has not been merged.
 The stable local `release/3DGS Perspectives Studio 1.23.0.exe` SHA-256 remains
 `c25903f082020a619e9c3e09705931051cff1b32c4269241d95f2e754c7fbd2b`.
+
+### Retained-source migration regression
+
+The follow-up `scripts/radix-invalid-scenes-check.mjs` is part of experimental
+CI. It holds unsupported scenes open in the native editor, checks that rendering
+resources remain absent, exercises invalid/valid transitions and hosting
+overrides, and saves/reopens before replacing a retained RAD source through the
+normal queue. A missing supported SOGS source is repaired and retried in the same
+runtime. This specifically covers the project-porting workflow rather than
+immediately moving from a legacy scene to a new import.
+
+The reported October 30 closure has a separate native Windows crash record:
+`c0000005` in `explorerframe.dll_unloaded`. Replaying the original seven-scene
+metadata in an isolated profile did not reproduce a process crash. That record
+does not establish that rejecting RAD caused the native fault, and the rendering
+preflight change is not claimed to repair that unproven shell failure. The
+original Hungars project folders remain untouched.

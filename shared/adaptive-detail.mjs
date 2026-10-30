@@ -10,21 +10,26 @@ export class AdaptiveDetailController {
  sample({time,frameMs,targetFps,eligible,context=''}){
   if(context!==this.context){this.context=context;this.resetHistory();}
   const elapsed=this.lastTime===undefined?0:time-this.lastTime;this.lastTime=time;
-  // A background-tab gap, breakpoint or isolated long stall does not prove a
-  // sustained rendering problem. Invalid intervals restart the settling window.
-  if(!eligible||![time,frameMs,targetFps,elapsed].every(Number.isFinite)||targetFps<1||frameMs<=0||frameMs>1000||elapsed<0||elapsed>1000){this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;this.recentFrames=[];return this.scale;}
+  // A hidden/ineligible view, breakpoint-sized gap or invalid clock restarts
+  // observation. Repeated visible frames up to five seconds can be genuine
+  // low-end rendering; rejecting every interval over one second prevented
+  // those devices from ever reducing their detail.
+  if(!eligible||![time,frameMs,targetFps,elapsed].every(Number.isFinite)||targetFps<1||frameMs<=0||frameMs>5000||elapsed<0||elapsed>5000){this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;this.recentFrames=[];return this.scale;}
   this.recentFrames.push(frameMs);if(this.recentFrames.length>3)this.recentFrames.shift();
   // A single screenshot/readback stall is not low steady cadence. Three
-  // comparable slow intervals establish real 2–3 FPS operation, including
-  // variable intervals on either side of the 250 ms threshold.
+  // comparable slow intervals establish real low cadence, including sub-1-FPS
+  // operation and variable intervals on either side of the 250 ms threshold.
   const minimum=Math.min(...this.recentFrames),maximum=Math.max(...this.recentFrames),slowCadence=this.recentFrames.length===3&&minimum>=150&&maximum/minimum<=2.5;
-  if(frameMs>250&&!slowCadence){this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;return this.scale;}
+  if((frameMs>250||elapsed>1000)&&!slowCadence){this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;return this.scale;}
   if(this.settledSince===undefined){this.settledSince=time;this.average=frameMs;return this.scale;}
   this.average+=(frameMs-this.average)*(1-Math.exp(-Math.min(elapsed,250)/500));
   if(time-this.settledSince<4000)return this.scale;
   const budget=1000/targetFps;
-  if(this.average>budget*1.2){this.slowMs+=elapsed;this.fastMs=0;}
-  else if(this.average<budget*1.05){this.fastMs+=elapsed;this.slowMs=0;}
+  // Even a confirmed very slow frame contributes at most one second. A single
+  // interval must not satisfy the whole decision window by itself.
+  const observed=Math.min(elapsed,1000);
+  if(this.average>budget*1.2){this.slowMs+=observed;this.fastMs=0;}
+  else if(this.average<budget*1.05){this.fastMs+=observed;this.slowMs=0;}
   else{this.slowMs=0;this.fastMs=0;}
   let next=this.scale;
   if(this.slowMs>=2000&&time-this.lastChange>=5000)next=Math.max(.25,this.scale*.75);

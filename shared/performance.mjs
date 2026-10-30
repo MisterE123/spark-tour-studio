@@ -1,5 +1,5 @@
 import {z} from 'zod';
-import {RadixPerformanceSettingsSchema} from './radix-performance.mjs';
+import {RadixPerformanceSettingsSchema,SceneRadixPerformanceSettingsSchema,radixPerformanceSettings} from './radix-performance.mjs';
 const number=(min,max,value)=>z.number().finite().min(min).max(max).default(value);
 export const PerformanceSettingsSchema=z.object({
  radix:RadixPerformanceSettingsSchema.optional(),
@@ -7,6 +7,8 @@ export const PerformanceSettingsSchema=z.object({
  pagedExtSplats:z.boolean().default(false),
  pixelRatio:number(.5,2,1.5),lodSplatCount:z.number().int().min(0).max(8000000).default(0),lodSplatScale:number(.25,2,1),lodRenderScale:number(1,5,1),maxSh:z.number().int().min(0).max(3).default(3),minSortIntervalMs:number(0,200,0),sortRadial:z.boolean().default(true),minPixelRadius:number(0,3,0),maxPixelRadius:number(64,1024,512),maxStdDev:number(2,3,Math.sqrt(8)),minAlpha:number(0,.1,.5/255),coneFov0:number(0,180,90),coneFov:number(0,180,120),coneFoveate:number(.1,1,.4),behindFoveate:number(.05,1,.2),xrFoveation:number(0,1,1)
 }).strict().refine(s=>s.coneFov>=s.coneFov0,{message:'Outer detail angle must be at least the central angle.',path:['coneFov']});
+export const ScenePerformanceSettingsSchema=z.object({radix:SceneRadixPerformanceSettingsSchema.optional()}).strict();
+export const ViewpointPerformanceSettingsSchema=ScenePerformanceSettingsSchema;
 export const PerformancePresetSchema=z.object({format:z.literal('spark-tour-performance-preset'),version:z.literal(1),name:z.string().trim().min(1).max(80),settings:PerformanceSettingsSchema}).strict();
 export const PerformanceLibrarySchema=z.object({defaultPresetId:z.string(),defaultSettings:PerformanceSettingsSchema.optional(),presets:z.array(z.object({id:z.string().regex(/^[a-zA-Z0-9_-]+$/),name:z.string().trim().min(1).max(80),settings:PerformanceSettingsSchema}).strict()).min(1).max(100)}).strict().superRefine((v,c)=>{if(new Set(v.presets.map(p=>p.id)).size!==v.presets.length)c.addIssue({code:'custom',message:'Preset IDs must be unique.'});if(!v.presets.some(p=>p.id===v.defaultPresetId))c.addIssue({code:'custom',message:'Default performance preset is missing.'});});
 /** @returns {import('zod').infer<typeof PerformanceLibrarySchema>} */
@@ -16,3 +18,25 @@ export function presetFile(preset){return PerformancePresetSchema.parse({format:
 // Older projects omit them and continue to use their selected default preset.
 /** @param {import('zod').infer<typeof PerformanceLibrarySchema> | undefined} performance */
 export function tourPerformanceSettings(performance){const library=performance||defaultPerformance();return library.defaultSettings||library.presets.find(p=>p.id===library.defaultPresetId).settings;}
+
+/** Resolve sparse scene overrides against the current tour/visitor settings.
+ * @param {import('zod').infer<typeof PerformanceSettingsSchema>} settings
+ * @param {{performance?:import('zod').infer<typeof ScenePerformanceSettingsSchema>}|null|undefined} scene
+ */
+export function scenePerformanceSettings(settings,scene){
+ const base=PerformanceSettingsSchema.parse(settings),overrides=ScenePerformanceSettingsSchema.parse(scene?.performance===undefined?{}:scene.performance).radix;
+ if(overrides)for(const key of Object.keys(overrides))if(overrides[key]===undefined)delete overrides[key];
+ if(!overrides||!Object.keys(overrides).length)return base;
+ const radix={...radixPerformanceSettings(base),...overrides};
+ // A single authored endpoint takes precedence over an inherited endpoint.
+ // This keeps one-sided overrides valid after a tour-preset change.
+ if(radix.lodRangeMin>radix.lodRangeMax){if(overrides.lodRangeMin!==undefined)radix.lodRangeMax=radix.lodRangeMin;else radix.lodRangeMin=radix.lodRangeMax;}
+ return PerformanceSettingsSchema.parse({...base,radix});
+}
+
+/** Resolve tour/visitor, scene, then the selected viewpoint without storing inherited values.
+ * @param {import('zod').infer<typeof PerformanceSettingsSchema>} settings
+ * @param {{performance?:import('zod').infer<typeof ScenePerformanceSettingsSchema>}|null|undefined} scene
+ * @param {{performance?:import('zod').infer<typeof ViewpointPerformanceSettingsSchema>}|null|undefined} viewpoint
+ */
+export function viewpointPerformanceSettings(settings,scene,viewpoint){return scenePerformanceSettings(scenePerformanceSettings(settings,scene),viewpoint);}

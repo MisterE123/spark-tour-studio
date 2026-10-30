@@ -37,6 +37,12 @@ jobs:
         run: npm run bundle:sogs
       - name: Run all unit and integration tests including actual SOGS conversion
         run: npm test
+      - name: Check standalone Radix developer reproduction and offline bundle
+        run: |
+          node --test repros/radix-buffer-growth/metrics.test.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node repros/radix-buffer-growth/build.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Check bundled GPU conversion and explicit offline CPU fallback
         run: node scripts/sogs-conversion-check.mjs
       - name: Build separate experimental editor and launcher
@@ -51,6 +57,16 @@ jobs:
         run: node scripts/radix-collision-check.mjs
       - name: Check persistent XR manager, stereo navigation and resolution settings
         run: node scripts/radix-xr-check.mjs
+      - name: Check inherited scene performance policies and live runtime changes
+        run: node scripts/scene-performance-check.mjs
+      - name: Check scene overrides and visitor performance controls
+        run: node scripts/scene-performance-ui-check.mjs
+      - name: Check automatic FPS tuning on WebGPU, WebGL and XR
+        run: node scripts/radix-adaptive-check.mjs
+      - name: Check frame history and the compact Scene performance graph
+        run: node scripts/frame-performance-check.mjs
+      - name: Check collision suspension in authored preview and physical mode recovery
+        run: node scripts/collision-preview-lifecycle-check.mjs
       - name: Check packaged queued imports, source replacement and offline export
         env:
           SPARK_RADIX_EDITOR_EXE: experimental-release/win-unpacked/3DGS Perspectives Studio.exe

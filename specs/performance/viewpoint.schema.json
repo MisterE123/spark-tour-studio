@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "radix": {
+      "type": "object",
+      "properties": {
+        "lodBaseDistance": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 1000
+        },
+        "lodMultiplier": {
+          "type": "number",
+          "minimum": 1.2,
+          "maximum": 10
+        },
+        "lodRangeMin": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31
+        },
+        "lodRangeMax": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31
+        },
+        "lodBehindPenalty": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 20
+        },
+        "lodUnderfill": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 31
+        },
+        "lodBudgetMode": {
+          "type": "string",
+          "enum": [
+            "limit",
+            "target"
+          ]
+        },
+        "lodUpdateDistance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 10
+        },
+        "lodUpdateAngle": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 180
+        },
+        "autoSortDistance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "autoSortAngle": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 90
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

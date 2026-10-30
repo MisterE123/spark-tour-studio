@@ -1,8 +1,8 @@
 import {useEffect,useState} from 'react';
 import {InspectorSection} from './icons';
-import type {PerformanceSettings,RadixPerformanceSettings} from './model';
+import type {PerformanceSettings,RadixPerformanceSettings,ScenePerformanceSettings,Project,TourScene,Viewpoint} from './model';
 import type {TourRuntime} from './runtime';
-import {PerformanceSettingsSchema} from '../shared/performance.mjs';
+import {PerformanceSettingsSchema,ScenePerformanceSettingsSchema,scenePerformanceSettings,tourPerformanceSettings} from '../shared/performance.mjs';
 import {radixPerformanceSettings} from '../shared/radix-performance.mjs';
 
 type Control<Key>=[Key,string,number,number,number,string];
@@ -35,7 +35,7 @@ const radixControls:Control<keyof RadixPerformanceSettings>[]=[
  ['xrResolutionScale','XR resolution scale',.25,2,.05,'Applied when the next VR session begins. Higher values draw more eye-buffer pixels.']
 ];
 
-export function RadixPerformanceControls({value,onChange}:{value:PerformanceSettings;onChange:(value:PerformanceSettings)=>void}){
+export function RadixPerformanceControls({value,onChange,lockedRadixKeys=[]}:{value:PerformanceSettings;onChange:(value:PerformanceSettings)=>void;lockedRadixKeys?:readonly (keyof RadixPerformanceSettings)[]}){
  const specific=radixPerformanceSettings(value);
  const publish=(next:PerformanceSettings)=>{const parsed=PerformanceSettingsSchema.safeParse(next);if(parsed.success)onChange(parsed.data);};
  const change=(patch:Partial<RadixPerformanceSettings>)=>{
@@ -46,7 +46,7 @@ export function RadixPerformanceControls({value,onChange}:{value:PerformanceSett
   if(patch.lodRangeMax!==undefined&&next.lodRangeMax<next.lodRangeMin)next.lodRangeMin=next.lodRangeMax;
   publish({...value,radix:next});
  };
- const numeric=(keys:(keyof RadixPerformanceSettings)[])=>radixControls.filter(([key])=>keys.includes(key)).map(([key,label,min,max,step,help])=><label className="field" key={key}><span>{label}</span><input aria-label={label} title={help} type="number" min={min} max={max} step={step} value={specific[key] as number} onChange={event=>{if(!event.target.value)return;const n=Number(event.target.value);if(Number.isFinite(n)&&n>=min&&n<=max)change({[key]:n});}}/><small className="muted">{help}</small></label>);
+ const numeric=(keys:(keyof RadixPerformanceSettings)[])=>radixControls.filter(([key])=>keys.includes(key)).map(([key,label,min,max,step,help])=><label className="field" key={key}><span>{label}</span><input aria-label={label} title={help} type="number" disabled={lockedRadixKeys.includes(key)} min={min} max={max} step={step} value={specific[key] as number} onChange={event=>{if(!event.target.value)return;const n=Number(event.target.value);if(Number.isFinite(n)&&n>=min&&n<=max)change({[key]:n});}}/><small className="muted">{lockedRadixKeys.includes(key)?'Authored for this scene or viewpoint. ':''}{help}</small></label>);
  const common=(keys:(keyof PerformanceSettings)[])=>commonControls.filter(([key])=>keys.includes(key)).map(([key,label,min,max,step,help])=><label className="field" key={key}><span>{label}</span><input aria-label={label} title={help} type="number" min={min} max={max} step={step} value={value[key] as number} onChange={event=>{if(!event.target.value)return;const n=Number(event.target.value);if(Number.isFinite(n)&&n>=min&&n<=max)publish({...value,[key]:n});}}/><small className="muted">{help}</small></label>);
  return <div className="performance-controls" data-renderer="radix">
   <InspectorSection title="Automatic adjustment" icon="tune" defaultOpen>
@@ -58,7 +58,7 @@ export function RadixPerformanceControls({value,onChange}:{value:PerformanceSett
   <InspectorSection title="Streamed detail" icon="tune" defaultOpen>
    <p className="muted">These controls apply to level-of-detail assets. A scene and splat background each receive this budget; the readout shows their totals. A single SOG file retains its full splat set.</p>
    {numeric(['selectedSplatBudget','residentSplatBudget'])}
-   <label className="field"><span>Detail budget behavior</span><select aria-label="Detail budget behavior" value={specific.lodBudgetMode} onChange={event=>change({lodBudgetMode:event.target.value as RadixPerformanceSettings['lodBudgetMode']})}><option value="limit">Distance first · budget is a cap</option><option value="target">Fill budget · favor more detail</option></select><small className="muted">Fill budget increases detail toward your selected limit. Source quality and available levels still apply.</small></label>
+   <label className="field"><span>Detail budget behavior</span><select aria-label="Detail budget behavior" disabled={lockedRadixKeys.includes('lodBudgetMode')} value={specific.lodBudgetMode} onChange={event=>change({lodBudgetMode:event.target.value as RadixPerformanceSettings['lodBudgetMode']})}><option value="limit">Distance first · budget is a cap</option><option value="target">Fill budget · favor more detail</option></select><small className="muted">{lockedRadixKeys.includes('lodBudgetMode')?'Authored for this scene or viewpoint. ':''}Fill budget increases detail toward your selected limit. Source quality and available levels still apply.</small></label>
    {numeric(['lodBaseDistance','lodMultiplier','lodRangeMin','lodRangeMax'])}
   </InspectorSection>
   <InspectorSection title="Streaming behavior" icon="tune">{numeric(['lodBehindPenalty','lodUnderfill','lodUpdateDistance','lodUpdateAngle'])}</InspectorSection>
@@ -80,4 +80,42 @@ export function RadixPerformanceStats({runtime}:{runtime:TourRuntime|null}){
   update();const timer=setInterval(update,500);return()=>clearInterval(timer);
  },[runtime]);
  return <p className="muted" aria-live="off" data-renderer-stats="radix">{text||'Load a scene to measure performance.'}</p>;
+}
+
+type SceneRadixSettings=NonNullable<ScenePerformanceSettings['radix']>;
+/** Scene geometry policies inherit independently; device limits stay global. */
+export function SceneRadixPerformanceControls({project,scene,onChange}:{project:Project;scene:TourScene;onChange:(value:ScenePerformanceSettings|undefined)=>void}){
+ return <RadixDetailPolicyControls defaults={tourPerformanceSettings(project.performance)} value={scene.performance} onChange={onChange} scope="scene"/>;
+}
+export function ViewpointRadixPerformanceControls({project,scene,view,onChange}:{project:Project;scene:TourScene;view:Viewpoint;onChange:(value:ScenePerformanceSettings|undefined)=>void}){
+ return <RadixDetailPolicyControls defaults={scenePerformanceSettings(tourPerformanceSettings(project.performance),scene)} value={view.performance} onChange={onChange} scope="viewpoint"/>;
+}
+function RadixDetailPolicyControls({defaults,value,onChange,scope}:{defaults:PerformanceSettings;value:ScenePerformanceSettings|undefined;onChange:(value:ScenePerformanceSettings|undefined)=>void;scope:'scene'|'viewpoint'}){
+ const specific=radixPerformanceSettings(scenePerformanceSettings(defaults,{performance:value})),overrides=value?.radix||{},labelScope=scope==='scene'?'Scene':'Viewpoint',inherited=scope==='scene'?'Tour default':'Scene / tour default';
+ const publish=(next:SceneRadixSettings)=>{
+  const result=ScenePerformanceSettingsSchema.safeParse({radix:next});
+  if(result.success)onChange(Object.keys(next).length?result.data:undefined);
+ };
+ const toggle=(key:keyof SceneRadixSettings,enabled:boolean)=>{
+  const next={...overrides};if(enabled)Object.assign(next,{[key]:specific[key]});else delete next[key];publish(next);
+ };
+ const change=(key:keyof SceneRadixSettings,value:number|string)=>{
+  const next={...overrides,[key]:value};
+  if(key==='lodRangeMin'&&Number(value)>specific.lodRangeMax)next.lodRangeMax=Number(value);
+  if(key==='lodRangeMax'&&Number(value)<specific.lodRangeMin)next.lodRangeMin=Number(value);
+  publish(next);
+ };
+ const numeric=(keys:(keyof SceneRadixSettings)[])=>radixControls.filter(([key])=>keys.includes(key as keyof SceneRadixSettings)).map(([key,label,min,max,step,help])=>{
+  const sceneKey=key as keyof SceneRadixSettings,enabled=overrides[sceneKey]!==undefined;
+  return <div key={key} className="scene-performance-field"><label className="check"><input type="checkbox" aria-label={`Override ${label} for this ${scope}`} checked={enabled} onChange={event=>toggle(sceneKey,event.target.checked)}/>{label}</label><label className="field"><span className="muted">{enabled?`${labelScope} override`:inherited}</span><input aria-label={`${labelScope} ${label}`} type="number" disabled={!enabled} title={help} min={min} max={max} step={step} value={specific[key] as number} onChange={event=>{if(!event.target.value)return;const value=Number(event.target.value);if(Number.isFinite(value)&&value>=min&&value<=max)change(sceneKey,value);}}/><small className="muted">{help}</small></label></div>;
+ });
+ const budgetOverride=overrides.lodBudgetMode!==undefined;
+ return <InspectorSection title={`${labelScope} detail & distances`} icon="tune">
+  <p className="muted">{scope==='scene'?'Uses the tour’s performance defaults unless you override a control here. Set longer detail distances for aerial scenes and shorter distances for rooms.':'Uses the scene’s effective defaults unless you override a control here. These adjustments apply while this viewpoint is selected.'} Device memory budgets and resolution remain in Performance settings.</p>
+  <button disabled={!Object.keys(overrides).length} onClick={()=>onChange(undefined)}>{scope==='scene'?'Use tour defaults for this scene':'Use scene defaults for this viewpoint'}</button>
+  {numeric(['lodBaseDistance','lodMultiplier','lodRangeMin','lodRangeMax'])}
+  <label className="check"><input type="checkbox" aria-label={`Override detail budget behavior for this ${scope}`} checked={budgetOverride} onChange={event=>toggle('lodBudgetMode',event.target.checked)}/>Detail budget behavior</label>
+  <label className="field"><span className="muted">{budgetOverride?`${labelScope} override`:inherited}</span><select aria-label={`${labelScope} detail budget behavior`} disabled={!budgetOverride} value={specific.lodBudgetMode} onChange={event=>change('lodBudgetMode',event.target.value)}><option value="limit">Distance first · budget is a cap</option><option value="target">Fill budget · favor more detail</option></select></label>
+  <details><summary>Streaming & sorting distances</summary>{numeric(['lodBehindPenalty','lodUnderfill','lodUpdateDistance','lodUpdateAngle','autoSortDistance','autoSortAngle'])}</details>
+ </InspectorSection>;
 }

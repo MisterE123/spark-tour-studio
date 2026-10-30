@@ -1,7 +1,9 @@
 import type {GitBridge} from './git-model';
 import type {z} from 'zod';
-import {PerformanceSettingsSchema,PerformanceLibrarySchema,PerformancePresetSchema} from '../shared/performance.mjs';
+import {PerformanceSettingsSchema,PerformanceLibrarySchema,PerformancePresetSchema,ScenePerformanceSettingsSchema,ViewpointPerformanceSettingsSchema} from '../shared/performance.mjs';
 import {RadixPerformanceSettingsSchema} from '../shared/radix-performance.mjs';
+export type ViewpointPerformanceSettings=z.infer<typeof ViewpointPerformanceSettingsSchema>;
+export type ScenePerformanceSettings=z.infer<typeof ScenePerformanceSettingsSchema>;
 export type PerformanceSettings=z.infer<typeof PerformanceSettingsSchema>;
 export type RadixPerformanceSettings=z.infer<typeof RadixPerformanceSettingsSchema>;
 export type PerformanceLibrary=z.infer<typeof PerformanceLibrarySchema>;
@@ -16,7 +18,7 @@ export interface CollisionAuthoring {scope?:'selected'|'entire';format?:'paged'|
 export interface AudioTrack {source:string;loop:boolean;volume:number}
 export interface SceneLink {id:string;label:string;sceneId:string;viewpointId?:string}
 export interface ExtendedDescription {enabled:boolean;richText:RichTextDocument;links:SceneLink[]}
-export interface Viewpoint {vrScale?:number;extendedDescription?:ExtendedDescription;listed?:boolean;type?:'photosphere'|'orbit'|'slider';autoAnimate?:boolean;animationSpeed?:number;orbit?:{center:Vec3;radius:number;azimuthBounds?:[number,number];elevationBounds?:[number,number]};slider?:{origin:Vec3;rotation:Vec3;bounds?:[number,number]};description?:string;audio?:AudioTrack;thumbnail?:string;id:string;name:string;position:Vec3;rotation:Vec3}
+export interface Viewpoint {performance?:ViewpointPerformanceSettings;vrScale?:number;extendedDescription?:ExtendedDescription;listed?:boolean;type?:'photosphere'|'orbit'|'slider';autoAnimate?:boolean;animationSpeed?:number;orbit?:{center:Vec3;radius:number;azimuthBounds?:[number,number];elevationBounds?:[number,number]};slider?:{origin:Vec3;rotation:Vec3;bounds?:[number,number]};description?:string;audio?:AudioTrack;thumbnail?:string;id:string;name:string;position:Vec3;rotation:Vec3}
 export interface Hotspot {createdAt?:number;size?:number;id:string;label:string;position:Vec3;kind:'page'|'scene'|'viewpoint';target:string;viewpoint?:string}
 export interface RichTextNode {type:string;text?:string;attrs?:Record<string,unknown>;marks?:{type:string;attrs?:Record<string,unknown>}[];content?:RichTextNode[]}
 export interface RichTextDocument {version:1;doc:RichTextNode}
@@ -26,7 +28,7 @@ export type SceneBackground={type:"solid";color:string;topColor?:string;bottomCo
 export interface BubbleSettings {occlusion?:boolean;translucency?:number;size?:number;distanceFade?:number;fadeDistance?:number|null}
 export interface SceneBubbleSettings {occlusion?:boolean;translucency?:number;sizeMultiplier?:number;fadeDistance?:number|null;fadeDistanceMultiplier?:number}
 export interface TourBranding {name?:string;website?:string;logo?:string;favicon?:string;tabTitle?:string;metaDescription?:string;socialImage?:string;publicUrl?:string;footer?:string;themeColor?:string;showStudioCredit?:boolean}
-export interface TourScene {bubbles?:SceneBubbleSettings;speedMultiplier?:number;vrScale?:number;collisionAuthoring?:CollisionAuthoring;background?:SceneBackground;walkHeight?:number;walkStepHeight?:number;thumbnailMode?:'starting-view'|'custom';audio?:AudioTrack;id:string;name:string;source:string;thumbnail:string;transform:Transform;collider:string;colliderTransform:Transform;modes:Mode[];entry:string;walkStart:string;viewpoints:Viewpoint[];hotspots:Hotspot[]}
+export interface TourScene {performance?:ScenePerformanceSettings;bubbles?:SceneBubbleSettings;speedMultiplier?:number;vrScale?:number;collisionAuthoring?:CollisionAuthoring;background?:SceneBackground;walkHeight?:number;walkStepHeight?:number;thumbnailMode?:'starting-view'|'custom';audio?:AudioTrack;id:string;name:string;source:string;thumbnail:string;transform:Transform;collider:string;colliderTransform:Transform;modes:Mode[];entry:string;walkStart:string;viewpoints:Viewpoint[];hotspots:Hotspot[]}
 export interface Project {branding?:TourBranding;navigation?:{baseSpeed:number;walkHeight?:number;walkStepHeight?:number};appearance?:{glassShade:number};bubbles?:BubbleSettings;performance?:PerformanceLibrary;version:1;title:string;description:string;cover:string;startScene:string;scenes:TourScene[];pages:Page[]}
 export interface Hosting {assetBaseUrl:string;collisionBaseUrl?:string;sceneUrls:Record<string,string>}
 export interface RecoverySnapshot {project:Project;hosting:Hosting}

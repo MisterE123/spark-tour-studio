@@ -1,0 +1,175 @@
+{
+  "schemaVersion": 1,
+  "capturedDate": "2026-10-30",
+  "purpose": "Sanitized integration observations accompanying an asset-free synthetic reproduction. These observations are not a claim that every reported stutter has the same cause.",
+  "privacy": "No tour assets, original project paths, network addresses, source mappings, screenshots, or full application traces are included.",
+  "environment": {
+    "os": "Windows x64",
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "gpuMemoryMiB": 24576,
+    "driverVersion": "610.88",
+    "diagnosticBrowserVersion": "Microsoft Edge 156.0.4314.50",
+    "nativeApplicationRuntime": {
+      "name": "Electron",
+      "version": "44.4.5",
+      "versionSource": "Packaged application's pinned Electron dependency",
+      "chromiumVersion": null,
+      "qualification": "The native application's trace is separate from the isolated Edge diagnostic. Its DevTools export identifies source and trace times but does not provide an exact Chromium version; no Chromium version is inferred from Edge."
+    },
+    "diagnosticAdapter": {
+      "vendor": "nvidia",
+      "architecture": "ampere",
+      "isFallbackAdapter": false
+    },
+    "threeVersion": "0.186.1",
+    "radix": {
+      "name": "@sparkjsdev/radix",
+      "version": "0.0.1",
+      "packageCommit": "e36742ee524a844ca79fbec8ea910d5598123690",
+      "sogExampleCommit": "b831cc5e98b52a83b6f0ac6ba5fc50b5ac883be1",
+      "tarballSha256": "675dcb35eeecefe170ad8f816c067dbe03616697e45ff0c148779c6d2c0a31b6",
+      "moduleSha256": "8633fa532e88358df44b907dc2d01d7cc6206c4f0fa5ceed7f56bf26161442e6",
+      "coreModuleSha256": "bcf493a6e431b9b25e1d746847b0553fa56ff07bffedd3bc97e3b77527194ab4",
+      "distributionModified": false,
+      "sogAdapter": "Adapted from the pinned upstream example; application adds ownership, cancellation, validation, resource cleanup and scene lifecycle. Not an unmodified upstream SOG example."
+    },
+    "integration": {
+      "renderer": "Three WebGPURenderer with Radix SplatRenderer in a shared Three scene; directCanvas:false",
+      "diagnosticViewportCssPixels": [1280, 720],
+      "diagnosticPixelRatio": 2,
+      "diagnosticBackingPixels": [2560, 1440],
+      "navigation": "Desktop walking using a Rapier kinematic capsule against streamed collision geometry",
+      "measurement": "Actual hardware WebGPU rendering; CPU profiler sampling and application frame instrumentation. No simulated network delay or synthetic product workload was added."
+    }
+  },
+  "radixSettings": {
+    "method": "ewa",
+    "sortMode": "gpu (application auto chooses GPU on WebGPU)",
+    "sortBits": 24,
+    "autoSortDistance": 0.05,
+    "autoSortAngleDegrees": 5,
+    "selectedSplatBudget": 5000000,
+    "residentSplatBudget": 16000000,
+    "lodBaseDistance": 17,
+    "lodMultiplier": 3,
+    "lodBehindPenalty": 2,
+    "lodUnderfill": 5,
+    "lodRangeMin": 0,
+    "lodRangeMax": 7,
+    "lodBudgetMode": "limit",
+    "lodUpdateDistance": 0.5,
+    "lodUpdateAngleDegrees": 90,
+    "minContribution": 0,
+    "blurAmount": 0.3,
+    "preBlurAmount": 0,
+    "sortGuard": 0,
+    "maxShDegree": 3,
+    "minPixelRadius": 0.5,
+    "maxPixelRadius": 512,
+    "minAlpha": 0.00196078431372549,
+    "maxStdDev": 3
+  },
+  "observations": {
+    "progressiveRefinementAllocationHitch": {
+      "status": "Observed in the integration; renderer scratch allocation is directly present in CPU samples. The accompanying synthetic test isolates whether it also occurs without the application or its assets.",
+      "initialRunVisibleFrameCpuMs": [71.2, 143.2],
+      "secondRunVisibleFrameCpuMs": [56.1, 116.1],
+      "phase": "Stationary immediately after the scene became visible, while progressively refined SOG chunks were landing",
+      "initialRunShownSplatsAtHitches": [2150062, 4268263],
+      "initialRunResidentSplatsAtHitches": [3354616, 7745874],
+      "initialRunInFlightChunksAtHitches": [4, 4],
+      "dominantSampledLeafFunctions": [
+        "GPUDevice.createBuffer (native)",
+        "Three WebGPUAttributeUtils.createAttribute",
+        "Radix WgpuBuffer.makeAttribute"
+      ],
+      "sampledCallStacksRootToLeaf": [
+        [
+          "Application TourRuntime.frame",
+          "Three WebGPURenderer.render",
+          "Radix SplatRenderer.onBeforeRender / update",
+          "Radix WgpuSplatSorter.sort",
+          "Radix WgpuCompact.compact",
+          "Radix WgpuComputeBatch.submit / flush",
+          "Three WebGPURenderer.compute",
+          "Three Bindings.updateForCompute / _updateBindings / _update",
+          "Three Attributes.update",
+          "Three WebGPUBackend.createStorageAttribute",
+          "Three WebGPUAttributeUtils.createAttribute",
+          "GPUDevice.createBuffer"
+        ],
+        [
+          "Application TourRuntime.frame",
+          "Three WebGPURenderer.render",
+          "Radix SplatRenderer.onBeforeRender / update",
+          "Radix WgpuSplatSorter.sort",
+          "Radix WgpuRadixSort.sortIndirect / run",
+          "Radix WgpuComputeBatch.submit / flush",
+          "Three WebGPURenderer.compute",
+          "Three storage attribute allocation",
+          "GPUDevice.createBuffer"
+        ]
+      ],
+      "sourceInspection": {
+        "WgpuBufferClassLine": 9445,
+        "WgpuCompactClassLine": 9594,
+        "WgpuRadixSortClassLine": 9710,
+        "WgpuSplatSorterClassLine": 9985,
+        "behavior": "WgpuBuffer.ensureCapacity grows by doubling and setCapacity replaces its StorageBufferAttribute. WgpuCompact and WgpuRadixSort request scratch capacity while sorting the visible frame.",
+        "qualification": "Shown-splat counts are application draw statistics, not an instrumented scratch-buffer capacity. The power-of-two relationship is suggestive, not a direct capacity measurement. CPU sample time windows use approximate profile/page-clock alignment; the recorded callback durations are direct measurements."
+      }
+    },
+    "warmWalkingPhysics": {
+      "status": "Measured separately; does not explain the long visible frame gaps in the tested walking routes",
+      "rapierVersion": "0.21.0",
+      "firstRunWarmWorldStepMaxMs": 0.8,
+      "secondRunWarmWorldStepMaxMs": 2.8,
+      "coldFirstCharacterStepMs": [112.8, 84.1],
+      "qualification": "Cold character initialization is a distinct one-time cost. It completed before these isolated walking measurement windows. Required world.step calls were retained."
+    },
+    "longFrameGapsWithMainThreadIdle": {
+      "status": "Separately reproduced in the user's already-running packaged application without the additional diagnostic renderer. Cause is unresolved; this is not established to be the same allocation hitch.",
+      "nativeCaptureSeconds": 140.52539,
+      "captureRuntime": "Native packaged Electron application, not the isolated Edge diagnostic",
+      "walkSegmentFromCaptureMs": 28500,
+      "walkSegmentFrameCount": 6322,
+      "walkFrameCallbackCpuMs": {
+        "median": 6.142,
+        "p95": 7.911,
+        "p99": 9.403,
+        "max": 12.821
+      },
+      "walkFrameIntervalMs": {
+        "median": 16.667,
+        "p95": 20.995,
+        "p99": 37.542,
+        "max": 250.812
+      },
+      "walkIntervalsOver100Ms": 28,
+      "worstWalkGap": {
+        "intervalMs": 250.812,
+        "precedingCallbackCpuMs": 4.992,
+        "followingCallbackCpuMs": 5.967,
+        "sampledMainThreadIdleMs": 244.06,
+        "longestConcurrentCrGpuMainTaskMs": 81.491
+      },
+      "wholeCaptureWorstGap": {
+        "mode": "Drone, before Walk was selected; not labeled as a walking measurement",
+        "intervalMs": 382.828,
+        "sampledMainThreadIdleMs": 376.522,
+        "longestConcurrentCrGpuMainTaskMs": 154.177
+      },
+      "readbackCorrelation": "readSortedCount/readCount/getArrayBufferAsync/mapAsync appear in the CPU profile. Sampled calls do not establish correlation with the largest gap clusters; no readback-disabled A/B has yet been run.",
+      "qualification": "GPUTask is a Chrome GPU-process CPU task duration, not a hardware GPU timestamp. Long gaps with an idle renderer main thread and busy CrGpuMain do not by themselves identify Radix, Three, Dawn, driver scheduling, GPU conversion contention, or present/backpressure as the root cause. The capture included normal application activity and profiling overhead."
+    }
+  },
+  "confoundsAndLimits": [
+    "The user's GPU conversion/import remained running throughout, as requested. Shared-card conversion contention was not removed.",
+    "The two isolated hardware probes added a second renderer alongside the user application: total GPU utilization reached 98–99%, falling to 44% after the probe closed. They cannot establish the native application's normal saturation or a before/after FPS improvement.",
+    "The native-only capture was taken before those extra diagnostic renderers; its long idle-main gaps are independently real, but the converter was still active.",
+    "The two scripted walking routes diverged later because timing changes affected corner collisions. They are not an exact spatial performance A/B.",
+    "No out-of-memory, device-lost, page error, failed SOG request, or failed collision request occurred in the isolated runs.",
+    "No physical Quest performance inference is made from these Windows desktop measurements.",
+    "No user assets are needed for the separate synthetic reproduction. The private integration assets are not distributed."
+  ]
+}

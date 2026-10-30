@@ -341,3 +341,106 @@ renderer, canvas, camera and rig identities remain unchanged between views;
 there are no failed/external requests, page errors or GPU errors. Those limits
 are upper budgets, not a claim that two million splats were drawn or an FPS
 benchmark. Physical Quest behavior and comparative performance remain user tests.
+
+### Scene/view detail inheritance and frame diagnostics — source checkpoint
+
+Tour Performance settings now establish the reusable defaults. **Scene detail &
+distances** and **Viewpoint detail & distances** can override individual distance,
+LoD-level, fallback and streaming/sort-threshold policies. Unchecked controls
+inherit; Reset removes only that scope's policy. Effective order is tour/visitor
+settings → scene → selected viewpoint. Moving away from an authored view restores
+the scene policy, and changing scenes never copies the previous scene's values
+into the new one. Entry-view policies apply before the destination pager starts.
+Device budgets, resolution, SH, projection/backend and XR settings remain global.
+Sparse JSON contracts are in `specs/performance/scene.schema.json` and
+`viewpoint.schema.json`; named preset exchange stays independent of scene data.
+
+The Scene inspector has a collapsed **Frame performance** panel with 60 seconds
+of raw frame-time peaks, current/average FPS, slowest frame and 50 ms+ frame count.
+Reset remains usable during Walk Preview while metadata stays locked. The ring
+buffer is bounded; the graph refreshes at most four times per second and stops
+refreshing while closed. Initial covers, hidden tabs and suspended XR break
+continuity; genuine visible paging/preparation stalls remain recorded. The panel
+does not appear in visitor tours. Tune defaults through Tour Performance and use
+the scene/view controls for authored detail policies.
+
+Optional automatic adjustment also handles demonstrated sustained visible
+sub-1-FPS cadence, rather than indefinitely rejecting every long interval as an
+inactive gap. Isolated long pauses still do not lower detail. No artificial
+network or rendering delay was added to the product. Viewpoint Preview now pauses
+unneeded streamed physics work, including late worker replies; Edit, Walk and
+Drone resume verified local collision coverage instead of bypassing collision.
+
+User-test sequence:
+
+1. Give the aerial scene a longer detail distance than a room. Add a closer view
+   with its own distance. Select each view, leave it for Drone, switch scenes and
+   return; confirm the correct policy returns without a camera reset.
+2. Save/reopen and export a copy. Check the same scene/view differences in the
+   visitor. Replacing a splat should retain these authored policies.
+3. Open Frame performance, Reset, enter Walk Preview and reproduce a hitch.
+   Check slowest-frame/spike readings as well as average FPS. Reset during Preview
+   and confirm Name and other authoring controls remain locked.
+4. Enable automatic detail only when desired; compare its temporary budget scale
+   with manual settings on the actual viewing device.
+
+Focused source verification passes 38 unit tests covering presets, sparse
+inheritance, range constraints, frame history and adaptive feedback; TypeScript
+also passes. Real-runtime browser checks cover 16 inheritance/scene/view/pager
+cases and raw frame sampling:
+`test-output/scene performance 1793393853466/result.json`. Isolated editor UI checks
+cover seven scene/view cases and six graph cases, including Preview Reset:
+`test-output/scene performance UI 1793393736217/result.json` and
+`test-output/frame performance UI 1793394337453/result.json`. Adaptive integration
+and eleven physics lifecycle/XR continuity cases pass in
+`test-output/radix adaptive 1793392423980/result.json` and
+`test-output/collision preview lifecycle 1793395401457/result.json`. The added
+case resumes a collider with an intentionally oversized transformed window:
+rendering does not throw, preparation rejects with the bounded-window notice,
+and restoring alignment rebuilds fresh valid Walk coverage in the same world.
+The combined native authoring/export regression also passes nine checks,
+including scene/view policy persistence through source replacement, Save/reopen,
+portable export and a cold offline visitor under a subdirectory. Actual Walk
+Preview keeps metadata locked while Frame performance Reset remains usable:
+`test-output/radix-authoring-1793395087705/result.json`. The complete unit and
+integration checkpoint passes 509/509 tests in 251.9 seconds, and the production
+web build passes. The subsequent bounded-window resume guard is verified by the
+eleven-case lifecycle check above. These checks are included in experimental CI;
+no new CI/package result is claimed here before that run completes.
+
+Remaining hitch limit: the original Aerial collision data was served read-only to
+an isolated CPU browser probe, without loading splats or stopping the user's
+imports. Across 524 physics steps and 621 Drone helper calls, the initial physics
+step cost about 78 ms, later steps stayed at or below 0.6 ms and helper calls at or
+below 1.6 ms in the sampled route. This supports removing unnecessary late
+physics work; it does not explain every hitch under full rendering load. The
+actual North Graveyard hardware run still contains frame gaps above 100 ms at
+high detail, while its warm physics steps are much shorter. Full-renderer,
+conversion/GPU contention and device-specific behavior remain under investigation.
+Do not treat the graph, inheritance changes or paused Viewpoint physics as proof
+that all Drone/Walk stutters are fixed, or as a measured FPS gain on Quest/VPS.
+User originals and the running import session were not changed by these checks.
+
+### Standalone renderer handoff
+
+The asset-free developer reproduction and report are in
+`repros/radix-buffer-growth/`. The pinned, unmodified Radix sorter independently
+reproduces synchronous buffer-growth hitches: 70.1 ms at five million entries
+versus 0.4 ms on the same-capacity replay; wrappers disabled gives 67.3/0.5 ms.
+Four mapped 28.8 MB buffers account for 46.1 ms of native allocation time. A
+separate procedural renderer with verified visible pixels gives 73.0/0.7 ms.
+These observations isolate the allocation path without SOG, Studio, physics or
+XR. The separate mostly-idle native Walk gaps remain unassigned; the report
+explicitly preserves simultaneous-conversion and browser/driver caveats.
+
+`artifacts/radix-buffer-growth-repro-2026-10-30.zip` is an ignored local handoff,
+2,577,850 bytes, SHA-256
+`c9eb2948df992e002196437fa0a0e323ad4d5c613e295a52209571851aab0148`.
+It includes the offline page, independent editable npm-pinned source, full MIT
+notices, report, raw synthetic measurements/profile and sanitized integration
+evidence. It contains no user tour assets or private full application trace.
+Four metric tests, real hardware growth/replay, visible-render/readback smoke,
+pending preparation cancellation and repeated Stop/Run checks pass. Nothing has
+been posted or uploaded to upstream. Runtime/vendor code is unchanged by this
+diagnostic; a scratch-allocation performance improvement remains an upstream or
+future integration task rather than a claimed fix in this build.

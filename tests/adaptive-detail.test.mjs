@@ -28,6 +28,17 @@ test('sustained 2–3 FPS and varying long frame intervals still reduce detail',
  const controller=new AdaptiveDetailController();let time=0;for(let i=0;i<150;i++){const frameMs=[240,333,500][i%3];time+=frameMs;controller.sample({time,frameMs,targetFps:60,eligible:true});}assert.equal(controller.scale,.25,'cadence varying across 250 ms is still sustained slow viewing');
 });
 
+test('sustained visible sub-1-FPS cadence can recover from an excessive detail budget',()=>{
+ for(const fps of [.75,.5,.25]){const h=harness();h.drive(30000,{fps});assert.ok(h.controller.scale<1,'must adapt at '+fps+' FPS');h.drive(120000,{fps});assert.equal(h.controller.scale,.25);for(let i=1;i<h.trace.length;i++)assert.ok(h.trace[i].time-h.trace[i-1].time>=5000,'slow frames retain the change cooldown');}
+ const controller=new AdaptiveDetailController();let time=0;for(let i=0;i<100;i++){const frameMs=[1100,1700,2200][i%3];time+=frameMs;controller.sample({time,frameMs,targetFps:72,eligible:true,context:'quest:xr:72'});}assert.equal(controller.scale,.25,'consistent varying slow headset intervals also adapt');
+});
+
+test('isolated multi-second gaps and interrupted slow samples cannot look like sustained device load',()=>{
+ for(const ms of [1001,1500,3000,5000,7000]){const h=harness();h.drive(20000);h.stall(ms);h.drive(15000);assert.equal(h.controller.scale,1,'isolated '+ms+' ms gap stays excluded');assert.equal(h.trace.length,0);}
+ const h=harness();h.drive(10000,{fps:.5,eligible:false});h.drive(9000,{fps:.5});assert.equal(h.controller.scale,1,'ineligible samples cannot complete the three-frame or observation windows');h.drive(4000,{fps:.5});assert.equal(h.controller.scale,.75);
+ const controller=new AdaptiveDetailController();for(let time=0;time<100000;time+=7000)controller.sample({time,frameMs:7000,targetFps:60,eligible:true});assert.equal(controller.scale,1,'very large gaps remain ineligible even when repeated');
+});
+
 test('isolated screenshot-sized stalls cannot lower an otherwise healthy budget',()=>{
  for(const milliseconds of [300,500,900]){const h=harness();h.drive(20000);h.stall(milliseconds);h.drive(15000);assert.equal(h.controller.scale,1,'isolated '+milliseconds+' ms stall is excluded');assert.equal(h.trace.length,0);}
 });

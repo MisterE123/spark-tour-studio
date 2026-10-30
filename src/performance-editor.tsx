@@ -1,11 +1,12 @@
 import {Icon,InspectorSection} from './icons';
 import {useEditorImport} from './editor-imports';
 import React,{useEffect,useState} from 'react';
-import type {PerformanceSettings,Project} from './model';
+import type {PerformanceSettings,Project,RadixPerformanceSettings} from './model';
 import type {TourRuntime} from './runtime';
 import {defaultPerformance,PerformanceSettingsSchema,presetFile,tourPerformanceSettings} from '../shared/performance.mjs';
 import {RENDERER_EXPERIMENT} from '../shared/renderer-experiment.mjs';
 import {RadixPerformanceControls,RadixPerformanceStats} from './radix-performance-editor';
+import {radixPerformanceSettings} from '../shared/radix-performance.mjs';
 const controls:[keyof PerformanceSettings,string,number,number,number,string][]=[
  ['adaptiveTargetFps','Target frame rate',30,60,5,'Desktop frame-rate goal for automatic detail adjustment. VR uses the headset refresh rate.'],
  ['pixelRatio','Resolution cap',.5,2,.1,'Maximum desktop pixels per CSS pixel. Lower values reduce GPU load.'],
@@ -46,7 +47,7 @@ function SparkPerformanceControls({value,onChange}:{value:PerformanceSettings;on
   {title==='Precision & storage'&&<><label className="check"><input type="checkbox" checked={value.pagedExtSplats} onChange={e=>onChange({...value,pagedExtSplats:e.target.checked})}/>Extended splat precision (ExtSplats)</label><p className="muted">Higher precision for streamed foreground and background splats. Uses 32 bytes per pooled splat instead of 16, with more memory and bandwidth. Changing this reloads the streaming pool while keeping your view.</p><p className="muted">This can reduce coordinate banding during loading; it cannot recover detail already lost in the source RAD.</p></>}
  </InspectorSection>)}</div>;
 }
-export function PerformanceControls(props:{value:PerformanceSettings;onChange:(value:PerformanceSettings)=>void}){return RENDERER_EXPERIMENT.id==='radix-sogs'?<RadixPerformanceControls {...props}/>:<SparkPerformanceControls {...props}/>;}
+export function PerformanceControls(props:{value:PerformanceSettings;onChange:(value:PerformanceSettings)=>void;lockedRadixKeys?:readonly (keyof RadixPerformanceSettings)[]}){return RENDERER_EXPERIMENT.id==='radix-sogs'?<RadixPerformanceControls {...props}/>:<SparkPerformanceControls {...props}/>;}
 function PerformanceStats(props:{runtime:TourRuntime|null}){return <RadixPerformanceStats {...props}/>;}
 export interface PerformanceEditorSession {name:string;notice:string;source:string;}
 export function PerformanceEditor({project,change,runtime,session,setSession}:{project:Project;change:(fn:(p:Project)=>void)=>void;runtime:TourRuntime|null;session:PerformanceEditorSession|null;setSession:React.Dispatch<React.SetStateAction<PerformanceEditorSession|null>>}){
@@ -62,7 +63,7 @@ export function PerformanceEditor({project,change,runtime,session,setSession}:{p
  const apply=(settings:PerformanceSettings)=>change(p=>{p.performance=structuredClone(p.performance||defaultPerformance());p.performance.defaultSettings=settings;});
  const save=(copy:boolean)=>{if(!name.trim())return;const id=copy?crypto.randomUUID():preset.id;change(p=>{const next=structuredClone(p.performance||defaultPerformance()),item={id,name:name.trim(),settings:draft};if(copy)next.presets.push(item);else next.presets=next.presets.map(v=>v.id===id?item:v);next.defaultPresetId=id;delete next.defaultSettings;p.performance=next;});};
  return <><div className="eyebrow">PERFORMANCE</div><h2>Tune the experience.</h2><PerformanceStats runtime={runtime}/>
-  <p className="muted">Adjustments are included in your tour and exports. Save the project to keep them after reopening. Named presets let you reuse a set of settings.</p>
+  <p className="muted">Adjustments are included in your tour and exports. Save the project to keep them after reopening. Named presets let you reuse a set of settings. These are the tour defaults; scene and viewpoint properties can override detail distances and streaming policies.</p>
   <label className="field"><span>Performance preset</span><select aria-label="Performance preset" value={library.defaultSettings?'':preset.id} onChange={e=>change(p=>{p.performance=structuredClone(p.performance||defaultPerformance());p.performance.defaultPresetId=e.target.value;delete p.performance.defaultSettings;})}>
    <option value="" disabled>Custom adjustments</option>{library.presets.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
   <label className="field"><span>Preset name</span><input maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label>
@@ -77,9 +78,20 @@ export function ViewerPerformance({project,runtime}:{project:Project|null;runtim
   if(!runtime)return;
   // Configuration can arrive after Settings is already open. Observe the actual
   // runtime rather than capturing its constructor defaults in a props effect.
-  const sync=(settings:PerformanceSettings)=>{const key=JSON.stringify(settings);setValue(settings);setSelected(previous=>library.presets.some(p=>p.id===previous&&JSON.stringify(p.settings)===key)?previous:library.presets.find(p=>JSON.stringify(p.settings)===key)?.id||'');};
+  const sync=(settings:PerformanceSettings)=>{const key=JSON.stringify(runtime.basePerformanceSettings);setValue(settings);setSelected(previous=>library.presets.some(p=>p.id===previous&&JSON.stringify(p.settings)===key)?previous:library.presets.find(p=>JSON.stringify(p.settings)===key)?.id||'');};
   sync(runtime.performanceSettings);return runtime.subscribePerformance(sync);
  },[runtime,project]);
  if(!project||!runtime)return <p role="status" className="muted">Loading tour settings…</p>;
- return <><PerformanceStats runtime={runtime}/><label className="field"><span>Performance preset</span><select aria-label="Performance preset" value={selected} onChange={e=>{const p=library.presets.find(p=>p.id===e.target.value)!;runtime.applyPerformance(p.settings);setSelected(p.id);}}><option value="" disabled>Custom adjustments</option>{library.presets.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label><InspectorSection title="Advanced performance" icon="tune"><PerformanceControls value={value} onChange={s=>{runtime.applyPerformance(s);setSelected('');}}/></InspectorSection></>;
+ const activeView=runtime.active?.viewpoints.find(view=>view.id===runtime.currentViewpoint);
+ const lockedRadixKeys=[...new Set([...Object.keys(runtime.active?.performance?.radix||{}),...Object.keys(activeView?.performance?.radix||{})])] as (keyof RadixPerformanceSettings)[];
+ if(lockedRadixKeys.includes('lodRangeMin')&&!lockedRadixKeys.includes('lodRangeMax'))lockedRadixKeys.push('lodRangeMax');
+ if(lockedRadixKeys.includes('lodRangeMax')&&!lockedRadixKeys.includes('lodRangeMin'))lockedRadixKeys.push('lodRangeMin');
+ const apply=(settings:PerformanceSettings)=>{
+  // The controls display the effective scene values. Carry only visitor edits
+  // back to the baseline so this scene's policies never leak into the next.
+  const specific=radixPerformanceSettings(settings),base=radixPerformanceSettings(runtime.basePerformanceSettings);
+  if(lockedRadixKeys.length)settings={...settings,radix:{...specific,...Object.fromEntries(lockedRadixKeys.map(key=>[key,base[key]]))}};
+  runtime.applyPerformance(settings);setSelected('');
+ };
+ return <><PerformanceStats runtime={runtime}/><label className="field"><span>Performance preset</span><select aria-label="Performance preset" value={selected} onChange={e=>{const p=library.presets.find(p=>p.id===e.target.value)!;runtime.applyPerformance(p.settings);setSelected(p.id);}}><option value="" disabled>Custom adjustments</option>{library.presets.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{!!lockedRadixKeys.length&&<p className="muted">Some detail distances and streaming policies are authored for this scene or viewpoint. Device budgets, resolution and other controls remain adjustable.</p>}<InspectorSection title="Advanced performance" icon="tune"><PerformanceControls value={value} lockedRadixKeys={lockedRadixKeys} onChange={apply}/></InspectorSection></>;
 }

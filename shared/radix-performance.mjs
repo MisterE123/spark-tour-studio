@@ -5,7 +5,7 @@ const integer=(min,max,value)=>z.number().int().min(min).max(max).default(value)
 
 // Keep renderer-specific settings in their own optional namespace. Opening an
 // older project must not reinterpret or overwrite its saved Spark presets.
-export const RadixPerformanceSettingsSchema=z.object({
+const radixFields={
  method:z.enum(['ewa','3dgut','htgs','raygs']).default('ewa'),
  sortBits:z.union([z.literal(16),z.literal(24),z.literal(32)]).default(24),
  sortMode:z.enum(['auto','gpu','cpu']).default('auto'),
@@ -20,9 +20,30 @@ export const RadixPerformanceSettingsSchema=z.object({
  minContribution:number(0,20,0),blurAmount:number(0,2,.3),
  preBlurAmount:number(0,2,0),sortGuard:number(0,4,0),
  xrResolutionScale:number(.25,2,1)
-}).strict().superRefine((value,context)=>{
+};
+export const RadixPerformanceSettingsSchema=z.object(radixFields).strict().superRefine((value,context)=>{
  if(value.lodRangeMin>value.lodRangeMax)context.addIssue({code:'custom',path:['lodRangeMax'],message:'The coarsest level must be at least the finest level.'});
  if(value.residentSplatBudget<value.selectedSplatBudget)context.addIssue({code:'custom',path:['residentSplatBudget'],message:'The resident budget must be at least the selected splat budget.'});
+});
+
+// Scene geometry and traversal can require different distance/detail policies.
+// Device budgets, projection, precision and resolution remain tour/visitor settings.
+// Remove defaults before making each field optional: an untouched scene must
+// continue inheriting future changes to the tour defaults.
+export const SceneRadixPerformanceSettingsSchema=z.object({
+ lodBaseDistance:radixFields.lodBaseDistance.removeDefault().optional(),
+ lodMultiplier:radixFields.lodMultiplier.removeDefault().optional(),
+ lodRangeMin:radixFields.lodRangeMin.removeDefault().optional(),
+ lodRangeMax:radixFields.lodRangeMax.removeDefault().optional(),
+ lodBehindPenalty:radixFields.lodBehindPenalty.removeDefault().optional(),
+ lodUnderfill:radixFields.lodUnderfill.removeDefault().optional(),
+ lodBudgetMode:radixFields.lodBudgetMode.removeDefault().optional(),
+ lodUpdateDistance:radixFields.lodUpdateDistance.removeDefault().optional(),
+ lodUpdateAngle:radixFields.lodUpdateAngle.removeDefault().optional(),
+ autoSortDistance:radixFields.autoSortDistance.removeDefault().optional(),
+ autoSortAngle:radixFields.autoSortAngle.removeDefault().optional()
+}).strict().superRefine((value,context)=>{
+ if(value.lodRangeMin!==undefined&&value.lodRangeMax!==undefined&&value.lodRangeMin>value.lodRangeMax)context.addIssue({code:'custom',path:['lodRangeMax'],message:'The coarsest level must be at least the finest level.'});
 });
 
 /** @param {{radix?:unknown}|undefined} settings */

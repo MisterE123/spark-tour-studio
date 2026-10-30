@@ -107,7 +107,7 @@ export function applySceneImport(project,job){
   const scene=project.scenes.find(s=>s.id===job.replaceSceneId);
   if(!scene)return {status:'discarded',message:`${job.name}: the scene was deleted while importing.`};
   if(scene.source===job.result.source)return {status:'already'};
-  if(job.expectedSource!==undefined&&scene.source!==job.expectedSource)return {status:'discarded',message:`${scene.name}: its source changed while importing. The generated RAD was kept without replacing the scene.`};
+  if(job.expectedSource!==undefined&&scene.source!==job.expectedSource)return {status:'discarded',message:`${scene.name}: its source changed while importing. The generated splat was kept without replacing the scene.`};
   scene.source=job.result.source;return {status:'replaced',sceneId:scene.id,source:scene.source};
  }
  if(project.scenes.some(s=>s.id===job.result.id))return {status:'already'};

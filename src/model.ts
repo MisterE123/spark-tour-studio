@@ -1,7 +1,9 @@
 import type {GitBridge} from './git-model';
 import type {z} from 'zod';
 import {PerformanceSettingsSchema,PerformanceLibrarySchema,PerformancePresetSchema} from '../shared/performance.mjs';
+import {RadixPerformanceSettingsSchema} from '../shared/radix-performance.mjs';
 export type PerformanceSettings=z.infer<typeof PerformanceSettingsSchema>;
+export type RadixPerformanceSettings=z.infer<typeof RadixPerformanceSettingsSchema>;
 export type PerformanceLibrary=z.infer<typeof PerformanceLibrarySchema>;
 export type PerformancePresetFile=z.infer<typeof PerformancePresetSchema>;
 export type Vec3=[number,number,number];
@@ -29,9 +31,16 @@ export interface Project {branding?:TourBranding;navigation?:{baseSpeed:number;w
 export interface Hosting {assetBaseUrl:string;collisionBaseUrl?:string;sceneUrls:Record<string,string>}
 export interface RecoverySnapshot {project:Project;hosting:Hosting}
 export interface Snapshot {project:Project;hosting:Hosting;base:string;path:string;recovery?:RecoverySnapshot}
-export interface ImportJob {id:string;name:string;kind:'rad'|'ply';replaceSceneId?:string;expectedSource?:string;options:{method?:string;maxSh?:number};state:'queued'|'running'|'completed'|'failed'|'cancelled';progress:string;error?:string;result?:TourScene;acknowledged:boolean}
+export interface SogsImportOptions {
+ kind?:'sogs'|'ply';method?:'quality'|'quick'|'adaptive'|'uniform';maxSh?:number;
+ /** Total levels including the original finest level, 2–8. */
+ levels?:number;
+ /** splat-transform chunk size in Ki splats (×1024), 16–2048. */
+ chunkCount?:number;chunkExtent?:number;iterations?:number;
+}
+export interface ImportJob {id:string;name:string;kind:'rad'|'sogs'|'ply';replaceSceneId?:string;expectedSource?:string;options:SogsImportOptions;state:'queued'|'running'|'completed'|'failed'|'cancelled';progress:string;error?:string;result?:TourScene;acknowledged:boolean}
 export interface ImportQueueState {revision:number;paused:boolean;activeId:string|null;jobs:ImportJob[]}
-export interface EditorBridge extends GitBridge {reimportScene(scene:{id:string;name:string;source:string},options:{method:'quality'|'quick';maxSh:number}):Promise<ImportQueueState>;queueScenes(kind:'rad'|'ply',options?:{method:'quality'|'quick';maxSh:number}):Promise<ImportQueueState>;getImportQueue():Promise<ImportQueueState>;importQueueAction(action:string,id?:string):Promise<ImportQueueState>;onImportQueue(fn:(queue:ImportQueueState)=>void):()=>void;importPerformancePreset():Promise<PerformancePresetFile|null>;exportPerformancePreset(preset:PerformancePresetFile):Promise<string|null>;importImageFile(file:File):Promise<string>;saveCollisionGlb(bytes:Uint8Array):Promise<string>;newProject():Promise<Snapshot|null>;openProject():Promise<Snapshot|null>;save(project:Project,hosting:Hosting,saveAs:true):Promise<Snapshot|null>;save(project:Project,hosting:Hosting,saveAs?:false):Promise<Snapshot>;save(project:Project,hosting:Hosting,saveAs:boolean):Promise<Snapshot|null>;autosave(project:Project,hosting?:Hosting):Promise<void>;importPly(options:{method:'quality'|'quick';maxSh:number}):Promise<string|null>;cancelConversion():Promise<void>;importAsset(kind:string):Promise<string|null>;exportTour(project:Project,hosting:Hosting,portable:boolean,omitSplats:boolean):Promise<string|null>;validateAssets(project:Project,hosting?:Hosting):Promise<string[]>;onProgress(fn:(text:string)=>void):()=>void;}
+export interface EditorBridge extends GitBridge {reimportScene(scene:{id:string;name:string;source:string},options:SogsImportOptions):Promise<ImportQueueState>;queueScenes(kind:'rad'|'sogs'|'ply',options?:SogsImportOptions):Promise<ImportQueueState>;getImportQueue():Promise<ImportQueueState>;importQueueAction(action:string,id?:string):Promise<ImportQueueState>;onImportQueue(fn:(queue:ImportQueueState)=>void):()=>void;importPerformancePreset():Promise<PerformancePresetFile|null>;exportPerformancePreset(preset:PerformancePresetFile):Promise<string|null>;importImageFile(file:File):Promise<string>;saveCollisionGlb(bytes:Uint8Array):Promise<string>;newProject():Promise<Snapshot|null>;openProject():Promise<Snapshot|null>;save(project:Project,hosting:Hosting,saveAs:true):Promise<Snapshot|null>;save(project:Project,hosting:Hosting,saveAs?:false):Promise<Snapshot>;save(project:Project,hosting:Hosting,saveAs:boolean):Promise<Snapshot|null>;autosave(project:Project,hosting?:Hosting):Promise<void>;importPly(options:SogsImportOptions):Promise<string|null>;cancelConversion():Promise<void>;importAsset(kind:string):Promise<string|null>;exportTour(project:Project,hosting:Hosting,portable:boolean,omitSplats:boolean):Promise<string|null>;validateAssets(project:Project,hosting?:Hosting):Promise<string[]>;onProgress(fn:(text:string)=>void):()=>void;}
 declare global {interface Window {studio?:EditorBridge}}
 export interface EditorBridge {
  beginCollisionDiagnostics(summary:{sceneId:string;source:string;format:'paged'|'glb';scope:'selected'|'entire';volumeCount:number;hasBounds:boolean;options:CollisionOptions}):Promise<{id:string;path:string}>;

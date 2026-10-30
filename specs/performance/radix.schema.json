@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "method": {
+      "default": "ewa",
+      "type": "string",
+      "enum": [
+        "ewa",
+        "3dgut",
+        "htgs",
+        "raygs"
+      ]
+    },
+    "sortBits": {
+      "default": 24,
+      "anyOf": [
+        {
+          "type": "number",
+          "const": 16
+        },
+        {
+          "type": "number",
+          "const": 24
+        },
+        {
+          "type": "number",
+          "const": 32
+        }
+      ]
+    },
+    "sortMode": {
+      "default": "auto",
+      "type": "string",
+      "enum": [
+        "auto",
+        "gpu",
+        "cpu"
+      ]
+    },
+    "autoSortDistance": {
+      "default": 0.05,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "autoSortAngle": {
+      "default": 5,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 90
+    },
+    "selectedSplatBudget": {
+      "default": 4000000,
+      "description": "Selected splat budget per asset. A foreground and splat background each have their own budget.",
+      "type": "integer",
+      "minimum": 50000,
+      "maximum": 32000000
+    },
+    "residentSplatBudget": {
+      "default": 16000000,
+      "description": "Resident splat target per asset; mandatory coarse coverage, textures and pending work also consume memory.",
+      "type": "integer",
+      "minimum": 50000,
+      "maximum": 64000000
+    },
+    "lodBaseDistance": {
+      "default": 5,
+      "type": "number",
+      "minimum": 0.1,
+      "maximum": 1000
+    },
+    "lodMultiplier": {
+      "default": 3,
+      "type": "number",
+      "minimum": 1.2,
+      "maximum": 10
+    },
+    "lodBehindPenalty": {
+      "default": 2,
+      "type": "number",
+      "minimum": 1,
+      "maximum": 20
+    },
+    "lodUnderfill": {
+      "default": 5,
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 31
+    },
+    "lodRangeMin": {
+      "default": 0,
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 31
+    },
+    "lodRangeMax": {
+      "default": 7,
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 31
+    },
+    "lodBudgetMode": {
+      "default": "limit",
+      "type": "string",
+      "enum": [
+        "limit",
+        "target"
+      ]
+    },
+    "lodUpdateDistance": {
+      "default": 0.5,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10
+    },
+    "lodUpdateAngle": {
+      "default": 90,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 180
+    },
+    "minContribution": {
+      "default": 0,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 20
+    },
+    "blurAmount": {
+      "default": 0.3,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "preBlurAmount": {
+      "default": 0,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 2
+    },
+    "sortGuard": {
+      "default": 0,
+      "type": "number",
+      "minimum": 0,
+      "maximum": 4
+    },
+    "xrResolutionScale": {
+      "default": 1,
+      "type": "number",
+      "minimum": 0.25,
+      "maximum": 2
+    }
+  },
+  "additionalProperties": false,
+  "title": "3DGS Perspectives Studio Radix renderer settings",
+  "$comment": "Semantic validation also requires lodRangeMin <= lodRangeMax and residentSplatBudget >= selectedSplatBudget. All angles use degrees; distances use scene meters."
+}

@@ -1,0 +1,35 @@
+{
+  "name": "@sparkjsdev/radix",
+  "version": "0.0.1",
+  "license": "MIT",
+  "copyright": "2026 WORLD LABS TECHNOLOGIES, INC.",
+  "repository": "https://github.com/sparkjsdev/radix",
+  "packageCommit": "e36742ee524a844ca79fbec8ea910d5598123690",
+  "exampleCommit": "b831cc5e98b52a83b6f0ac6ba5fc50b5ac883be1",
+  "tarball": "https://registry.npmjs.org/@sparkjsdev/radix/-/radix-0.0.1.tgz",
+  "tarballSha256": "675dcb35eeecefe170ad8f816c067dbe03616697e45ff0c148779c6d2c0a31b6",
+  "tarballIntegrity": "sha512-9eFB/D+A0okR08a9UhMsw6efRqc7r41vjmcIAJ63zQn1u8HsCJNJi8xjSbXfw9cClLmRo9axxLoD57ue+hOH7A==",
+  "moduleSha256": "8633fa532e88358df44b907dc2d01d7cc6206c4f0fa5ceed7f56bf26161442e6",
+  "distribution": "radix.module.js, radix-core.module.js and types/ are unmodified published package files; adjacent .d.ts entries are local type-export glue",
+  "sogAdapter": "../sog contains adapted upstream example code, not a published SOG API",
+  "originalExampleSha256": {
+    "lod.ts": "ac7df3b9e22e1b539620c0bbfce773795a4fc91d570b068106aeebd0f26da66b",
+    "webp.ts": "50fbdc8fe9c671ddabf2d0af2b21b53bce75365914ae169153b08217ed41cdad",
+    "sog.ts": "c2640ec1f1e6cf909db700fe1add40f55687edcb106ecd4e84989eb45fee2a26",
+    "lodStream.ts": "d757fec2cfb7da3deba0f39208c516ec13242c0c49e872d10e60f821e5e2d2bc",
+    "gpuDecode.ts": "62d8be56e411f12084a19fd72faab3894b2ab115d56ec19735f6a556574133ce",
+    "zip.ts": "0b4fa4abab82850642ab8e9d2dc2b8053d44936574bda97d6ac90ca35eb70228",
+    "resident.ts": "55c2e686dc42cdc85893573e13744cbc4c573c1df40dd9bd2bafc026337ce7c5",
+    "sh.ts": "987df3cb1d9123f344235827b7e94756b6ac10acdf9ed505da8876c6ba6c3c1d"
+  },
+  "localModifications": [
+    "Relative imports to pinned local distribution",
+    "Strict metadata and range validation",
+    "Cancelable requests and scene ownership",
+    "Bounded pending image preparation, retries and explicit error/readiness notifications",
+    "Safe image and GPU resource cleanup",
+    "Texture-only pre-disposal cleanup of simultaneous WebGL 2D and 2D-array decoder bindings through the pinned Three texture cache, preserving active unit and XR framebuffer/draw-buffer/viewport state",
+    "Application wrapper supplies physical stereo eye midpoint rather than Three's offset union/culling camera to both SOG LoD selection and Radix projection/shared sorting; tracked eyes and camera rig are unchanged"
+  ],
+  "coreModuleSha256": "bcf493a6e431b9b25e1d746847b0553fa56ff07bffedd3bc97e3b77527194ab4"
+}

@@ -15,22 +15,22 @@ export function Stage({onReady,onError,retryKey=0}:{onReady:(r:TourRuntime|null)
  const host=useRef<HTMLDivElement>(null),callbacks=useRef({onReady,onError});callbacks.current={onReady,onError};
  const [error,setError]=useState(''),[preparing,setPreparing]=useState(true),[attempt,setAttempt]=useState(0);
  useEffect(()=>{
-  let canceled=false,started=false,runtime:TourRuntime|undefined,afterPaint:ReturnType<typeof setTimeout>|undefined;
+  const preparation=new AbortController();let canceled=false,started=false,runtime:TourRuntime|undefined,afterPaint:ReturnType<typeof setTimeout>|undefined;
   setError('');setPreparing(true);callbacks.current.onError?.('');callbacks.current.onReady(null);
   const warm=()=>{
    if(canceled||started)return;started=true;clearTimeout(fallback);
-   void loadTourRuntime().then(({TourRuntime})=>{
+   void loadTourRuntime().then(async({TourRuntime})=>{
     if(canceled||!host.current)return;
-    runtime=new TourRuntime(host.current);setPreparing(false);callbacks.current.onReady(runtime);
+    const created=await TourRuntime.create(host.current,preparation.signal);if(canceled){created.dispose();return;}runtime=created;setPreparing(false);callbacks.current.onReady(runtime);
    }).catch(error=>{
     if(canceled)return;runtime?.dispose();runtime=undefined;callbacks.current.onReady(null);
     const message=String(error);setError(message);setPreparing(false);callbacks.current.onError?.(message);
    });
   };
   // React's title/config effects run immediately. Yield a visible frame before
-  // evaluating Spark or allocating a GPU context; hidden windows still warm up.
+  // evaluating the renderer or allocating a GPU context; hidden windows still warm up.
   const frame=requestAnimationFrame(()=>{afterPaint=setTimeout(warm,0);}),fallback=setTimeout(warm,100);
-  return()=>{canceled=true;cancelAnimationFrame(frame);clearTimeout(afterPaint);clearTimeout(fallback);runtime?.dispose();callbacks.current.onReady(null);};
+  return()=>{canceled=true;preparation.abort();cancelAnimationFrame(frame);clearTimeout(afterPaint);clearTimeout(fallback);runtime?.dispose();callbacks.current.onReady(null);};
  },[retryKey,attempt]);
  return <div className="stage" data-guide="scene" ref={host}>{!onError&&(error||preparing)&&<div className="stage-startup" role={error?'alert':'status'}>{error?<><span>{/webgl|graphics context/i.test(error)?'WebGL 2 could not start. Use a device and browser that support WebGL 2.':'The 3D viewer could not load.'}</span><Button onClick={()=>setAttempt(value=>value+1)}>Retry 3D viewer</Button></>:'Preparing 3D viewer…'}</div>}</div>;
 }

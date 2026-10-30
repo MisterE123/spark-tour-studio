@@ -6,7 +6,10 @@ Export a tour from Studio, then upload the complete website folder to a static H
 
 The bundled local server compresses HTML, JavaScript, CSS, JSON, SVG and text responses of at least 1 KiB when the browser accepts gzip. Compression streams through bounded buffers; it does not create a second compressed copy of a scan in memory. The editor's local preview and the launcher's HTTPS network share use the same server behavior.
 
-RAD/RADC files, collision tiles, binary models, images, audio, video and byte-range responses remain uncompressed. Existing RAD offsets and streaming requests are unchanged. This improves delivery of the application and configuration, not the encoded splat payload itself.
+SOG archives, WebP textures, retained RAD/RADC files, collision tiles, binary
+models, images, audio, video and byte-range responses remain uncompressed. JSON
+SOGS manifests can be compressed. This improves delivery of application text,
+not the already encoded splat textures themselves.
 
 Local files use `Cache-Control: no-cache`, an ETag and Last-Modified. A repeat visit can reuse an unchanged cached body after a small `304 Not Modified` validation response. `no-cache` requires checking freshness; it does not mean every unchanged file must be downloaded again. Editing configuration or replacing a local file changes its validator, so the next validation receives the updated body. There is no long-lived immutable cache policy on editable project files.
 
@@ -48,14 +51,37 @@ In the browser's Network panel, verify that the large application JavaScript and
 
 ## Splat and collision delivery
 
-Text compression does not change SH degree, splat count or RAD chunk sizes. To reduce encoded splat bytes, compare lower-SH imports or a separately optimized source asset while keeping the original. Use viewer performance presets to change rendering work independently.
+This experimental viewer accepts `.sog`, loose `meta.json`, and streamed
+`lod-meta.json` entry points. Serve JSON with `application/json`, textures with
+`image/webp`, and `.sog` archives with `application/octet-stream`. Preserve each
+manifest's referenced folders and filenames, including every detail level and
+any environment asset. A single `.sog` does not provide streamed LoD by itself.
+New RAD imports are disabled in the Radix experiment.
 
-The asset host must honor byte-range requests with correct `206 Partial Content` and `Content-Range` responses. Do not rewrite missing `.rad`, `.radc`, collision or media paths to the website's HTML entry point. A missing asset should return `404` so the viewer can report or recover from the actual failure.
+Text compression does not change SH degree, splat count or SOGS chunk sizes.
+Compare lower-SH imports or different conversion chunk settings while keeping
+the original. Viewer presets change rendering work independently of source size.
+
+The asset host must honor byte-range requests with correct `206 Partial Content`
+and `Content-Range` responses. Do not rewrite missing SOGS manifests, `.sog`,
+`.webp`, retained `.rad`/`.radc`, collision or media paths to the HTML entry point.
+A missing asset must return `404` so the viewer can report the actual failure.
 
 Edit `config/hosting.json` to set `assetBaseUrl` or per-scene `sceneUrls`; bundled application resources remain on the website's origin. Set `collisionBaseUrl` separately when relocating paged collision. Preserve relative companion chunk and collision tile paths. An asset origin different from the tour must permit that tour through CORS. HTTPS is required for immersive WebXR outside localhost.
 
 Studio's file chooser encodes local filenames in asset URLs. A file named `Photo #1.png` is referenced as `Photo%20%231.png`; a literal `%20` in a filename becomes `%2520`. Keep these encoded references when editing configuration. A real URL query or fragment remains separate, for example `Photo%20%231.png?rev=2#detail`.
 
-RAD companion names inside RAD metadata follow Spark's URL rules too. For a physical chunk named `part #1.radc`, its metadata reference must be `part%20%231.radc`. A raw `#` is a URL fragment, and a raw `%20` means a space; encoding the main RAD filename cannot repair mismatched companion metadata. Studio validates and copies companions using those rules without rewriting the original RAD. Companion references must remain inside the scene's asset folder; traversal, private editor files and links escaping that folder are rejected.
+Manifest companion references follow URL rules too. For a physical texture named
+`part #1.webp`, its reference must be `part%20%231.webp`. A raw `#` is a fragment,
+and a raw `%20` means a space. This also applies to retained RAD metadata: encoding
+the root cannot repair mismatched internal companion references. Studio validates
+and copies references without rewriting original source assets. Portable
+companions must remain inside the scene's asset folder; traversal, private editor
+files and links escaping that folder are rejected.
+
+Keep `licenses/` in every deployment. It includes the full World Labs MIT notice
+for the Radix renderer and adapted SOGS LoD example code, pinned provenance and
+modification notes. These dependency notices are separate from the tour author's
+own branding and copyright.
 
 Compare first visits separately from repeat visits, using the same scene, camera, rendering preset and device. Network transfer and GPU frame rate can each limit perceived loading. Local-loopback compression timings do not predict performance over a visitor's Wi-Fi or Internet connection.

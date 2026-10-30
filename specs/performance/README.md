@@ -52,4 +52,31 @@ The resolved tour settings apply when the editor opens a project or the viewer l
 
 Exports include individual `performance/<id>.performance.json` files, the resolved tour settings at `performance/active/preset.performance.json`, and this specification. The active copy uses a subdirectory so it cannot conflict with any named preset ID. These files are portable exchange copies, not a second source of configuration: edit `config/tour.json` or import a preset and re-export to change tour defaults. Importing creates and selects a new ID. Deleting the selected preset clears custom adjustments and selects the first remaining preset; deleting the last preset is disabled.
 
-The runtime integration uses Spark 2.4.0. The schema version tracks the preset contract, independently of the application or Spark release. Invalid data is reported rather than silently ignored.
+The stable runtime integration uses Spark 2.4.0. The schema version tracks the preset contract, independently of the application or renderer release. Invalid data is reported rather than silently ignored.
+
+## Experimental Radix settings
+
+The `Experiemental-Radix-SOGS` branch preserves the fields above and adds an optional `settings.radix` object. The experiment applies the shared `pixelRatio`, `maxSh`, `minPixelRadius`, `maxPixelRadius`, `maxStdDev`, `minAlpha`, `xrFoveation` and automatic-adjustment fields. Spark-specific tuning remains stored, but is not reinterpreted as Radix tuning. A project without the namespace uses Radix defaults in memory; merely opening and saving it does not add those defaults. Older stable versions that do not know the namespace reject presets containing it.
+
+`radix.schema.json` describes this block; `radix-balanced.performance.json` is a complete exchange example. Angles are degrees. Distances use the normalized scene's meters; the backend converts distance thresholds into each asset's local units. Named presets, custom tour adjustments, Save, recovery, Undo and portable export all use the existing preset library and exchange format.
+
+| Radix setting | Default | Meaning |
+| --- | --- | --- |
+| method | ewa | Projection method: ewa, 3dgut, htgs or raygs. |
+| sortBits | 24 | Sort key precision: 16, 24 or 32 bits. |
+| sortMode | auto | GPU sorting on WebGPU; CPU worker sorting on the WebGL2 fallback. Explicit cpu/gpu choices are also accepted. |
+| autoSortDistance / autoSortAngle | 0.05 / 5 | CPU sort movement and turning thresholds. GPU sorting runs each frame. |
+| selectedSplatBudget | 4,000,000 | Selected splats per asset, independent of saved Spark detail targets. A foreground and a splat background each receive this budget. |
+| residentSplatBudget | 16,000,000 | Retained splat-data target per asset; must be at least the selected budget. Required coarse coverage, textures and pending work also consume memory. |
+| lodBudgetMode | limit | limit uses distance thresholds and a budget cap; target raises detail toward the cap. |
+| lodBaseDistance / lodMultiplier | 5 / 3 | Detail transition distance and the factor between successive levels (multiplier range 1.2–10). |
+| lodRangeMin / lodRangeMax | 0 / 7 | Finest/coarsest allowed levels, clamped to the source's available levels. The minimum cannot exceed the maximum. |
+| lodBehindPenalty | 2 | Increased effective distance behind the camera. |
+| lodUnderfill | 5 | Coarser resident levels usable while selected data loads. |
+| lodUpdateDistance / lodUpdateAngle | 0.5 / 90 | Camera movement/turn needed to reconsider selected levels. |
+| minContribution | 0 | EWA projected opacity-area culling threshold; 0 disables it. |
+| blurAmount / preBlurAmount | 0.3 / 0 | Pixel-area antialiasing blur and additional pre-blur. |
+| sortGuard | 0 | CPU sort view margin; 0 keeps all splats in its sort. |
+| xrResolutionScale | 1 | Eye-buffer resolution factor, applied at the next XR session start. |
+
+Automatic detail temporarily scales each asset's effective Radix selected budget between 25% and 100%, preserving saved settings and resident limits. The readout totals visible draw/sort splats, supplied fallback splats, selected detail and resident splats across the active foreground and background, and reports the actual WebGPU/WebGL2 backend. None of these counts is a byte-memory limit. Source compression, network waiting and steady frame cadence are different measurements; renderer replacement alone does not establish a speedup on a device.

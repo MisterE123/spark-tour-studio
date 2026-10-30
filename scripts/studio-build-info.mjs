@@ -9,7 +9,7 @@ function experimentalOverride(value){
 /** Resolve build identity without touching the filesystem or starting Git. */
 export function studioBuildInfo({branch='',commit='',dirty=false,override,refType='',refName='',headRef=''}={}){
  const currentBranch=branch||(refType==='tag'?'':headRef||refName),hash=/^[0-9a-f]{7,40}$/i.test(commit)?commit.toLowerCase():'';
- return {experimental:experimentalOverride(override)??(refType!=='tag'&&currentBranch.startsWith('codex/experimental-')),branch:currentBranch,commit:hash,shortCommit:hash.slice(0,8),dirty:!!dirty};
+ return {experimental:experimentalOverride(override)??(refType!=='tag'&&(currentBranch.startsWith('codex/experimental-')||currentBranch==='Experiemental-Radix-SOGS')),branch:currentBranch,commit:hash,shortCommit:hash.slice(0,8),dirty:!!dirty};
 }
 /** Read repository metadata at build time only; no visitor code imports this. */
 export function readStudioBuildInfo({cwd=process.cwd(),env=process.env,git}={}){

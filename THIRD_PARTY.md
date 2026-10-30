@@ -4,7 +4,18 @@ The MIT license in `LICENSE` covers 3DGS Perspectives Studio's original code.
 Dependencies retain their own copyright and license terms; they are not
 relicensed by this project.
 
-- Spark 2.4.0 (viewer runtime), Three.js, React, Zod, Recast Navigation, Electron, Tiptap OSS,
+- Radix 0.0.1 (experimental viewer renderer): Copyright © 2026 WORLD LABS
+  TECHNOLOGIES, INC., MIT. The separately adapted **SOGS / streamed LoD adapter**
+  comes from World Labs' Radix example code at commit
+  `b831cc5e98b52a83b6f0ac6ba5fc50b5ac883be1`; it is not an independently
+  published SOGS API. Original files, hashes, local modifications and exact
+  package/source revisions are recorded in
+  `src/rendering/radix/vendor/PROVENANCE.json` and
+  `src/rendering/radix/README.md`. The full upstream notice below applies to
+  both the renderer and adapted example modules. Every built website and Studio
+  includes `licenses/Radix-LICENSE.txt`, `Radix-PROVENANCE.json` and
+  `Radix-SOGS-ADAPTER.md`. Source: https://github.com/sparkjsdev/radix .
+- Spark 2.4.0 (retained legacy RAD collision decoder), Three.js, React, Zod, Recast Navigation, Electron, Tiptap OSS,
   ProseMirror:
   MIT (with their included notices).
 - Google Material Symbols: Copyright Google LLC, Apache-2.0. The locally bundled
@@ -15,8 +26,20 @@ relicensed by this project.
 - Rapier: Apache-2.0, distributed with its license text.
 - The bundled Node.js runtime includes its own MIT license and third-party
   notices in `licenses/Node-LICENSE.txt`.
-- Spark 2.4.0's separately checksum-verified Rust converter and its crates retain the notices in `converter/`;
-  Rust's library notices are included separately.
+- This Radix branch retains the source of the legacy RAD importer and Spark
+  Rust converter, but disables new RAD imports and does not package that
+  converter. Its original notices remain in `converter/` when built separately.
+- The editor-only PLY → LoD SOGS converter uses PlayCanvas splat-transform
+  **3.10.3**, PlayCanvas engine **2.23.3** and embedded SuperSplat Viewer code
+  under MIT, plus libwebp under its BSD license. A modified MIT Node filesystem
+  adapter retains its original copyright header in `scripts/vendor/`.
+  Complete permission notices and source provenance ship in
+  `sogs-tools/licenses/`, and exact archive/generated-file hashes in
+  `sogs-tools/dependencies.json`. The converter runs on bundled Node.js
+  **24.21.0**, including Node's complete third-party notices. These tools are
+  bundled with Studio, not visitor websites. Source:
+  https://github.com/playcanvas/splat-transform and
+  https://github.com/playcanvas/engine .
 - The editor bundles the official GitHub CLI 2.102.0 Windows x64 distribution
   under MIT. Its original notice is in `github-tools/LICENSE.txt`.
   The download is pinned and checksum-verified. Source and license:
@@ -24,7 +47,7 @@ relicensed by this project.
 
 The build writes dependency license texts and version identifiers into
 `dist/licenses/`. Exported tours preserve that directory. The Windows editor
-includes the Node runtime notices, Rust converter notices, and the licenses
+includes the Node runtime notices, SOGS converter notices, and the licenses
 for the editor-only scientific meshing engine. Dependency licenses govern those
 components independently of 3DGS Perspectives Studio's MIT license.
 
@@ -42,3 +65,27 @@ These packages are not copied into exported viewer websites.
 3DGS Perspectives Studio's ball/box selection, voxel enclosure, merged-face surface builder
 and GLB writer were authored independently under MIT. No GPL-marked Lichtfeld
 plugin source has been incorporated or relicensed.
+
+## World Labs Radix renderer and adapted SOGS LoD example — full MIT notice
+
+The MIT License
+
+Copyright © 2026 WORLD LABS TECHNOLOGIES, INC.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.

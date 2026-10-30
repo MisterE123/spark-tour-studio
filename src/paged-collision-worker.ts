@@ -1,9 +1,8 @@
-import {fromHalf,PagedSplats,type SplatPager} from '@sparkjsdev/spark';
 import {Vector3} from 'three';
 import {CollisionAuthoringSchema,sceneMatrix} from '../shared/collision-selection.mjs';
 import {PAGED_COLLISION_FORMAT,collisionTileBounds,parseCollisionTileKey,encodeCollisionTile,collisionSha256,validatePagedCollisionManifest} from '../shared/paged-collision.mjs';
 import {CollisionTileAccumulator,readStagedCollisionTile,compileNavigableDomain,navigableTileKeys,allowedCollisionCells,collisionFieldCells,CollisionBoundsSampler,quantizeCollisionCell} from '../shared/paged-collision-generator.mjs';
-import {assertPagedRad} from '../shared/rad.mjs';
+import {scanSplatLeaves} from './splat-leaves';
 import type {CollisionRequest} from './collision-worker';
 (globalThis as any).window=globalThis;
 const progress=(phase:string,completed?:number,total?:number)=>postMessage({type:'progress',phase,completed,total});
@@ -11,12 +10,7 @@ let nextId=1;const pending=new Map<number,{resolve:(value:any)=>void;reject:(err
 function callSink(method:string,...args:any[]):Promise<any>{return new Promise((resolve,reject)=>{const id=nextId++;pending.set(id,{resolve,reject});const transfer:Transferable[]=[];for(const value of args)if(value instanceof Uint32Array||value instanceof Uint8Array)transfer.push(value.buffer);(self as any).postMessage({type:'sink',id,method,args},transfer);});}
 const sink={append:(key:string,cells:Uint32Array)=>callSink('append',key,cells),keys:()=>callSink('keys'),read:(key:string,offset:number,maxCells:number)=>callSink('read',key,offset,maxCells),writeTile:(entry:any,bytes:Uint8Array)=>callSink('writeTile',entry,bytes),finalize:(manifest:any)=>callSink('finalize',manifest)};
 async function scanLeaves(request:CollisionRequest,visit:(x:number,y:number,z:number,opacity:number)=>Promise<void>|void){
- const paged=new PagedSplats({rootUrl:request.url,pager:{extSplats:true} as SplatPager,maxSh:0});let scanned=0,leaves=0;
- try{const {meta}=await paged.getRadMeta();assertPagedRad(meta);const total=meta.chunks.length;
-  for(let chunk=0;chunk<total;chunk++){progress('Reading original splat pages…',chunk,total);const decoded=await paged.fetchDecodeChunk(chunk);if(!('extArrays'in decoded))throw Error('Extended splat decoding is unavailable.');const tree=decoded.extra.lodTree as Uint32Array|undefined;if(!tree||tree.length<decoded.numSplats*4)throw Error('RAD page has no complete LoD tree.');const words=decoded.extArrays[0],centers=new Float32Array(words.buffer,words.byteOffset,words.length);
-   for(let index=0;index<decoded.numSplats;index++){scanned++;const offset=index*4;if((tree[offset+2]&0xffff)!==0)continue;leaves++;const waiting=visit(centers[offset],centers[offset+1],centers[offset+2],fromHalf(words[offset+3]&0xffff));if(waiting)await waiting;}
-  }progress('Reading original splat pages…',total,total);
- }finally{paged.dispose();}return {scanned,leaves};
+ return scanSplatLeaves(request.url,visit,{progress});
 }
 export async function estimateCollisionBounds(request:CollisionRequest){
  const options=request.authoring.options,sampler=new CollisionBoundsSampler({detail:options.detail/request.transform.scale,minimumPadding:.25/request.transform.scale});await scanLeaves(request,(x,y,z,opacity)=>{if(!options.ignoreTransparent||opacity>=options.opacityCutoff)sampler.add(x,y,z);});return sampler.finish();

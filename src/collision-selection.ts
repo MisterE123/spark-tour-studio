@@ -1,20 +1,20 @@
 import * as THREE from 'three';
-import {dyno,SplatMesh} from '@sparkjsdev/spark';
-import {volumeMatrix,selectionTextureData,selectionTextureStatements,SELECTION_TEXTURE_WIDTH,SELECTION_TEXTURE_HEIGHT} from '../shared/collision-selection.mjs';
+import {volumeMatrix} from '../shared/collision-selection.mjs';
 import {boxWallPosition,resizeBoxWall} from '../shared/box-walls.mjs';
 import type {CollisionVolume} from './model';
+import type {SplatAssetGroup} from './rendering/backend';
 
 export class CollisionSelectionLayer {
- readonly group=new THREE.Group();readonly shapes=new THREE.Group();private faces=new THREE.Group();private signature='';private mesh?:SplatMesh;private volumes:CollisionVolume[]=[];selected='';
- private tintSignature='';private texture?:THREE.DataTexture;private tintCount={value:0};
+ readonly group=new THREE.Group();readonly shapes=new THREE.Group();private faces=new THREE.Group();private signature='';private mesh?:SplatAssetGroup;private volumes:CollisionVolume[]=[];selected='';
+ private tintSignature='';
  constructor(){this.group.name='collision-selection';this.group.add(this.shapes,this.faces);}
  mountHandles(overlay:THREE.Scene){overlay.add(this.faces);this.faces.matrixAutoUpdate=false;this.syncHandles();}
  syncHandles(){if(!this.faces.matrixAutoUpdate){this.group.updateWorldMatrix(true,false);this.faces.matrix.copy(this.group.matrixWorld);this.faces.updateMatrixWorld(true);}}
  private remove(object:THREE.Object3D){object.traverse(child=>{if(child instanceof THREE.Mesh||child instanceof THREE.Line){child.geometry.dispose();(child.material as THREE.Material).dispose();}});object.removeFromParent();}
- private releaseTint(){if(this.mesh&&this.texture){this.mesh.objectModifier=undefined;this.mesh.updateGenerator();}this.texture?.dispose();this.texture=undefined;this.tintSignature='';}
+ private releaseTint(){this.mesh?.setSelection([]);this.tintSignature='';}
  clear(){this.signature='';for(const group of [this.shapes,this.faces])for(const child of [...group.children])this.remove(child);this.releaseTint();this.mesh=undefined;this.volumes=[];}
  private pose(object:THREE.Object3D,volume:CollisionVolume){volumeMatrix(volume).decompose(object.position,object.quaternion,object.scale);object.updateMatrixWorld(true);}
- rebuild(volumes:CollisionVolume[],mesh?:SplatMesh,selected='',resize=true){
+ rebuild(volumes:CollisionVolume[],mesh?:SplatAssetGroup,selected='',resize=true){
   this.selected=selected;const signature=JSON.stringify([volumes,selected,resize]);
   if(mesh!==this.mesh){this.releaseTint();this.mesh=mesh;this.signature='';}
   if(signature===this.signature)return this.shapes.children.find(child=>child.name===selected);
@@ -38,14 +38,7 @@ export class CollisionSelectionLayer {
  private tint(volumes:CollisionVolume[]){
   if(!this.mesh)return;const signature=JSON.stringify(volumes);if(signature===this.tintSignature)return;
   if(!volumes.length){this.releaseTint();return;}
-  const data=selectionTextureData(volumes);
-  if(!this.texture){
-   this.texture=new THREE.DataTexture(data,SELECTION_TEXTURE_WIDTH,SELECTION_TEXTURE_HEIGHT,THREE.RGBAFormat,THREE.FloatType);this.texture.minFilter=THREE.NearestFilter;this.texture.magFilter=THREE.NearestFilter;this.texture.generateMipmaps=false;
-   const texture={value:this.texture},count=this.tintCount;
-   this.mesh.objectModifier=new dyno.Dyno({inTypes:{gsplat:dyno.Gsplat},outTypes:{gsplat:dyno.Gsplat},generate:({inputs,outputs,compile})=>{const name=`tourCollision${compile.nextSequence()}`,sampler=name+'Shapes',length=name+'Count';return {globals:[`uniform sampler2D ${sampler};`,`uniform int ${length};`],statements:selectionTextureStatements(inputs.gsplat,outputs.gsplat,sampler,length),uniforms:{[sampler]:texture,[length]:count}};}});
-   this.mesh.updateGenerator();
-  }else (this.texture.image.data as Float32Array).set(data);
-  this.tintSignature=signature;this.tintCount.value=volumes.length;this.texture.needsUpdate=true;this.mesh.needsUpdate=true;
+  this.mesh.setSelection(volumes);this.tintSignature=signature;
  }
  preview(object:THREE.Object3D,updateTint=true){const patch=this.patch(object);if(object.userData.collisionFace){const shape=this.shapes.children.find(shape=>shape.name===patch.id);if(shape)this.pose(shape,patch);}for(const node of this.faces.children)if(node.userData.collisionVolume.id===patch.id){const {axis,sign}=node.userData.collisionFace;node.position.fromArray(boxWallPosition(patch,axis,sign));}if(updateTint)this.tint(this.volumes.map(volume=>volume.id===patch.id?patch:volume));}
  patch(object:THREE.Object3D):CollisionVolume{const volume=object.userData.collisionVolume as CollisionVolume;if(object.userData.collisionFace){const {axis,sign}=object.userData.collisionFace;return resizeBoxWall(volume,axis,sign,object.position.toArray()) as CollisionVolume;}const euler=new THREE.Euler().setFromQuaternion(object.quaternion,'YXZ'),scale=object.scale.toArray(),radius=scale.reduce((value,next)=>Math.abs(next-volume.size[0])>Math.abs(value-volume.size[0])?next:value,scale[0]);return {...volume,position:object.position.toArray() as [number,number,number],rotation:[euler.x,euler.y,euler.z],size:(volume.type==='ball'?Array(3).fill(Math.max(.005,radius)):scale.map(value=>Math.max(.005,value))) as [number,number,number]};}

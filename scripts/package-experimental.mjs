@@ -14,7 +14,7 @@ await fs.access(npmCli).catch(()=>{throw Error('Run this build with npm run pack
 async function run(script,args=[]){
  await new Promise((resolve,reject)=>{const child=spawn(process.execPath,[script,...args],{cwd:root,env,stdio:'inherit',windowsHide:true});child.on('error',reject);child.on('exit',(code,signal)=>code===0?resolve():reject(Error(`${path.basename(script)} failed (${signal||code}).`)));});
 }
-for(const task of ['build','bundle:github','launcher'])await run(npmCli,['run',task]);
+for(const task of ['bundle:sogs','build','bundle:github','launcher'])await run(npmCli,['run',task]);
 await run(path.join(root,'node_modules','electron-builder','out','cli','cli.js'),['--win','portable','--x64','--publish',options.publish,`--config.directories.output=${options.output}`,`--config.artifactName=${options.artifactName}`]);
 await fs.writeFile(path.join(root,options.output,'studio-build.json'),JSON.stringify({version,...metadata,artifactName:options.artifactName},null,2)+'\n');
 console.log('Experimental Studio ready: '+path.join(root,options.output,options.artifactName));

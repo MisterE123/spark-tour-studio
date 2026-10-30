@@ -1,0 +1,107 @@
+name: Radix SOGS experimental builds
+
+on:
+  push:
+    branches: [Experiemental-Radix-SOGS]
+  pull_request:
+    branches: [Experiemental-Radix-SOGS]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: radix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: SOGS selectors, meshers, authoring and portable build
+    runs-on: windows-2025
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      SPARK_EXPERIMENTAL_BUILD: '1'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24.21.0'
+          cache: npm
+      - name: Install pinned dependencies
+        run: npm ci
+      - name: Bundle verified offline CPU SOGS converter and complete notices
+        run: npm run bundle:sogs
+      - name: Run all unit and integration tests including actual SOGS conversion
+        run: npm test
+      - name: Build separate experimental editor and launcher
+        run: npm run package:experimental
+      - name: Check actual SOGS LoD rendering, selectors and cancellation
+        run: node scripts/radix-backend-check.mjs
+      - name: Check finest SOGS selection and both collision meshers
+        run: node scripts/radix-collision-check.mjs
+      - name: Check persistent XR manager, stereo navigation and resolution settings
+        run: node scripts/radix-xr-check.mjs
+      - name: Check packaged queued imports, source replacement and offline export
+        env:
+          SPARK_RADIX_EDITOR_EXE: experimental-release/win-unpacked/3DGS Perspectives Studio.exe
+        run: node scripts/radix-authoring-check.mjs
+      - name: Check packaged experimental identity and visitor dependency graph
+        env:
+          SPARK_PACKAGED: '1'
+          SPARK_PACKAGE_DIR: experimental-release/win-unpacked
+        run: node scripts/studio-build-check.mjs --experimental
+      - name: Check actual portable executable launch and normal close
+        run: |
+          $build = Get-Content experimental-release/studio-build.json | ConvertFrom-Json
+          $env:SPARK_PORTABLE_EXE = Join-Path (Resolve-Path experimental-release) $build.artifactName
+          node scripts/portable-smoke-check.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Prepare experimental downloads and checksums
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/Experiemental-Radix-SOGS'
+        run: node scripts/radix-artifacts.mjs
+      - name: Upload tested experimental artifacts
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/Experiemental-Radix-SOGS'
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: Radix-SOGS-windows-x64-${{ github.sha }}
+          path: experimental-artifacts/*
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+      - name: Upload diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: radix-diagnostics-${{ github.run_id }}
+          path: test-output/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  prerelease:
+    name: Publish tested experimental prerelease
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/Experiemental-Radix-SOGS'
+    needs: windows
+    runs-on: windows-2025
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: Radix-SOGS-windows-x64-${{ github.sha }}
+          path: experimental-artifacts
+      - name: Publish separate prerelease without changing stable latest
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $short = $env:GITHUB_SHA.Substring(0, 8)
+          $tag = "radix-sogs-experiment-$env:GITHUB_RUN_NUMBER-$env:GITHUB_RUN_ATTEMPT-$short"
+          $files = @(Get-ChildItem -LiteralPath experimental-artifacts -File | Where-Object Name -ne 'RELEASE_NOTES.md' | ForEach-Object FullName)
+          if ($files.Count -lt 4) { throw 'Incomplete experimental artifacts' }
+          gh release create $tag @files --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --prerelease --latest=false --title "Radix SOGS experiment $short" --notes-file experimental-artifacts/RELEASE_NOTES.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

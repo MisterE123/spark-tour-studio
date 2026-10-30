@@ -1,3 +1,4 @@
+import {isSplatReference} from './splat-format.mjs';
 import {NavigationSettingsSchema} from './navigation-settings.mjs';
 import {BrandingSchema,brandingReferences,validateBrandingUrls} from './branding.mjs';
 import {normalizeBubbleContent,usedContent,generatedContentId} from './authoring.mjs';
@@ -40,9 +41,9 @@ export function validateProject(value){
  for(const s of p.scenes){
   unique(s.viewpoints,`${s.name} viewpoint`);unique(s.hotspots,`${s.name} bubble`);
   if(!s.modes.length)errors.push(`${s.name}: enable at least one navigation mode.`);
-  if(s.background&&s.background.type!=='solid'){if(!s.background.source)errors.push(`${s.name}: choose a background asset.`);if(s.background.type==='splat'&&s.background.source&&!/\.rad(?:[?#]|$)/i.test(s.background.source))errors.push(`${s.name}: background splat must be a .rad URL or file.`);}
-  if(!s.source)errors.push(`${s.name}: choose a RAD source.`);
-  if(s.source && !/\.rad(?:[?#]|$)/i.test(s.source))errors.push(`${s.name}: source must be a .rad URL or file.`);
+  if(s.background&&s.background.type!=='solid'){if(!s.background.source)errors.push(`${s.name}: choose a background asset.`);if(s.background.type==='splat'&&s.background.source&&!isSplatReference(s.background.source))errors.push(`${s.name}: background splat must be a SOG, Streamed SOG or retained RAD asset.`);}
+  if(!s.source)errors.push(`${s.name}: choose a splat source.`);
+  if(s.source && !isSplatReference(s.source))errors.push(`${s.name}: source must be .sog, meta.json, lod-meta.json or a retained .rad asset.`);
   if(s.collider&&!/\.(?:glb|collision\.json)(?:[?#]|$)/i.test(s.collider))errors.push(`${s.name}: collision must be a GLB or .collision.json asset.`);
   if(!s.viewpoints.some(v=>v.id===s.entry))errors.push(`${s.name}: missing entry viewpoint.`);
   if(s.modes.includes('explore')&&(!s.collider||!s.viewpoints.some(v=>v.id===s.walkStart)))errors.push(`${s.name}: Walk needs a collider and walking start.`);

@@ -2,6 +2,7 @@ const fs=require('node:fs/promises'),path=require('node:path');
 const {contained,privateStateFile}=require('./server.cjs');
 const {sourcePath,radMeta,radCompanion}=require('./export.cjs');
 const {localReference}=require('./asset-paths.cjs');
+const {sogFiles,sogKind}=require('./sogs.cjs');
 const remote=ref=>/^https?:\/\//i.test(ref);
 const ignored=name=>privateStateFile(name)||name.split(/[\\/]/).some(part=>part.startsWith('.')||['node_modules','collision-logs','conversion-logs'].includes(part))||/\.(exe|zip|ply|ckpt|safetensors|log|pem|key|pfx|p12)$/i.test(name);
 function assetPath(root,name){if(!name||name.includes('\0')||name.includes('\\')||name.split('/').some(p=>p==='..'||p==='.git'))throw Error('Invalid tour asset path.');const target=path.resolve(root,name);if(!contained(root,target)||ignored(name))throw Error('Asset cannot be included in tour history: '+name);return target;}
@@ -28,7 +29,8 @@ async function collectTourFiles({projectRoot,project,hosting={},sources={},resol
    for(const prefix of Object.keys(sources))if(name.startsWith(prefix+'/'))prefixes.add(prefix);
    if(htmlRefs.has(ref))await walk(path.dirname(source),path.posix.dirname(name));
    if(collisionRefs.has(ref)){const api=require('./paged-collision.cjs'),manifest=await api.validateLocalManifest(source);for(const entry of api.entries(manifest)){const to=path.posix.join(path.posix.dirname(name),api.relativeAsset(entry.url)),from=path.resolve(path.dirname(source),entry.url);await put(to,from);}}
-   if(radRefs.has(ref)){const meta=await radMeta(source);for(const chunk of meta.chunks){if(!chunk.filename)continue;const companion=await radCompanion(source,chunk.filename),to=path.posix.join(path.posix.dirname(name),companion.path);await put(to,companion.source);}}
+   if(radRefs.has(ref)&&sogKind(source)){const graph=await sogFiles(source);for(const file of graph.files){if(!file.path)continue;await put(path.posix.join(path.posix.dirname(name),file.path),file.source);}}
+   else if(radRefs.has(ref)){const meta=await radMeta(source);for(const chunk of meta.chunks){if(!chunk.filename)continue;const companion=await radCompanion(source,chunk.filename),to=path.posix.join(path.posix.dirname(name),companion.path);await put(to,companion.source);}}
   }catch(error){missing.push(name+': '+error.message);}
  }
  return {files:[...files.values()],missing,remoteCount:remoteRefs.size,prefixes:[...prefixes]};

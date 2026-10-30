@@ -9,6 +9,8 @@ test('experimental branch detection leaves main, ordinary branches and release t
  assert.equal(studioBuildInfo({branch:'main',commit}).experimental,false);
  assert.equal(studioBuildInfo({branch:'codex/editor-polish',commit}).experimental,false);
  assert.equal(studioBuildInfo({branch:'codex/experimental-experience-2026-10-28',commit}).experimental,true);
+ assert.equal(studioBuildInfo({branch:'Experiemental-Radix-SOGS',commit}).experimental,true);
+ assert.equal(studioBuildInfo({branch:'Experiemental-Radix-SOGS',refType:'tag',refName:'v1.23.0',commit}).experimental,false);
  assert.equal(studioBuildInfo({branch:'feature/codex/experimental-tools',commit}).experimental,false);
  assert.equal(studioBuildInfo({refType:'tag',refName:'v1.22.3',commit}).experimental,false);
  assert.equal(studioBuildInfo({branch:'codex/experimental-preview',refType:'tag',refName:'v1.22.3',commit}).experimental,false,'tag CI must not be labeled experimental by a leftover branch name');

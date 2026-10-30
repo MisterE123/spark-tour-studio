@@ -1,7 +1,6 @@
 import {movementSpeed,vrWorldScale,walkingSettings} from '../shared/navigation-settings.mjs';
 import {scaleTrackedRig,rigidXRViews} from '../shared/xr-scale.mjs';
 import {richTextPlainText} from '../shared/rich-text.mjs';
-import {repairLodBounds} from '../shared/lod-bounds.mjs';
 import {moveViewGeometry,viewFromCamera} from '../shared/view-authoring.mjs';
 import {WalkMotion} from '../shared/walk-motion.mjs';
 import {keyboardMotion,isJumpKey,lookRotation} from '../shared/navigation-input.mjs';
@@ -11,7 +10,9 @@ import {PerformanceSettingsSchema} from '../shared/performance.mjs';
 import {AdaptiveDetailController} from '../shared/adaptive-detail.mjs';
 import type {PerformanceSettings} from './model';
 import * as THREE from 'three';
-import { SparkRenderer, SplatMesh } from '@sparkjsdev/spark';
+import {createRadixBackend} from './rendering/radix';
+import type {SplatBackend,SplatAssetGroup} from './rendering/backend';
+import {radixRenderSettings,radixPerformanceSettings} from '../shared/radix-performance.mjs';
 import type Rapier from '@dimforge/rapier3d-compat';
 import {physics as RAPIER} from '../shared/physics.mjs';
 import {loadPhysics} from './physics-loader';
@@ -27,7 +28,6 @@ import { sceneUrl,colliderUrl } from '../shared/project.mjs';
 import {isPagedCollision,validatePagedCollisionManifest} from '../shared/paged-collision.mjs';
 import {PagedCollider} from './paged-collider';
 import {readCollisionResponse} from '../shared/collision-stream.mjs';
-import { assertPagedRad } from '../shared/rad.mjs';
 import {xrMotion,stick} from '../shared/xr-controls.mjs';
 import {badge,updateBadge,badgeVisibility,panel,imagePanel,releaseUI} from './spatial-ui';
 import {XRContent} from './xr-content';
@@ -52,7 +52,7 @@ export class TourRuntime {
  onCollisionVolume=(volume:CollisionVolume)=>{};onCollisionSelect=(id:string)=>{};onCollisionPlace=(point:Vec3,type:'ball'|'box',operation:'add'|'remove')=>{};onCollisionPickCancel=()=>{};
  readonly viewGeometry=new ViewGeometry();private navigator?:ViewNavigation;private viewXROffset=new THREE.Vector3();private thumbnailPending?:{id:string;after:number};onViewpointThumbnail=(id:string,data:string)=>{};onViewGeometry=(id:string,patch:Partial<Viewpoint>)=>{};
  readonly audio=new TourAudio();private flight?:{start:number;duration:number;from:THREE.Vector3;to:THREE.Vector3;fromYaw:THREE.Quaternion;toYaw:THREE.Quaternion;pitch:number;targetPitch:number};private descriptionLabel?:THREE.Mesh;
- readonly overlay=new THREE.Scene();readonly viewMarkers=new THREE.Group();readonly routes=new WalkingRoutes(this.overlay);readonly renderer:THREE.WebGLRenderer;readonly scene=new THREE.Scene();readonly camera=new THREE.PerspectiveCamera(65,1,.05,20000);readonly rig=new THREE.Group();readonly content=new THREE.Group();readonly bubbles=new THREE.Group();readonly hud=new THREE.Group();spark:SparkRenderer;readonly gizmo:TransformControls;
+ readonly overlay=new THREE.Scene();readonly viewMarkers=new THREE.Group();readonly routes=new WalkingRoutes(this.overlay);readonly renderer:SplatBackend['renderer'];readonly scene=new THREE.Scene();readonly camera=new THREE.PerspectiveCamera(65,1,.05,20000);readonly rig=new THREE.Group();readonly content=new THREE.Group();readonly bubbles=new THREE.Group();readonly hud=new THREE.Group();readonly gizmo:TransformControls;
  performanceTransition:Promise<void>=Promise.resolve();
  onPointerCapture=(captured:boolean)=>{};
  get pointerCaptured(){return document.pointerLockElement===this.renderer.domElement;}
@@ -66,28 +66,35 @@ export class TourRuntime {
  private adaptiveDetail=new AdaptiveDetailController();
  get adaptiveDetailScale(){return this.adaptiveDetail.scale;}
  subscribePerformance(listener:(settings:PerformanceSettings)=>void){this.performanceListeners.add(listener);return()=>{this.performanceListeners.delete(listener);};}
- private precisionRestore?:ReturnType<TourRuntime['precisionSnapshot']>;private pendingDestination?:{id:string;viewpoint?:string};private precisionCleanup:Promise<void>=Promise.resolve();
+ private adaptiveScale=1;private pendingDestination?:{id:string;viewpoint?:string};
  private lastViewpoints=new Map<string,string>();currentViewpoint='';showViewpoints=false;swapSticks=false;xrFly=false;onViewpoint=(id:string)=>{};
  private bubbleOcclusion=new WeakMap<THREE.Object3D,{at:number;eye:THREE.Vector3;point:THREE.Vector3;hidden:boolean;blockedCount:number}>();private occlusionCursor=0;private occlusionRay=new THREE.Raycaster();
  private menuRecenterFrames=0;private menuOpen=false;private menuTab:'move'|'scenes'|'views'|'options'='move';private menuPage=0;private confirmExit=false;private held=new Map<THREE.Object3D,THREE.Object3D|null>();private teleportController?:THREE.XRTargetRaySpace;private teleportPoint?:THREE.Vector3;private aimTime=0;private hovered?:THREE.Object3D;private routeStall=0;private lastSafeHead?:THREE.Vector3;private menuAnchor=new THREE.Vector3();private wristMenu=badge('menu','Tour menu');private teleportRing=new THREE.Mesh(new THREE.RingGeometry(.17,.25,48),new THREE.MeshBasicMaterial({color:0x9fffc8,side:THREE.DoubleSide,depthTest:false,depthWrite:false}));
  project:Project|null=null;hosting:Hosting={assetBaseUrl:'./',sceneUrls:{}};base=location.href;active:TourScene|null=null;mode:Mode='jumps';viewHeight=1.7;stepHeight=DEFAULT_STEP_HEIGHT;private visitorSpeed=1;onSpeed=(value:number)=>{};get speedMultiplier(){return this.visitorSpeed;}set speedMultiplier(value:number){if(!Number.isFinite(value)||value<.05||value>20)return;this.visitorSpeed=value;this.onSpeed(value);}private appliedXRScale=1;get speed(){return movementSpeed(this.project,this.active,this.speedMultiplier);}set speed(value:number){this.speedMultiplier=value/movementSpeed(this.project,this.active,1);}quality=1;performanceSettings:PerformanceSettings=PerformanceSettingsSchema.parse({});frameMs=16;snap=true;editing=false;blocked=false;
- private firstDisplay?:{mesh:SplatMesh;started:number;minimum:number;frame:number};
+ private firstDisplay?:{mesh:SplatAssetGroup};
  loading:SceneLoadState|null=null;onLoading=(state:SceneLoadState|null)=>{};
  private loadingListeners=new Set<()=>void>();
  subscribeLoading=(listener:()=>void)=>{this.loadingListeners.add(listener);return()=>{this.loadingListeners.delete(listener);};};
  getLoadingSnapshot=()=>this.loading;
  onStatus=(text:string,error=false)=>{};onScene=(id:string)=>{};onMode=(mode:Mode)=>{};onPage=(page:Page)=>{};onPick=(point:Vec3)=>{};onSelect=(id:string)=>{};onMove=(id:string,point:Vec3)=>{};
- private backgroundLayer=new BackgroundLayer(this.scene,message=>this.report(message,true));private mesh?:SplatMesh;private collider?:THREE.Group;private world?:Rapier.World;private body?:Rapier.RigidBody;private character?:Rapier.KinematicCharacterController;private capsule?:Rapier.Collider;private generation=0;private dead=false;private keys=new Set<string>();private observers:ResizeObserver;private cleanup:(()=>void)[]=[];private ray=new THREE.Raycaster();private touch=new THREE.Vector2();private pointerMove=new THREE.Vector3();private last=0;private crouched=false;private touchCrouch=false;private touchLift=0;private jumpRequested=false;private turnReady=true;private status='';private currentPage:Page|null=null;private selected?:THREE.Object3D;private fade:THREE.Mesh;private fadeUntil=0;private controllers:THREE.XRTargetRaySpace[]=[];private pendingPick=false;
+ private backgroundLayer:BackgroundLayer;private mesh?:SplatAssetGroup;private collider?:THREE.Group;private world?:Rapier.World;private body?:Rapier.RigidBody;private character?:Rapier.KinematicCharacterController;private capsule?:Rapier.Collider;private generation=0;private dead=false;private keys=new Set<string>();private observers:ResizeObserver;private cleanup:(()=>void)[]=[];private ray=new THREE.Raycaster();private touch=new THREE.Vector2();private pointerMove=new THREE.Vector3();private last=0;private crouched=false;private touchCrouch=false;private touchLift=0;private jumpRequested=false;private turnReady=true;private status='';private currentPage:Page|null=null;private selected?:THREE.Object3D;private fade:THREE.Mesh;private fadeUntil=0;private controllers:THREE.XRTargetRaySpace[]=[];private pendingPick=false;
  private colliderGeneration=0;private colliderSource='';private colliderVisible=false;private transformKey='';private colliderTransformKey='';colliderTransition:Promise<void>=Promise.resolve();private xrContent=new XRContent();
  private initialColliderLoad?:{generation:number;sceneId:string;promise:Promise<void>};private sceneResourcesReady=false;private colliderLoading=false;private colliderFailure='';private navigationFailure=false;private statusScope:'scene'|'navigation'|'xr'='scene';
  private get collisionMovementBlocked(){return !this.editing&&this.mode!=='jumps'&&!!this.active?.collider&&(this.colliderLoading||!this.world);}
  private pagedCollider?:PagedCollider;private colliderAbort?:AbortController;private modeRequest=0;private preparingMode=false;private modeTransition:Promise<void>=Promise.resolve();private fallbackNavigationDirty=false;private pagedNavigationAligned=true;private teleportRequest=0;private teleportLease?:{release():void};private teleportQuery?:{id:number;controller:THREE.XRTargetRaySpace;abort:AbortController};private teleportAim?:{origin:THREE.Vector3;direction:THREE.Vector3;point?:THREE.Vector3;head?:THREE.Vector3;landing?:THREE.Vector3;state:'pending'|'ready'|'invalid';retryAt:number};
  private get teleportAimPending(){return !!this.teleportQuery;}
  private headSafetyTrackingCleanup?:()=>void;
- constructor(readonly host:HTMLElement){
+ static async create(host:HTMLElement,signal?:AbortSignal){
+  const preference=new URL(location.href).searchParams.get('radixBackend');
+  const backend=await createRadixBackend({backend:preference==='webgpu'||preference==='webgpu-gl'?preference:'auto',xr:true,directCanvas:false});
+  if(signal?.aborted||!host.isConnected){backend.dispose();throw new DOMException('Viewer preparation cancelled.','AbortError');}
+  try{return new TourRuntime(host,backend);}catch(error){backend.dispose();throw error;}
+ }
+ constructor(readonly host:HTMLElement,readonly backend:SplatBackend){
   this.cleanup.push(()=>this.headSafetyTrackingCleanup?.());
-  this.renderer=new THREE.WebGLRenderer({antialias:false,alpha:false,preserveDrawingBuffer:true});this.renderer.localClippingEnabled=true;this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));this.renderer.xr.enabled=true;this.renderer.xr.cameraAutoUpdate=false;this.renderer.xr.setReferenceSpaceType('local-floor');this.renderer.setClearColor('#0b151d');this.renderer.domElement.tabIndex=0;host.appendChild(this.renderer.domElement);
-  this.spark=new SparkRenderer({renderer:this.renderer,lodSplatScale:1,maxPagedSplats:8388608});this.applyPerformance(this.performanceSettings);this.scene.add(this.spark,this.content,this.rig);this.content.add(this.viewGeometry.group);this.overlay.add(this.bubbles,this.viewMarkers,this.hud,this.wristMenu,this.teleportRing);this.wristMenu.visible=false;this.wristMenu.userData.action=()=>this.toggleMenu();this.teleportRing.rotation.x=-Math.PI/2;this.teleportRing.visible=false;this.routes.onNotice=text=>this.onStatus(text,false);this.rig.rotation.order='YXZ';this.rig.add(this.camera);this.rig.position.set(0,1.7,3);
+  this.renderer=backend.renderer;this.renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));this.renderer.xr.enabled=true;this.renderer.xr.cameraAutoUpdate=false;this.renderer.xr.setReferenceSpaceType('local-floor');this.renderer.setClearColor('#0b151d');this.renderer.domElement.tabIndex=0;host.appendChild(this.renderer.domElement);
+  this.backgroundLayer=new BackgroundLayer(this.scene,message=>this.report(message,true),(url,options)=>this.backend.createAsset(url,options));
+  this.applyPerformance(this.performanceSettings);this.scene.add(backend.node,this.content,this.rig);this.content.add(this.viewGeometry.group);this.overlay.add(this.bubbles,this.viewMarkers,this.hud,this.wristMenu,this.teleportRing);this.wristMenu.visible=false;this.wristMenu.userData.action=()=>this.toggleMenu();this.teleportRing.rotation.x=-Math.PI/2;this.teleportRing.visible=false;this.routes.onNotice=text=>this.onStatus(text,false);this.rig.rotation.order='YXZ';this.rig.add(this.camera);this.rig.position.set(0,1.7,3);
   const grid=new THREE.GridHelper(30,30,0x2d706e,0x18333c);grid.name='empty-grid';this.scene.add(grid);
   this.fade=new THREE.Mesh(new THREE.PlaneGeometry(100,100),new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0,depthTest:false,depthWrite:false,side:THREE.DoubleSide}));this.fade.renderOrder=10000;this.overlay.add(this.fade);
   this.content.add(this.collisionSelection.group);this.collisionSelection.mountHandles(this.overlay);
@@ -166,30 +173,32 @@ export class TourRuntime {
   }catch(error){if(generation===this.generation&&paged===this.pagedCollider)this.report('Nearby navigation data: '+String(error),true,'navigation');return false;}
   finally{this.focusCollision(paged);placementLease?.release();lease?.release();}
  }
- unload(){this.precisionRestore=undefined;this.pendingDestination=undefined;++this.generation;this.clearScene();this.active=null;this.status='';this.scene.getObjectByName('empty-grid')!.visible=true;}
+ unload(){this.pendingDestination=undefined;++this.generation;this.clearScene();this.active=null;this.status='';this.scene.getObjectByName('empty-grid')!.visible=true;}
  private setLoading(value:SceneLoadState|null){this.loading=value;this.onLoading(value);for(const listener of this.loadingListeners)listener();if(this.renderer.xr.isPresenting)this.refreshHud();}
  private report(text:string,error=false,scope:'scene'|'navigation'|'xr'='scene'){this.statusScope=scope;if(scope==='navigation'){this.navigationFailure=error;this.onStatus(text,false);if(this.renderer.xr.isPresenting)this.refreshHud();return;}if(error){this.firstDisplay=undefined;this.setLoading(null);}this.status=text;this.onStatus(text,error);if(this.renderer.xr.isPresenting){if(error)this.menuOpen=true;this.refreshHud(error);}}
  private clearScene(){this.pendingPick=false;this.firstDisplay=undefined;this.sceneResourcesReady=false;this.releasePointer();this.keys.clear();this.collisionPick=undefined;this.cancelViewGeometryPick();this.walkMotion.reset();this.collisionSelection.clear();this.setLoading(null);this.backgroundLayer.clear();this.navigator=undefined;this.thumbnailPending=undefined;this.viewGeometry.clear();this.crouched=false;this.jumpRequested=false;this.touchCrouch=false;this.touchLift=0;this.setTouch(0,0);this.pointerMove.set(0,0,0);this.flight=undefined;this.fadeUntil=0;this.audio.stop();this.descriptionLabel&&releaseUI(this.descriptionLabel);this.descriptionLabel=undefined;this.lastSafeHead=undefined;this.clearCollider();this.transformKey='';this.colliderTransformKey='';this.cancelTeleport();this.held.clear();this.currentViewpoint='';this.onViewpoint('');for(const c of [...this.viewMarkers.children])releaseUI(c);this.gizmo.detach();this.selected=undefined;if(this.mesh){this.mesh.removeFromParent();this.mesh.dispose();this.mesh=undefined;}for(const c of [...this.bubbles.children])release(c);}
  /** Prepare destination resources; ready also waits for its first rendered view. */
  async selectScene(id:string,viewpoint?:string,preservePrecision=false){
-  if(!preservePrecision){this.precisionRestore=undefined;this.pendingDestination={id,viewpoint};}
+  this.pendingDestination={id,viewpoint};
   const s=this.project?.scenes.find(x=>x.id===id);if(!s){this.report('Choose a scene to begin.',true);return;}
   const previousMode=this.mode,token=++this.generation;this.clearScene();this.active=s;this.mode=s.modes.includes(previousMode)?previousMode:s.modes.includes('jumps')?'jumps':s.modes[0]||'fly';const walkingDefaults=walkingSettings(this.project,s);this.setViewHeight(walkingDefaults.height);this.setStepHeight(walkingDefaults.stepHeight);this.onMode(this.mode);this.currentPage=null;this.report(`Loading ${s.name}…`);this.onScene(id);const total=2+(s.background?.type&&s.background.type!=='solid'?1:0)+(s.collider?1:0);let completed=0;const progress=(phase:string)=>{if(token!==this.generation||this.dead)return;const reference=sceneThumbnail(s)||this.project?.cover||'',fallback=this.project?.cover||'',resolve=(value:string)=>{try{return value?new URL(value,this.base).href:'';}catch{return '';}};this.setLoading({sceneId:id,name:s.name,cover:resolve(reference),fallbackCover:resolve(fallback),phase,completed,total});};progress('Reading scene…');this.scene.getObjectByName('empty-grid')!.visible=false;apply(this.content,s.transform);this.bubbles.position.copy(this.content.position);this.bubbles.quaternion.copy(this.content.quaternion);this.bubbles.scale.copy(this.content.scale);this.viewMarkers.position.copy(this.content.position);this.viewMarkers.quaternion.copy(this.content.quaternion);this.viewMarkers.scale.copy(this.content.scale);
   try{
-   if(!s.source)throw new Error('Choose a RAD file or URL for this scene.');
-   let streamError:unknown;const mesh=new SplatMesh({url:sceneUrl(s,this.hosting,this.base),paged:true});this.mesh=mesh;mesh.maxSh=this.performanceSettings.maxSh;
-   if(mesh.paged){const paged=mesh.paged,decode=paged.fetchDecodeChunk.bind(paged);let reported=false;paged.fetchDecodeChunk=async chunk=>{try{const data=await decode(chunk),repaired=repairLodBounds(data.extra?.lodTree);if(repaired){if(!mesh.userData.lodBoundsRepairs)console.warn('[Spark Tour] Corrected non-finite LoD bounds', {chunk,nodes:repaired});mesh.userData.lodBoundsRepairs=(mesh.userData.lodBoundsRepairs||0)+repaired;}return data;}catch(e){if(!reported&&token===this.generation&&!this.dead){reported=true;streamError=e;paged.abortController.abort();mesh.visible=false;this.report(`Streaming failed: ${String(e)}. Retry the scene.`,true);}throw e;}};}
-   // Fetch/decode an ordinary panorama while RAD metadata is being read. Keep
+   if(!s.source)throw new Error('Choose a SOGS file or LoD manifest for this scene.');
+   const mesh=this.backend.createAsset(sceneUrl(s,this.hosting,this.base),{maxSh:this.performanceSettings.maxSh,onProgress:(_fraction,stage)=>progress(stage),onError:error=>{if(token===this.generation&&!this.dead)this.onStatus('SOGS detail: '+error.message,true);}});this.mesh=mesh;
+   // LoD selection starts at the authored camera, with the asset attached while
+   // coarsest coverage streams. Navigation, transforms and physics stay shared.
+   this.jump(viewpoint||s.entry,false,true,true);this.thumbnailPending=undefined;this.content.add(mesh);
+   // Fetch/decode an ordinary panorama while SOGS metadata is being read. Keep
    // splat backgrounds sequential so they do not compete with the destination
    // pager. Observe rejection now, even if metadata fails or this load is retired.
    const initialBackground=s.background,panorama=initialBackground?.type==='panorama'?this.setBackground(initialBackground).then(()=>({ok:true as const}),error=>({ok:false as const,error})):undefined;
-   await mesh.initialized;const rad=await mesh.paged?.getRadMeta();if(token!==this.generation||this.dead)return;if(rad)assertPagedRad(rad.meta);this.jump(viewpoint||s.entry,false,true,true);this.thumbnailPending=undefined;this.content.add(mesh);completed++;progress('Preparing background…');
+   await mesh.initialized;if(token!==this.generation||this.dead)return;completed++;progress('Preparing background…');
    const background=this.active?.id===s.id?this.active.background:s.background;
    if(panorama&&background===initialBackground){const result=await panorama;if(!result.ok)throw result.error;}
    else await this.setBackground(background);
    if(token!==this.generation||this.dead)return;
    if(s.background?.type&&s.background.type!=='solid')completed++;if(this.editing||this.mode!=='jumps')await this.loadInitialCollider(s.id,token,progress);if(this.active?.collider)completed++;if(token!==this.generation||this.dead)return;progress('Opening scene…');
-   if(streamError)throw streamError;this.rebuildHotspots();if(!this.editing)this.audio.setScene(s.audio,this.base);this.jump(viewpoint||s.entry,false,true);this.report('');const available=s.modes;
+   this.rebuildHotspots();if(!this.editing)this.audio.setScene(s.audio,this.base);this.jump(viewpoint||s.entry,false,true);this.report('');const available=s.modes;
    const mode=available.includes(previousMode)?previousMode:available.includes('jumps')?'jumps':available[0];
    if(mode==='jumps'){this.mode=mode;this.onMode(mode);this.refreshHud();}
    else if(mode){
@@ -204,7 +213,7 @@ export class TourRuntime {
      else if(fallback)this.setMode(fallback,true);
     }
    }else throw new Error('No usable navigation mode for this scene.');
-   this.sceneResourcesReady=true;this.updateScene(this.active!);this.refreshCollisionSelection();if(this.editing)this.setLoading(null);else{completed=total-1;progress('Preparing first view…');this.firstDisplay={mesh,started:performance.now(),minimum:Math.max(1,Math.min(8192,rad?.meta.count||1)),frame:this.renderer.info.render.frame};}
+   this.sceneResourcesReady=true;this.updateScene(this.active!);this.refreshCollisionSelection();if(this.editing)this.setLoading(null);else{completed=total-1;progress('Preparing first view…');this.firstDisplay={mesh};}
   }catch(e){if(token===this.generation&&!this.dead){this.clearScene();this.report(`${s.name}: ${e instanceof Error?e.message:e}`,true);}}
  }
  get vrScale(){return vrWorldScale(this.active,this.active?.viewpoints.find(view=>view.id===this.currentViewpoint));}
@@ -292,7 +301,7 @@ export class TourRuntime {
  updateScene(scene:TourScene){
   if(this.active?.id!==scene.id)return;this.active=scene;
   const transform=JSON.stringify(scene.transform),colliderTransform=JSON.stringify(scene.colliderTransform),changed=transform!==this.transformKey||colliderTransform!==this.colliderTransformKey;
-  if(changed){if(transform!==this.transformKey){this.spark.lodDirty=true;this.spark.lastPixelLimit=undefined;}apply(this.content,scene.transform);if(this.navigator?.type==='orbit')this.navigator.orbitFrame.copy(this.orbitFrame());for(const group of [this.bubbles,this.viewMarkers]){group.position.copy(this.content.position);group.quaternion.copy(this.content.quaternion);group.scale.copy(this.content.scale);}if(this.collider)apply(this.collider,scene.colliderTransform);this.transformKey=transform;this.colliderTransformKey=colliderTransform;this.rebuildPhysics();this.spark.dirty=true;}
+  if(changed){if(transform!==this.transformKey){this.mesh?.invalidateTransform();}apply(this.content,scene.transform);if(this.navigator?.type==='orbit')this.navigator.orbitFrame.copy(this.orbitFrame());for(const group of [this.bubbles,this.viewMarkers]){group.position.copy(this.content.position);group.quaternion.copy(this.content.quaternion);group.scale.copy(this.content.scale);}if(this.collider)apply(this.collider,scene.colliderTransform);this.transformKey=transform;this.colliderTransformKey=colliderTransform;this.rebuildPhysics();this.mesh?.invalidateTransform();}
   if(this.sceneResourcesReady&&(this.editing||this.mode!=='jumps')&&scene.collider!==this.colliderSource)this.replaceCollider(scene);
  }
  private replaceCollider(scene:TourScene){
@@ -317,48 +326,20 @@ export class TourRuntime {
   else{this.rig.rotation.set(0,rotation.y,0);this.camera.position.set(0,0,0);this.camera.rotation.set(rotation.x,0,0,'YXZ');}
   this.lastSafeHead=undefined;
  }
- applyPerformance(value:PerformanceSettings){const s=PerformanceSettingsSchema.parse(value);this.performanceSettings=s;this.adaptiveDetail.reset();if(this.spark.pagedExtSplats!==s.pagedExtSplats)this.rebuildPrecision(s);const {pixelRatio,maxSh,xrFoveation,lodSplatCount,adaptiveDetail,adaptiveTargetFps,...sparkSettings}=s;Object.assign(this.spark,sparkSettings);this.spark.lodSplatCount=lodSplatCount||undefined;this.quality=s.lodSplatScale;if(!this.renderer.xr.isPresenting)this.renderer.setPixelRatio(Math.min(devicePixelRatio,pixelRatio));this.renderer.xr.setFoveation(xrFoveation);if(this.mesh&&this.mesh.maxSh!==maxSh){this.mesh.maxSh=maxSh;this.mesh.generatorDirty=true;}this.mesh?.updateVersion();this.backgroundLayer.performance(maxSh);this.spark.dirty=true;for(const listener of this.performanceListeners)listener(s);}
+ getRenderStats(){return this.backend.stats;}
+ applyPerformance(value:PerformanceSettings){
+  const s=PerformanceSettingsSchema.parse(value);this.performanceSettings=s;this.adaptiveDetail.reset();this.adaptiveScale=1;this.backend.applySettings(radixRenderSettings(s));this.quality=1;
+  if(!this.renderer.xr.isPresenting)this.renderer.setPixelRatio(Math.min(devicePixelRatio,s.pixelRatio));this.renderer.xr.setFoveation(s.xrFoveation);this.mesh?.setMaxSh(s.maxSh);this.backgroundLayer.performance(s.maxSh);
+  for(const listener of this.performanceListeners)listener(s);
+ }
  private updateAdaptivePerformance(time:number,frameMs:number,xr:boolean,suspended:boolean,opacity:number){
   if(!this.performanceSettings.adaptiveDetail)return;
   const refresh=(this.renderer.xr.getSession() as (XRSession&{frameRate?:number})|null)?.frameRate,targetFps=xr?(refresh||72):(this.performanceSettings.adaptiveTargetFps??60);
-  // Continuous camera refinement can keep the pager busy indefinitely. Judge
-  // sustained visible frame cadence, never elapsed download time or pager idle.
-  const eligible=this.ready&&!this.loading&&!!this.active&&this.spark.display.numSplats>0&&!document.hidden&&!this.editing&&!this.blocked&&!this.flight&&!this.preparingMode&&!this.colliderLoading&&!suspended&&!this.menuOpen&&!this.currentPage&&opacity===0;
+  const eligible=this.ready&&!this.loading&&!!this.active&&this.backend.stats.shown>0&&!document.hidden&&!this.editing&&!this.blocked&&!this.flight&&!this.preparingMode&&!this.colliderLoading&&!suspended&&!this.menuOpen&&!this.currentPage&&opacity===0;
   const scale=this.adaptiveDetail.sample({time,frameMs,targetFps,eligible,context:this.generation+':'+(xr?'xr:'+targetFps:'desktop')});
-  const effective=this.performanceSettings.lodSplatScale*scale;if(this.spark.lodSplatScale!==effective){this.spark.lodSplatScale=effective;this.spark.dirty=true;}
+  if(scale!==this.adaptiveScale){this.adaptiveScale=scale;this.backend.applySettings(radixRenderSettings(this.performanceSettings,scale));}
  }
- private precisionSnapshot(){return {xrScale:this.appliedXRScale,sceneId:this.active!.id,position:this.rig.position.clone(),quaternion:this.rig.quaternion.clone(),cameraPosition:this.camera.position.clone(),cameraQuaternion:this.camera.quaternion.clone(),mode:this.mode,viewpoint:this.currentViewpoint,navigator:this.navigator,xrOffset:this.viewXROffset.clone(),body:this.body?.translation(),crouched:this.crouched,velocityY:this.velocityY,walkGrounded:this.walking.grounded,walkJumping:this.walking.jumping,walkCameraY:this.walkCamera.y,walkX:this.walkMotion.x,walkZ:this.walkMotion.z,flight:this.flight,at:performance.now(),selected:this.selected?.userData.id,geometry:this.viewGeometry.view,geometryVisible:this.viewGeometry.group.visible,geometryHandle:this.selected?.userData.geometryHandle,wireframe:this.collider?.visible,page:this.currentPage,contentScroll:this.xrContent.offset,contentImage:this.xrContent.focus,menuOpen:this.menuOpen};}
- private async retireSpark(spark:SparkRenderer){
-  // Spark's scheduled update/sort promises do not handle worker termination.
-  // Stop new work and drain its public worker queue before releasing resources.
-  spark.autoUpdate=false;spark.enableDriveLod=false;spark.sortDirty=false;
-  if(spark.updateTimeoutId!==undefined){clearTimeout(spark.updateTimeoutId);spark.updateTimeoutId=undefined;}
-  if(spark.sortTimeoutId!==undefined){clearTimeout(spark.sortTimeoutId);spark.sortTimeoutId=undefined;}
-  const deadline=performance.now()+10000;let deadlineTimer:ReturnType<typeof setTimeout>|undefined;
-  await Promise.race([spark.lodWorker?.exclusive(async()=>{}),new Promise(resolve=>{deadlineTimer=setTimeout(resolve,10000);})]);clearTimeout(deadlineTimer);
-  while(spark.sorting&&performance.now()<deadline)await new Promise(resolve=>setTimeout(resolve,5));
-  spark.dispose();
- }
- private rebuildPrecision(settings:PerformanceSettings){
-  const sceneId=this.active?.id;let saved=this.precisionRestore;if(saved?.sceneId!==sceneId)saved=undefined;if(!saved&&this.resourcesAvailable&&sceneId)saved=this.precisionSnapshot();this.precisionRestore=saved;
-  // The pool encoding is selected when Spark creates its pager. Rebuild Spark's
-  // resource owner, while retaining the WebGL renderer, canvas and XR session.
-  const generation=++this.generation;this.clearScene();const previousSpark=this.spark;previousSpark.removeFromParent();this.precisionCleanup=Promise.all([this.precisionCleanup,this.retireSpark(previousSpark)]).then(()=>{});this.spark=new SparkRenderer({renderer:this.renderer,maxPagedSplats:8388608,pagedExtSplats:settings.pagedExtSplats});this.scene.add(this.spark);
-  if(!sceneId||!this.project){this.performanceTransition=this.precisionCleanup;return;}
-  this.report(`Loading ${this.active!.name}…`);const token=generation+1;
-  this.performanceTransition=this.precisionCleanup.then(async()=>{if(this.dead||this.generation!==generation)return false;await this.selectScene(sceneId,saved?.viewpoint||this.pendingDestination?.viewpoint,true);return true;}).then(started=>{
-   if(!started)return;
-   if(this.dead||this.generation!==token||this.active?.id!==sceneId)return;
-   if(!saved||!this.resourcesAvailable||this.precisionRestore!==saved){this.precisionRestore=undefined;return;}this.precisionRestore=undefined;
-   if(saved.crouched)this.updateCrouch(true,true);this.rig.scale.setScalar(1/saved.xrScale);this.appliedXRScale=saved.xrScale;this.camera.near=.05/saved.xrScale;this.rig.position.copy(saved.position);this.rig.quaternion.copy(saved.quaternion);
-   // WebXR owns the tracked camera pose. Only its locomotion rig is restored.
-   if(!this.renderer.xr.isPresenting){this.camera.position.copy(saved.cameraPosition);this.camera.quaternion.copy(saved.cameraQuaternion);}
-   if(this.body&&saved.body){this.body.setTranslation(saved.body,true);this.world?.step();}this.velocityY=saved.velocityY;this.walking.grounded=saved.walkGrounded;this.walking.jumping=saved.walkJumping;this.walkCamera.reset(saved.walkCameraY);this.walkMotion.x=saved.walkX;this.walkMotion.z=saved.walkZ;this.mode=saved.mode;this.onMode(this.mode);this.currentViewpoint=saved.viewpoint;this.navigator=saved.navigator;this.viewXROffset.copy(saved.xrOffset);this.onViewpoint(this.currentViewpoint);
-   this.flight=saved.flight;if(this.flight)this.flight.start+=performance.now()-saved.at;this.showCollider(!!saved.wireframe);this.showViewGeometry(saved.geometryVisible?saved.geometry:undefined);if(saved.geometryHandle){const handle=this.viewGeometry.handles().find(object=>object.userData.geometryHandle===saved.geometryHandle);if(handle){this.selected=handle;this.gizmo.attach(handle);}}else if(saved.selected)this.selectHotspot(saved.selected);
-   this.currentPage=saved.page;this.xrContent.page=saved.page;this.xrContent.offset=saved.contentScroll;this.xrContent.focus=saved.contentImage;this.menuOpen=saved.menuOpen;this.refreshHud();
-  }).catch(error=>{if(this.generation===token&&!this.dead)this.report(String(error),true);});
- }
- setQuality(q:number){this.applyPerformance({...this.performanceSettings,lodSplatScale:q});}
+ setQuality(q:number){const settings=radixPerformanceSettings(this.performanceSettings),factor=THREE.MathUtils.clamp(q,.25,2);this.applyPerformance({...this.performanceSettings,radix:{...settings,selectedSplatBudget:Math.max(50000,Math.min(settings.residentSplatBudget,Math.round(settings.selectedSplatBudget*factor/this.quality)))}});this.quality=factor;}
  setTouch(x:number,y:number){if(Math.abs(x)+Math.abs(y)>.01)this.navigator?.takeControl();this.touch.set(THREE.MathUtils.clamp(x,-1,1),THREE.MathUtils.clamp(y,-1,1));}
  private get walkEyeHeight(){return this.viewHeight-(this.crouched?.6:0);}
  setViewHeight(value:number){if(!Number.isFinite(value))return;const next=THREE.MathUtils.clamp(value,1,2.4),delta=next-this.viewHeight;this.viewHeight=next;if(this.mode==='explore'&&!this.renderer.xr.isPresenting){this.rig.position.y+=delta;this.walkCamera.reset(this.rig.position.y);}}
@@ -470,12 +451,10 @@ export class TourRuntime {
   const distance=point.distanceTo(eye),limit=bubbleOcclusionLimit(distance);if(limit<=.15)return false;
   const direction=point.clone().sub(eye).normalize();
   if(this.world){const hit=this.world.castRay(new RAPIER.Ray(eye.clone().addScaledVector(direction,.1),direction),Math.max(0,limit-.1),true,undefined,undefined,this.capsule);if(hit)return true;}
-  const mesh=this.mesh;if(!mesh?.parent||!mesh.visible)return false;const indices=mesh.raycastIndices;
-  // Spark rounds its reduced set to zero for very small scenes. Such scenes
-  // can use the loaded LoD set directly without removing the large-scene bound.
-  if(mesh.paged&&(!indices||indices.numSplats===0)&&mesh.paged.numSplats>25000)return false;
-  this.occlusionRay.set(eye,direction);this.occlusionRay.near=.15;this.occlusionRay.far=limit;const hits:{distance:number;point:THREE.Vector3;object:THREE.Object3D}[]=[],opacity=mesh.minRaycastOpacity;
-  try{mesh.minRaycastOpacity=.55;if(indices?.numSplats===0)mesh.raycastIndices=undefined;mesh.raycast(this.occlusionRay,hits);return hits.some(hit=>hit.distance>=.15&&hit.distance<limit);}finally{mesh.minRaycastOpacity=opacity;mesh.raycastIndices=indices;}
+  const mesh=this.mesh;if(!mesh?.parent||!mesh.visible)return false;
+  // Radix exposes a bounded coarse proxy for placement. Its samples do not
+  // prove occlusion; imported collision geometry remains authoritative here.
+  return false;
  }
  private updateBubbleOcclusion(eye:THREE.Vector3,time:number){
   if(resolveBubbleSettings(this.project,this.active).occlusion===false||!this.bubbles.children.length||(!this.world&&!this.mesh))return;
@@ -601,7 +580,7 @@ export class TourRuntime {
  }
  private cancelTeleportQuery(){const query=this.teleportQuery;this.teleportQuery=undefined;query?.abort.abort();}
  private cancelTeleport(){++this.teleportRequest;this.cancelTeleportQuery();this.teleportAim=undefined;this.teleportController=undefined;this.teleportPoint=undefined;this.teleportRing.visible=false;this.focusCollision();this.teleportLease?.release();this.teleportLease=undefined;}
- async enterXR(){try{if(!navigator.xr||!await navigator.xr.isSessionSupported('immersive-vr'))throw new Error('WebXR immersive VR is unavailable in this browser.');const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor']});await this.renderer.xr.setSession(session);}catch(e){this.report(String(e),true,'xr');}}
+ async enterXR(){try{if(!navigator.xr||!await navigator.xr.isSessionSupported('immersive-vr'))throw new Error('WebXR immersive VR is unavailable in this browser.');const gpu=this.backend.stats.backend==='webgpu';if(gpu&&!('XRGPUBinding' in globalThis))throw new Error('This browser needs the WebGL XR backend. Reopen with ?radixBackend=webgpu-gl before entering VR.');if(!this.renderer.xr.isPresenting)this.renderer.xr.setFramebufferScaleFactor(radixPerformanceSettings(this.performanceSettings).xrResolutionScale);const session=await navigator.xr.requestSession('immersive-vr',gpu?{requiredFeatures:['webgpu','local-floor']}:{optionalFeatures:['local-floor']});try{await this.renderer.xr.setSession(session);}catch(error){await session.end().catch(()=>{});throw error;}}catch(e){this.report(String(e),true,'xr');}}
  private button(text:string,y:number,action:(()=>void)|undefined,width=1.65,x=0,bg='rgba(0,0,0,.22)',icon?:IconName){const mesh=panel(text,width,.21,bg,icon);mesh.position.set(x,y,.025);mesh.userData.action=action;mesh.userData.label=text;if(!action)(mesh.material as THREE.MeshBasicMaterial).opacity=.4;this.hud.add(mesh);return mesh;}
  toggleMenu(){if(this.xrInputSuspended)return;this.menuOpen=!this.menuOpen;this.currentPage=null;this.confirmExit=false;this.cancelTeleport();this.routes.cancel();this.refreshHud(true);}
  closeContent(id?:string){if(id&&this.currentPage?.id!==id)return;this.currentPage=null;this.menuOpen=false;this.refreshHud();}
@@ -700,10 +679,10 @@ Grip: open or close this menu`,1.65,.55,'rgba(0,0,0,0)');help.position.y=-.58;th
   let opacity=performance.now()<this.fadeUntil?.95:0;
   if(xr&&!suspended&&!this.flight&&(this.mode==='explore'||this.mode==='fly')&&this.world&&this.capsule)opacity=Math.max(opacity,this.headFadeOpacity(this.trackedHeadPosition()));else this.resetHeadSafety();
   this.fade.position.copy(xr?this.trackedHeadPosition():cameraPosition).add(cam.getWorldDirection(new THREE.Vector3()).multiplyScalar(.2*(xr?this.xrUnit:1)));this.fade.quaternion.copy(cameraRotation);(this.fade.material as THREE.MeshBasicMaterial).opacity=opacity;this.fade.visible=opacity>0;
-  this.pagedCollider?.updateOverview(cam,this.host.clientHeight);this.renderer.autoClear=true;this.renderer.render(this.scene,this.camera);this.renderer.autoClear=false;this.renderer.clearDepth();this.renderer.render(this.overlay,this.camera);this.renderer.autoClear=true;
-  const first=this.firstDisplay;if(first&&(first.mesh!==this.mesh||this.renderer.info.render.frame>first.frame+1&&(first.mesh.paged?.pager?.getSplatsChunk(first.mesh.paged,0)&&(this.spark as any).display?.numSplats>=first.minimum||performance.now()-first.started>=8000))){this.firstDisplay=undefined;if(first.mesh===this.mesh){this.setLoading(null);this.refreshHud();}}
+  this.pagedCollider?.updateOverview(cam,this.host.clientHeight);this.backend.update(cam,time);this.renderer.autoClear=true;this.renderer.render(this.scene,this.camera);this.renderer.autoClear=false;this.renderer.clearDepth();this.renderer.render(this.overlay,this.camera);this.renderer.autoClear=true;this.backend.markRendered();
+  const first=this.firstDisplay;if(first&&(first.mesh!==this.mesh||this.backend.hasPresented(first.mesh))){this.firstDisplay=undefined;if(first.mesh===this.mesh){this.setLoading(null);this.refreshHud();}}
   this.updateAdaptivePerformance(time,sampleMs,xr,suspended,opacity);
-  if(this.thumbnailPending&&!this.flight&&time>this.thumbnailPending.after&&this.editing&&this.currentViewpoint===this.thumbnailPending.id){if((this.spark as any).display?.numSplats>0){const id=this.thumbnailPending.id;this.thumbnailPending=undefined;this.onViewpointThumbnail(id,this.thumbnail());}}
+  if(this.thumbnailPending&&!this.flight&&time>this.thumbnailPending.after&&this.editing&&this.currentViewpoint===this.thumbnailPending.id){if(this.backend.stats.shown>0){const id=this.thumbnailPending.id;this.thumbnailPending=undefined;this.onViewpointThumbnail(id,this.thumbnail());}}
  }
- dispose(){if(document.pointerLockElement===this.renderer.domElement)document.exitPointerLock();this.viewGeometry.clear();this.dead=true;++this.generation;this.renderer.setAnimationLoop(null);this.clearScene();this.routes.dispose();for(const child of [...this.overlay.children])releaseUI(child);this.gizmo.dispose();this.observers.disconnect();this.cleanup.forEach(f=>f());for(const c of [...this.hud.children])release(c);this.performanceTransition=Promise.all([this.precisionCleanup,this.retireSpark(this.spark)]).then(()=>this.renderer.dispose());this.renderer.domElement.remove();}
+ dispose(){if(document.pointerLockElement===this.renderer.domElement)document.exitPointerLock();this.viewGeometry.clear();this.dead=true;++this.generation;this.renderer.setAnimationLoop(null);this.clearScene();this.routes.dispose();for(const child of [...this.overlay.children])releaseUI(child);this.gizmo.dispose();this.observers.disconnect();this.cleanup.forEach(f=>f());for(const c of [...this.hud.children])release(c);this.backend.dispose();this.renderer.domElement.remove();}
 }

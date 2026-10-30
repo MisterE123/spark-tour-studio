@@ -10,11 +10,12 @@
     "test": "node --test tests/*.test.mjs",
     "editor": "electron .",
     "launcher": "node scripts/build-launcher.mjs",
-    "package": "npm run build && npm run bundle:github && npm run launcher && electron-builder --win portable --x64",
+    "package": "npm run package:experimental",
     "package:experimental": "node scripts/package-experimental.mjs",
     "build:converter": "node scripts/build-converter.mjs",
     "bundle:github": "node scripts/bundle-github.mjs",
-    "bundle:meshing": "node scripts/bundle-meshing.mjs"
+    "bundle:meshing": "node scripts/bundle-meshing.mjs",
+    "bundle:sogs": "node scripts/bundle-sogs.mjs"
   },
   "dependencies": {
     "@dimforge/rapier3d-compat": "0.21.0",
@@ -75,21 +76,24 @@
         ]
       },
       {
-        "from": "converter",
-        "to": "converter",
-        "filter": [
-          "build-lod.exe",
-          "*.json",
-          "*.txt"
-        ]
-      },
-      {
         "from": "github-tools",
         "to": "github-tools",
         "filter": [
           "gh.exe",
           "*.json",
           "*.txt"
+        ]
+      },
+      {
+        "from": "sogs-tools",
+        "to": "sogs-tools",
+        "filter": [
+          "node.exe",
+          "convert.mjs",
+          "worker.mjs",
+          "webp.wasm",
+          "dependencies.json",
+          "licenses/**/*"
         ]
       }
     ],

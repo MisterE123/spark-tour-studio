@@ -128,6 +128,10 @@
           "type": "boolean",
           "default": false,
           "description": "Extended 32-byte streamed-splat encoding. Recreates the shared foreground/background paging pool when changed; preserves viewer position and WebXR session."
+        },
+        "radix": {
+          "$ref": "radix.schema.json",
+          "description": "Optional Radix preview renderer settings. Legacy Spark settings remain intact and are not reinterpreted."
         }
       },
       "additionalProperties": false

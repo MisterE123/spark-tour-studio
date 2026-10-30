@@ -1,12 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Matrix4,Vector3,PerspectiveCamera,Scene,Group} from 'three';
-import {dyno} from '@sparkjsdev/spark';
 import {CollisionSelectionLayer} from '../src/collision-selection.ts';
 import {compileSelection,selectionTextureData,SELECTION_TEXTURE_WIDTH} from '../shared/collision-selection.mjs';
 
 const shape=(id,type='box',operation='add',position=[0,0,0])=>({id,type,operation,position,rotation:[.1,.3,0],size:[4,4,4]});
-function meshStub(){return {objectModifier:undefined,compiles:0,updates:0,updateGenerator(){this.compiles++;},set needsUpdate(value){if(value)this.updates++;}};}
+function meshStub(){return {updates:0,volumes:[],setSelection(volumes){this.updates++;this.volumes=structuredClone(volumes);}};}
 
 test('selection texture preserves rotated, ordered ball and box operations',()=>{
  const volumes=[shape('a'),shape('b','ball','remove',[1,0,0]),{...shape('c'),size:[.5,.5,.5]}],data=selectionTextureData(volumes),selected=compileSelection(volumes);
@@ -15,14 +14,14 @@ test('selection texture preserves rotated, ordered ball and box operations',()=>
  assert.equal(data.byteLength,10240);assert.throws(()=>selectionTextureData(Array(129).fill(shape('a'))),/128/);
 });
 
-test('moving, resizing and choosing shapes retain geometry and a single shader',()=>{
- const layer=new CollisionSelectionLayer(),mesh=meshStub(),box=shape('a'),ball=shape('b','ball'),object=layer.rebuild([box,ball],mesh,'a',true),surface=object.children[0],wall=layer.wallHandles()[0],program=mesh.objectModifier;let disposed=0;surface.geometry.addEventListener('dispose',()=>disposed++);
- assert.equal(mesh.compiles,1);const compilation=new dyno.Compilation(),shader=program.compile({inputs:{gsplat:'splatIn'},outputs:{gsplat:'splatOut'},compile:compilation}).join('\n');assert.match(shader,/texelFetch/);assert.equal(Object.keys(compilation.uniforms).length,2);
+test('moving, resizing and choosing shapes retain geometry and the tint target',()=>{
+ const layer=new CollisionSelectionLayer(),mesh=meshStub(),box=shape('a'),ball=shape('b','ball'),object=layer.rebuild([box,ball],mesh,'a',true),surface=object.children[0],wall=layer.wallHandles()[0];let disposed=0;surface.geometry.addEventListener('dispose',()=>disposed++);
+ assert.equal(mesh.updates,1);assert.deepEqual(mesh.volumes,[box,ball]);
  for(let step=0;step<50;step++){object.position.x=.05*step;layer.preview(object);}
- assert.equal(mesh.compiles,1);assert.equal(mesh.objectModifier,program);assert.ok(mesh.updates>=50);
- layer.rebuild([{...box,position:[3,0,0]},ball],mesh,'a',true);assert.equal(layer.shapes.children[0],object);assert.equal(object.children[0],surface);assert.equal(layer.wallHandles()[0],wall);assert.equal(mesh.compiles,1);
- const updates=mesh.updates;layer.rebuild([{...box,position:[3,0,0]},ball],mesh,'b',false);assert.equal(mesh.compiles,1);assert.equal(mesh.updates,updates);assert.equal(disposed,0);
- layer.rebuild([ball],mesh,'b');assert.equal(disposed,1);assert.equal(mesh.compiles,1);layer.clear();assert.equal(mesh.compiles,2);assert.equal(mesh.objectModifier,undefined);assert.equal(layer.shapes.children.length,0);
+ assert.ok(mesh.updates>=50);assert.equal(mesh.volumes[0].id,box.id);assert.equal(mesh.volumes[0].position[0],2.45);
+ layer.rebuild([{...box,position:[3,0,0]},ball],mesh,'a',true);assert.equal(layer.shapes.children[0],object);assert.equal(object.children[0],surface);assert.equal(layer.wallHandles()[0],wall);assert.deepEqual(mesh.volumes[0].position,[3,0,0]);
+ const updates=mesh.updates;layer.rebuild([{...box,position:[3,0,0]},ball],mesh,'b',false);assert.equal(mesh.updates,updates);assert.equal(disposed,0);
+ layer.rebuild([ball],mesh,'b');assert.equal(disposed,1);assert.deepEqual(mesh.volumes,[ball]);layer.clear();assert.deepEqual(mesh.volumes,[]);assert.equal(layer.shapes.children.length,0);
 });
 
 test('selected boxes expose six face handles by default and retain usable screen size',()=>{

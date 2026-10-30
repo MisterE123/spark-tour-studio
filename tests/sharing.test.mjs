@@ -20,3 +20,15 @@ test('local HTTPS serves binary collision pages with HEAD and ranges while keepi
   for(const ref of ['.spark-tour-diagnostics/private.scv','%2e%2e%2fsecret.scv'])assert.ok((await get(share.url+ref)).status>=400,'private collision data stays inaccessible: '+ref);
  }finally{share?.server.closeAllConnections();if(share)await new Promise(resolve=>share.server.close(resolve));await fs.rm(root,{recursive:true,force:true});}
 });
+
+test('local HTTPS serves SOG archives and complete adapter notices without exposing arbitrary text files',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'radix-share-')),site=path.join(root,'site');await fs.mkdir(path.join(site,'licenses'),{recursive:true});
+ const bytes=Buffer.from([80,75,3,4,0,255,128,19]),notice=await fs.readFile(new URL('../src/rendering/radix/vendor/LICENSE',import.meta.url));
+ await fs.writeFile(path.join(site,'scene.sog'),bytes);await fs.writeFile(path.join(site,'licenses','Radix-LICENSE.txt'),notice);await fs.writeFile(path.join(site,'private.txt'),'private');let share;
+ try{
+  share=await startSharing({root:site,host:'127.0.0.1',cacheRoot:path.join(root,'certificates'),port:0});
+  const archive=await get(share.url+'scene.sog');assert.equal(archive.status,200);assert.deepEqual(archive.bytes,bytes);assert.equal(archive.headers['content-type'],'application/octet-stream');
+  const range=await get(share.url+'scene.sog',{headers:{Range:'bytes=4-7'}});assert.equal(range.status,206);assert.deepEqual(range.bytes,bytes.subarray(4));
+  const license=await get(share.url+'licenses/Radix-LICENSE.txt');assert.equal(license.status,200);assert.deepEqual(license.bytes,notice);assert.match(license.headers['content-type'],/^text\/plain/);assert.equal((await get(share.url+'private.txt')).status,404);
+ }finally{share?.server.closeAllConnections();if(share)await new Promise(resolve=>share.server.close(resolve));await fs.rm(root,{recursive:true,force:true});}
+});

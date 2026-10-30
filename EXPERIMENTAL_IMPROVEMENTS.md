@@ -1,5 +1,11 @@
 # Overnight experience improvements
 
+**Release status:** the user authorized the merge after CI passed. Full source
+[run 40994195022](https://github.com/MisterE123/spark-tour-studio/actions/runs/40994195022)
+completed successfully, and this work is merged into main for **1.23.0**.
+The pending/approval references below are historical checkpoints. The subsequent
+Radix/SOGS experiment is a separate branch and is not part of this release.
+
 Branch: `codex/experimental-experience-2026-10-28`  
 Baseline: main commit `72c759b`, Studio **1.22.3**  
 Review target: **October 28, 2026, 7:00 AM America/New_York**  

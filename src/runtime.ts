@@ -81,7 +81,7 @@ export class TourRuntime {
  private colliderGeneration=0;private colliderSource='';private colliderVisible=false;private transformKey='';private colliderTransformKey='';colliderTransition:Promise<void>=Promise.resolve();private xrContent=new XRContent();
  private initialColliderLoad?:{generation:number;sceneId:string;promise:Promise<void>};private sceneResourcesReady=false;private colliderLoading=false;private colliderFailure='';private navigationFailure=false;private statusScope:'scene'|'navigation'|'xr'='scene';
  private get collisionMovementBlocked(){return !this.editing&&this.mode!=='jumps'&&!!this.active?.collider&&(this.colliderLoading||!this.world);}
- private pagedCollider?:PagedCollider;private colliderAbort?:AbortController;private modeRequest=0;private preparingMode=false;private modeTransition:Promise<void>=Promise.resolve();private fallbackNavigationDirty=false;private pagedNavigationAligned=true;private teleportPreparation='';private teleportRequest=0;private teleportLease?:{release():void};private teleportQuery?:{id:number;controller:THREE.XRTargetRaySpace;abort:AbortController};private teleportAim?:{origin:THREE.Vector3;direction:THREE.Vector3;point?:THREE.Vector3;landing?:THREE.Vector3;state:'pending'|'ready'|'invalid';retryAt:number};
+ private pagedCollider?:PagedCollider;private colliderAbort?:AbortController;private modeRequest=0;private preparingMode=false;private modeTransition:Promise<void>=Promise.resolve();private fallbackNavigationDirty=false;private pagedNavigationAligned=true;private teleportRequest=0;private teleportLease?:{release():void};private teleportQuery?:{id:number;controller:THREE.XRTargetRaySpace;abort:AbortController};private teleportAim?:{origin:THREE.Vector3;direction:THREE.Vector3;point?:THREE.Vector3;head?:THREE.Vector3;landing?:THREE.Vector3;state:'pending'|'ready'|'invalid';retryAt:number};
  private get teleportAimPending(){return !!this.teleportQuery;}
  private headSafetyTrackingCleanup?:()=>void;
  constructor(readonly host:HTMLElement){
@@ -506,10 +506,7 @@ export class TourRuntime {
  private triggerEnd(controller:THREE.XRTargetRaySpace){if(!controller.visible){this.held.delete(controller);if(this.teleportController===controller)this.cancelTeleport();return;}if(this.xrInputSuspended||!this.held.has(controller))return;const pressed=this.held.get(controller);this.held.delete(controller);this.controllerRay(controller);if(pressed&&this.hitUI()===pressed){this.activate(pressed);}else if(!pressed&&this.teleportController===controller&&!this.status){this.updateTeleport();if(this.teleportPoint){this.routes.cancel();this.placeFeet(this.teleportPoint);this.currentViewpoint='';this.onViewpoint('');this.fadeUntil=performance.now()+220;}}if(this.teleportController===controller)this.cancelTeleport();}
  private updateTeleport(){if(!this.teleportController||this.mode==='jumps')return;if(!this.teleportController.visible){this.held.delete(this.teleportController);this.cancelTeleport();return;}this.controllerRay(this.teleportController);this.teleportPoint=undefined;this.teleportRing.visible=false;if(this.xrInputSuspended||this.blocked||this.loading||this.status||this.menuOpen||this.collisionMovementBlocked||this.hitUI()||this.ray.ray.direction.y>-.06){this.cancelTeleportQuery();this.teleportAim=undefined;return;}if(this.mode==='explore'&&this.pagedCollider){this.updatePagedTeleport(this.teleportController,this.pagedCollider,this.ray.ray.clone());return;}const origin=this.ray.ray.origin,direction=this.ray.ray.direction;let point:THREE.Vector3|undefined,valid=true;
   if(this.mode==='explore'&&this.world){const hit=this.world.castRayAndGetNormal(new RAPIER.Ray(origin,direction),25,true,undefined,undefined,this.capsule);if(hit){point=this.ray.ray.at(hit.timeOfImpact,new THREE.Vector3());const feet=teleportWalkingFeet(this.world,point,hit.normal,this.capsule,p=>this.validWalkingPlacement(p),Math.max(.25,this.stepHeight),.6);valid=!!feet;if(feet)point=v([feet.x,feet.y,feet.z]);}}else if(this.mesh){const hit=this.ray.intersectObject(this.mesh)[0];if(hit&&hit.distance<25)point=hit.point;}
-  if(this.pagedCollider){
-   if(!point&&this.mesh){const hit=this.ray.intersectObject(this.mesh)[0];if(hit&&hit.distance<25){point=hit.point;valid=false;}}
-   if(point){const paged=this.pagedCollider,center=point.clone().add(new THREE.Vector3(0,.87,0)),allowed=this.allowedPosition(center,.6,.24);valid=valid&&allowed;if(!allowed){const key=this.generation+':'+paged.toGeneration(point).toArray().map(value=>Math.floor(value*2)).join(',');if(key!==this.teleportPreparation){this.teleportPreparation=key;const controller=this.teleportController,request=++this.teleportRequest;this.focusCollision(paged);void paged.prepare(point,4).then(lease=>{if(request!==this.teleportRequest||controller!==this.teleportController||paged!==this.pagedCollider){this.focusCollision(paged);lease.release();return;}this.focusCollision(paged);this.teleportLease?.release();this.teleportLease=lease;this.updateTeleport();}).catch(()=>{}).finally(()=>{if(this.teleportPreparation===key)this.teleportPreparation='';});}}}
-  }
+  if(this.mode==='fly'&&this.pagedCollider){if(point)this.updateDroneTeleport(this.teleportController,this.pagedCollider,this.ray.ray.clone(),point);else{this.cancelTeleportQuery();this.teleportAim=undefined;this.focusCollision();this.teleportLease?.release();this.teleportLease=undefined;}return;}
   if(point){valid=valid&&this.clearXRFeetPosition(point,this.mode==='fly'?this.flyRadius:this.xrHeadRadius);this.teleportRing.visible=true;this.teleportRing.position.copy(point).add(new THREE.Vector3(0,.04*this.xrUnit,0));this.teleportRing.scale.setScalar(this.xrUnit);(this.teleportRing.material as THREE.MeshBasicMaterial).color.set(valid?0x9fffc8:0xff665e);if(valid)this.teleportPoint=point;}}
  private showTeleport(point:THREE.Vector3,state:'pending'|'ready'|'invalid'){
   this.teleportRing.visible=true;this.teleportRing.position.copy(point).add(new THREE.Vector3(0,.04*this.xrUnit,0));this.teleportRing.scale.setScalar(this.xrUnit);
@@ -518,6 +515,45 @@ export class TourRuntime {
  }
  private validTeleportLanding(feet:THREE.Vector3){
   const center={x:feet.x,y:feet.y+.87,z:feet.z};return !!this.world&&this.validWalkingPlacement(center)&&!this.world.intersectionWithShape(center,{x:0,y:0,z:0,w:1},new RAPIER.Capsule(.6,.25),undefined,undefined,this.capsule);
+ }
+ private droneTeleportHead(point:THREE.Vector3){return point.clone().add(new THREE.Vector3(0,this.trackedHeadPosition().y-this.rig.position.y,0));}
+ private updateDroneTeleport(controller:THREE.XRTargetRaySpace,paged:PagedCollider,ray:THREE.Ray,point:THREE.Vector3){
+  const head=this.droneTeleportHead(point),previous=this.teleportAim;
+  if(!previous?.point||!previous.head||previous.point.distanceToSquared(point)>.0025||previous.head.distanceToSquared(head)>.0025||previous.origin.distanceToSquared(ray.origin)>.0025||previous.direction.dot(ray.direction)<Math.cos(Math.PI/240)){
+   this.cancelTeleportQuery();this.focusCollision(paged);this.teleportLease?.release();this.teleportLease=undefined;
+   this.teleportAim={origin:ray.origin.clone(),direction:ray.direction.clone(),point:point.clone(),head:head.clone(),state:'pending',retryAt:0};
+  }
+  const aim=this.teleportAim!;
+  // Drone movement owns a camera sphere, not a standing walking capsule. The
+  // anchor still represents the feet plane, preserving tracked height/offset.
+  if(this.clearXRFeetPosition(point,this.flyRadius)){aim.state='ready';aim.landing=point.clone();aim.retryAt=Infinity;this.showTeleport(point,'ready');return;}
+  this.teleportPoint=undefined;aim.landing=undefined;
+  if(paged.probeHeadMotion(head,head,this.flyRadius)==='blocked'){this.cancelTeleportQuery();aim.state='invalid';aim.retryAt=Infinity;this.showTeleport(point,'invalid');return;}
+  if(aim.state==='ready'||aim.state==='invalid'&&aim.retryAt===Infinity)aim.retryAt=0;
+  if(aim.state!=='invalid'||performance.now()>=aim.retryAt)aim.state='pending';this.showTeleport(point,aim.state==='invalid'?'invalid':'pending');
+  if(this.teleportQuery||performance.now()<aim.retryAt)return;
+  aim.origin.copy(ray.origin);aim.direction.copy(ray.direction);aim.point!.copy(point);aim.head!.copy(head);
+  const query={id:++this.teleportRequest,controller,abort:new AbortController()},generation=this.generation;this.teleportQuery=query;
+  const current=()=>!this.dead&&!query.abort.signal.aborted&&this.teleportQuery===query&&query.id===this.teleportRequest&&generation===this.generation&&this.teleportController===controller&&this.pagedCollider===paged&&this.mode==='fly'&&this.teleportAim===aim;
+  this.focusCollision(paged);void(async()=>{let lease:{release():void}|undefined;
+   try{
+    // A scaled or crouching headset may be far above the picked surface. Load
+    // the actual camera destination instead of an unrelated torso-sized box.
+    lease=await paged.prepare(head,4,{signal:query.abort.signal});if(!current())return;
+    this.focusCollision(paged);this.teleportLease?.release();this.teleportLease=lease;lease=undefined;
+    const clear=this.clearXRFeetPosition(point,this.flyRadius),known=paged.probeHeadMotion(head,head,this.flyRadius);
+    aim.landing=clear?point.clone():undefined;aim.state=clear?'ready':known==='unknown'?'pending':'invalid';aim.retryAt=clear||known==='blocked'?Infinity:performance.now()+3000;
+   }catch(error){if(current()){aim.state='pending';aim.retryAt=performance.now()+3000;this.report('Nearby navigation data: '+String(error),true,'navigation');}}
+   finally{
+    this.focusCollision(paged);lease?.release();const refresh=current();if(this.teleportQuery===query)this.teleportQuery=undefined;
+    if(refresh){this.teleportPoint=undefined;this.teleportRing.visible=false;
+     if(controller.visible&&!this.xrInputSuspended&&!this.blocked&&!this.loading&&!this.status&&!this.menuOpen&&!this.collisionMovementBlocked){
+      this.controllerRay(controller);const live=this.ray.ray,unchanged=aim.origin.distanceToSquared(live.origin)<=1e-12&&aim.direction.distanceToSquared(live.direction)<=1e-16&&head.distanceToSquared(this.droneTeleportHead(point))<=1e-12;
+      if(unchanged&&live.direction.y<=-.06&&!this.hitUI()){const clear=this.clearXRFeetPosition(point,this.flyRadius);this.showTeleport(point,clear?'ready':aim.state==='invalid'?'invalid':'pending');}
+     }
+    }
+   }
+  })();
  }
  private updatePagedTeleport(controller:THREE.XRTargetRaySpace,paged:PagedCollider,ray:THREE.Ray){
   // Rapier closes cold page seams for movement. Aim against the authoritative
@@ -564,7 +600,7 @@ export class TourRuntime {
   })();
  }
  private cancelTeleportQuery(){const query=this.teleportQuery;this.teleportQuery=undefined;query?.abort.abort();}
- private cancelTeleport(){++this.teleportRequest;this.cancelTeleportQuery();this.teleportPreparation='';this.teleportAim=undefined;this.teleportController=undefined;this.teleportPoint=undefined;this.teleportRing.visible=false;this.focusCollision();this.teleportLease?.release();this.teleportLease=undefined;}
+ private cancelTeleport(){++this.teleportRequest;this.cancelTeleportQuery();this.teleportAim=undefined;this.teleportController=undefined;this.teleportPoint=undefined;this.teleportRing.visible=false;this.focusCollision();this.teleportLease?.release();this.teleportLease=undefined;}
  async enterXR(){try{if(!navigator.xr||!await navigator.xr.isSessionSupported('immersive-vr'))throw new Error('WebXR immersive VR is unavailable in this browser.');const session=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor']});await this.renderer.xr.setSession(session);}catch(e){this.report(String(e),true,'xr');}}
  private button(text:string,y:number,action:(()=>void)|undefined,width=1.65,x=0,bg='rgba(0,0,0,.22)',icon?:IconName){const mesh=panel(text,width,.21,bg,icon);mesh.position.set(x,y,.025);mesh.userData.action=action;mesh.userData.label=text;if(!action)(mesh.material as THREE.MeshBasicMaterial).opacity=.4;this.hud.add(mesh);return mesh;}
  toggleMenu(){if(this.xrInputSuspended)return;this.menuOpen=!this.menuOpen;this.currentPage=null;this.confirmExit=false;this.cancelTeleport();this.routes.cancel();this.refreshHud(true);}

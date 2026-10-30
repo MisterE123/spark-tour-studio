@@ -26,7 +26,74 @@ move the visitor later. Current floor support and the existing XR session stay
 intact. In the controlled stalled-request regression, a new aim reached green
 in 49 ms; this is a test result, not a Quest hardware latency promise.
 
-### VR Walk teleport freeze follow-up
+### October 29: Drone targeting corrected; physical Walk freeze still open
+
+The latest physical Quest report is distinct from the October 28 cached-query
+reproduction below. In North Graveyard, Drone targets were usually red, and a
+second Walk teleport after switching from Drone produced a white marker and
+froze the scene. **The new physical Walk freeze is not yet diagnosed or fixed.**
+Yesterday's `b96a242` browser/package regression and green CI remain valid for
+their tested conditions; they do not establish that this new hardware report is
+resolved.
+
+The Drone false-red cause is confirmed. Its paged-collision check required a
+standing walking capsule above the picked splat, even though Drone movement uses
+a camera sphere. A low obstacle could reject the unused body while the actual
+head destination was clear. It also prepared collision data around the picked
+surface instead of the scaled physical headset destination, and used an
+uncancelable string-key preparation whose late completion could clear ownership
+of a newer request to the same target.
+
+The scoped source correction now checks the same head sphere as Drone movement
+and the existing GLB teleport path. The surface remains the feet-plane anchor;
+actual tracked height, horizontal physical offset and VR scale are preserved.
+It prepares the actual head destination, shows a neutral marker while checking,
+uses abortable request identity, and publishes the result without calling the
+query again. Known blocked head positions remain red. Failed/incomplete
+preparation observes a three-second retry backoff. Retargeting, release, menu
+blocking, loss of tracking and mode/scene changes cannot authorize stale moves.
+Walk resolution and collision internals are unchanged by this correction.
+
+The rebuilt source passes the actual Spark/Three XR regression at
+`test-output/XR Drone teleport 1793328212212/result.json`. It proves a real
+Spark-picked target with a blocked standing body but clear head becomes green
+and is reached through native trigger release. A 0.25 scene VR scale prepares
+the actual head at 7.39 m with a neutral pending marker; a still larger head
+crossing the room roof remains red. It also checks canceled/restarted identical
+targets, inert late results after blocking/tracking loss/retarget/mode changes,
+rejection backoff, advancing stereo frames and ordinary timers, and unchanged
+session/renderer/camera/rig/stereo identities. Only the physical XR platform and
+controlled asynchronous hold/rejection are emulated; Spark picking, paged
+coverage and Rapier head clearance are real. The focused check is registered
+beside the existing XR liveness check in branch CI. Build evidence:
+`test-output/build-quest-drone-2026-10-29.log`. A replacement packaged preview
+is still pending. The combined source checkpoint passes **436/436** unit and
+integration tests in 132.7 seconds at
+`test-output/unit-quest-drone-2026-10-29.log`. Existing Walk stereo liveness,
+request cancellation and full scaled head-safety regressions also pass at
+`test-output/XR teleport liveness 1793328311137/`,
+`test-output/teleport cancellation 1793328413344/` and
+`test-output/xr head collision 1793328413916/`.
+
+Physical-device evidence already confirms a busy renderer during the reported
+freeze: `test-output/quest-capture-1793326598459/renderer19364-threads.txt`
+records `CrRendererMain` at 100% CPU, with the renderer process near 99% in
+`browser-cpu-live.txt`. This identifies a stalled busy renderer, not its exact
+JavaScript/WASM call stack. Wi-Fi debugging and profiler capture are armed at
+`test-output/quest-armed-1793327893865/`; another physical reproduction is
+pending. The user's original projects and exports remain unchanged.
+
+For the next user test, re-export using the replacement preview once provided.
+In North Graveyard, aim in Drone around low obstacles and at nearby/distant
+surfaces: safe camera positions should reach green; a cold check should first
+be neutral; a head that actually intersects geometry should stay red. Hold the
+trigger while retargeting, open the menu, switch hands/modes, and release;
+canceled results must not move the visitor later. Repeat with authored VR scale
+overrides. Then separately repeat the reported Drone → Walk → second teleport
+sequence while physical profiling is active. The Walk freeze remains an open
+acceptance failure until its cause is captured and a hardware retest succeeds.
+
+### October 28: cached wall-grazing Walk query loop
 
 The reported freeze has a concrete browser reproduction. A controller ray only
 1 mm inside an allowed-space wall can still hit a valid floor and resolve a safe
@@ -452,7 +519,8 @@ success condition was weakened. The next combined source run must complete.
 
 ## Validation and handoff
 
-Latest verified local preview: compiled clean commit
+Previous verified local preview (October 28, before the Drone source correction):
+compiled clean commit
 `b96a24258b58707c98d0cd17d1bd2b553dacf547`.
 
 `experimental-release/3DGS Perspectives Studio 1.22.3 Experimental b96a2425.exe`
@@ -505,10 +573,11 @@ source run [40687104692](https://github.com/MisterE123/spark-tour-studio/actions
 at `d29f858` passed all 79 Windows steps, including every native/browser check,
 portable package and uploaded artifacts. Release publication was correctly
 skipped. No application source changed during these fixture/CI-budget repairs.
-The subsequently reported VR Walk teleport freeze is fixed and verified in
-`b96a242`, including the exact Drone → Walk sequence and same-session stereo
-rendering. The newer green run and replacement preview above supersede this
-pre-fix baseline.
+The October 28 cached wall-grazing query loop is fixed and verified in
+`b96a242`, including the tested Drone → Walk sequence and same-session stereo
+rendering. That green run and preview supersede this pre-fix baseline. The
+subsequent physical North Graveyard freeze is a separate open report, as
+recorded in the October 29 follow-up above.
 
 Full source CI for `134bd61` completed at
 [run 40659512940](https://github.com/MisterE123/spark-tour-studio/actions/runs/40659512940).

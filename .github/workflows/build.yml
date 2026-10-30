@@ -136,6 +136,8 @@ jobs:
         run: node scripts/teleport-cancellation-check.mjs
       - name: Check responsive stereo XR frames during wall-grazing teleport
         run: node scripts/xr-teleport-liveness-check.mjs
+      - name: Check Drone head clearance, scaled preparation and canceled XR targets
+        run: node scripts/xr-drone-teleport-check.mjs
       - name: Check tracked controller hover and safe pose-loss recovery
         run: node scripts/xr-controller-tracking-check.mjs
       - name: Check optional automatic detail and immutable authored presets

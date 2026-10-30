@@ -93,6 +93,7 @@
           "worker.mjs",
           "webp.wasm",
           "dependencies.json",
+          "node_modules/webgpu/**/*",
           "licenses/**/*"
         ]
       }
@@ -108,7 +109,6 @@
   "license": "MIT",
   "allowScripts": {
     "electron-winstaller@5.4.0": true,
-    "esbuild@0.28.2": true,
-    "webgpu@0.4.0": true
+    "esbuild@0.28.2": true
   }
 }

@@ -37,12 +37,30 @@ full `licenses/Radix-LICENSE.txt`, source revisions in
 These components retain their upstream copyright; they are not presented as
 original Studio code. The application wrapper is separately MIT licensed.
 
-The editor-only CPU converter uses PlayCanvas splat-transform 3.10.3,
-PlayCanvas engine 2.23.3, libwebp and bundled Node.js 24.21.0. Exact hashes,
+The editor-only converter uses PlayCanvas splat-transform 3.10.3,
+PlayCanvas engine 2.23.3, libwebp and bundled Node.js 24.21.0. It prefers WebGPU
+through pinned `webgpu` 0.6.2 / Dawn on Windows x64, with explicit CPU fallback.
+Exact hashes,
 full licenses (including embedded SuperSplat Viewer code) and the adapted Node
 filesystem implementation's provenance ship under `sogs-tools/`. Those editor
 tools are not copied into visitor websites. Conversion and runtime operation
 need no installed Node or fetched application code.
+
+**Processing** offers Automatic (GPU preferred), GPU only and CPU only. GPU work
+accelerates both LoD reduction and SOG compression. Adapter initialization
+failure can use CPU; a failed GPU attempt is discarded before Automatic retries
+once on CPU from the unchanged input. GPU only reports failure instead of
+silently changing backends. Large adaptive reductions require GPU support in
+the pinned library; CPU conversion uses uniform reduction when that capability
+limit is reached. The original finest level and selected SH degree are retained.
+`conversion-report.json` records requested/effective backends, actual level
+counts, reduction methods and fallback reasons beside the completed scene.
+Reduced budgets round upward by at most one Gaussian, avoiding an unnecessary
+full adaptive planning pass when an odd-sized input is halved.
+
+The GPU runtime's actual Dawn/Tint BSD-3-Clause license and full DirectX compiler
+notices accompany the authoring tools and complete Windows ZIP. This does not
+change the World Labs MIT license of the renderer/SOGS LoD adapter above.
 
 ## Port an existing project copy
 
@@ -221,3 +239,27 @@ metadata in an isolated profile did not reproduce a process crash. That record
 does not establish that rejecting RAD caused the native fault, and the rendering
 preflight change is not claimed to repair that unproven shell failure. The
 original Hungars project folders remain untouched.
+
+### GPU-preferred conversion regression
+
+The bundled converter now includes the pinned Windows Dawn runtime and compiler
+libraries. Automatic selects a hardware WebGPU adapter when available, with a
+clean CPU restart after a failed GPU batch. Explicit CPU and GPU selections are
+available for testing. A software adapter is identified in the report and is
+not preferred over CPU by Automatic. Large CPU adaptive jobs switch to uniform
+reduction only at the pinned library's demonstrated multi-block capability limit.
+
+`scripts/sogs-conversion-check.mjs` is part of branch CI. It runs the bundled
+converter without Node on PATH and with JavaScript networking blocked, verifies
+native dependencies and notices, performs an actual WGSL readback, checks odd
+detail counts, signed coordinates and SH1 color data, and exercises missing-GPU
+fallback, explicit GPU failure and active cancellation. Local hardware runs use
+an NVIDIA RTX 3090; hosted CI may honestly report CPU when hardware is absent.
+Device-loss/validation/OOM and fresh-process CPU retry policies also have focused
+tests. These checks do not promise a particular conversion speed on other GPUs.
+
+Local follow-up checkpoint: 490/490 unit/integration tests pass in
+`test-output/sogs-gpu-final-unit.log`. The real offline hardware/CPU check passes
+in `test-output/sogs-conversion-1793365938726/result.json`: both paths produce
+2,047 / 1,024 / 512 Gaussians, preserve the finest signed coordinates and SH1
+colors within measured compression error, and pass fallback/cancellation tests.

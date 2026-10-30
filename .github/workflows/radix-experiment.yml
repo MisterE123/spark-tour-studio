@@ -33,10 +33,12 @@ jobs:
           cache: npm
       - name: Install pinned dependencies
         run: npm ci
-      - name: Bundle verified offline CPU SOGS converter and complete notices
+      - name: Bundle verified offline WebGPU and CPU SOGS converter with complete notices
         run: npm run bundle:sogs
       - name: Run all unit and integration tests including actual SOGS conversion
         run: npm test
+      - name: Check bundled GPU conversion and explicit offline CPU fallback
+        run: node scripts/sogs-conversion-check.mjs
       - name: Build separate experimental editor and launcher
         run: npm run package:experimental
       - name: Check actual SOGS LoD rendering, selectors and cancellation

@@ -32,13 +32,13 @@ export interface Hosting {assetBaseUrl:string;collisionBaseUrl?:string;sceneUrls
 export interface RecoverySnapshot {project:Project;hosting:Hosting}
 export interface Snapshot {project:Project;hosting:Hosting;base:string;path:string;recovery?:RecoverySnapshot}
 export interface SogsImportOptions {
- kind?:'sogs'|'ply';method?:'quality'|'quick'|'adaptive'|'uniform';maxSh?:number;
+ kind?:'sogs'|'ply';method?:'quality'|'quick'|'adaptive'|'uniform';maxSh?:number;compute?:'auto'|'gpu'|'cpu';
  /** Total levels including the original finest level, 2–8. */
  levels?:number;
  /** splat-transform chunk size in Ki splats (×1024), 16–2048. */
  chunkCount?:number;chunkExtent?:number;iterations?:number;
 }
-export interface ImportJob {id:string;name:string;kind:'rad'|'sogs'|'ply';replaceSceneId?:string;expectedSource?:string;options:SogsImportOptions;state:'queued'|'running'|'completed'|'failed'|'cancelled';progress:string;error?:string;result?:TourScene;acknowledged:boolean}
+export interface ImportJob {id:string;name:string;kind:'rad'|'sogs'|'ply';replaceSceneId?:string;expectedSource?:string;options:SogsImportOptions;state:'queued'|'running'|'completed'|'failed'|'cancelled';progress:string;detail?:string;error?:string;result?:TourScene;acknowledged:boolean}
 export interface ImportQueueState {revision:number;paused:boolean;activeId:string|null;jobs:ImportJob[]}
 export interface EditorBridge extends GitBridge {reimportScene(scene:{id:string;name:string;source:string},options:SogsImportOptions):Promise<ImportQueueState>;queueScenes(kind:'rad'|'sogs'|'ply',options?:SogsImportOptions):Promise<ImportQueueState>;getImportQueue():Promise<ImportQueueState>;importQueueAction(action:string,id?:string):Promise<ImportQueueState>;onImportQueue(fn:(queue:ImportQueueState)=>void):()=>void;importPerformancePreset():Promise<PerformancePresetFile|null>;exportPerformancePreset(preset:PerformancePresetFile):Promise<string|null>;importImageFile(file:File):Promise<string>;saveCollisionGlb(bytes:Uint8Array):Promise<string>;newProject():Promise<Snapshot|null>;openProject():Promise<Snapshot|null>;save(project:Project,hosting:Hosting,saveAs:true):Promise<Snapshot|null>;save(project:Project,hosting:Hosting,saveAs?:false):Promise<Snapshot>;save(project:Project,hosting:Hosting,saveAs:boolean):Promise<Snapshot|null>;autosave(project:Project,hosting?:Hosting):Promise<void>;importPly(options:SogsImportOptions):Promise<string|null>;cancelConversion():Promise<void>;importAsset(kind:string):Promise<string|null>;exportTour(project:Project,hosting:Hosting,portable:boolean,omitSplats:boolean):Promise<string|null>;validateAssets(project:Project,hosting?:Hosting):Promise<string[]>;onProgress(fn:(text:string)=>void):()=>void;}
 declare global {interface Window {studio?:EditorBridge}}

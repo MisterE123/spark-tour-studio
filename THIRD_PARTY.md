@@ -37,9 +37,14 @@ relicensed by this project.
   `sogs-tools/licenses/`, and exact archive/generated-file hashes in
   `sogs-tools/dependencies.json`. The converter runs on bundled Node.js
   **24.21.0**, including Node's complete third-party notices. These tools are
-  bundled with Studio, not visitor websites. Source:
+  bundled with Studio, not visitor websites. GPU acceleration uses the pinned
+  **webgpu 0.6.2** Windows x64 Dawn/Tint native runtime and matching D3D compiler
+  libraries. The archive's actual Dawn/Tint **BSD-3-Clause** license is retained
+  in `NodeWebGPU-Dawn.txt` (its npm metadata alone says MIT); full DXC license and
+  third-party notices are retained alongside it. GPU unavailability has an
+  explicit CPU fallback. Source:
   https://github.com/playcanvas/splat-transform and
-  https://github.com/playcanvas/engine .
+  https://github.com/playcanvas/engine and https://github.com/dawn-gpu/node-webgpu .
 - The editor bundles the official GitHub CLI 2.102.0 Windows x64 distribution
   under MIT. Its original notice is in `github-tools/LICENSE.txt`.
   The download is pinned and checksum-verified. Source and license:

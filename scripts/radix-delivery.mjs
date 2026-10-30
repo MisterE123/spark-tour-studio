@@ -19,7 +19,7 @@ export function relativeFile(name){
 
 export const deliveryName=metadata=>`3DGS-Perspectives-Studio-${deliveryMetadata(metadata).version}-Radix-SOGS-Experimental-${metadata.shortCommit}-windows-x64.zip`;
 export const runtimeName=metadata=>`Radix-SOGS-Web-Runtime-${deliveryMetadata(metadata).shortCommit}.zip`;
-export const converterNotices=['Node.txt','PlayCanvas-splat-transform.txt','PlayCanvas-engine.txt','PlayCanvas-SuperSplat-Viewer.txt','libwebp.txt','PROVENANCE.txt'];
+export const converterNotices=['Node.txt','PlayCanvas-splat-transform.txt','PlayCanvas-engine.txt','PlayCanvas-SuperSplat-Viewer.txt','libwebp.txt','NodeWebGPU-Dawn.txt','DirectXShaderCompiler-LICENSE.txt','DirectXShaderCompiler-ThirdPartyNotices.txt','PROVENANCE.txt'];
 
 export async function digestFile(file){const hash=createHash('sha256');for await(const chunk of createReadStream(file))hash.update(chunk);return hash.digest('hex');}
 

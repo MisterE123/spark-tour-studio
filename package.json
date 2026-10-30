@@ -11,6 +11,7 @@
     "editor": "electron .",
     "launcher": "node scripts/build-launcher.mjs",
     "package": "npm run build && npm run bundle:github && npm run launcher && electron-builder --win portable --x64",
+    "package:experimental": "node scripts/package-experimental.mjs",
     "build:converter": "node scripts/build-converter.mjs",
     "bundle:github": "node scripts/bundle-github.mjs",
     "bundle:meshing": "node scripts/bundle-meshing.mjs"

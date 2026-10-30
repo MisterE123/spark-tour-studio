@@ -1,0 +1,8 @@
+/* Direct authoring actions remain on the editor's existing glass surfaces. */
+.studio .empty-state{right:calc(var(--inspector-width) + 22px);max-width:580px}.studio .empty-state .actions{margin-top:22px;pointer-events:auto}.studio .empty-state .actions button{padding:11px 15px;backdrop-filter:var(--blur);background:var(--glass-strong)}
+.utility-dialog-heading{display:flex;align-items:center;gap:10px}.utility-dialog-heading h2{font-size:20px}.import-queue-summary{font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted);padding:10px 0;border-block:1px solid #ffffff25}.import-queue-tools{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.import-queue-tools .actions button{font-size:11px}
+@media(max-width:1150px){.studio .empty-state h1{font-size:36px;letter-spacing:-1px}.studio .empty-state{left:calc(var(--sidebar-width) + 25px);right:calc(var(--inspector-width) + 25px)}}
+
+.studio-build-badge{font-size:9px;letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;flex:none;padding:5px 8px;border:1px solid #ffffff55;border-radius:20px;color:var(--muted);background:var(--control)}.studio-build-details{margin-top:22px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--control)}.studio-build-details h3{margin:0 0 7px}.studio-build-details p{font-size:12px;color:var(--muted)}.studio-build-details dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px 16px;font-size:12px}.studio-build-details dt{color:var(--muted)}.studio-build-details dd{margin:0;overflow-wrap:anywhere}
+
+.authoring-fields{border:0;padding:0;margin:0;min-width:0}.authoring-fields:disabled input,.authoring-fields:disabled textarea,.authoring-fields:disabled select{opacity:.6}

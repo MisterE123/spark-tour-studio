@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import RAPIER from '@dimforge/rapier3d-compat';
+import {physics as RAPIER} from '../shared/physics.mjs';import {loadPhysics} from '../shared/physics-loader.mjs';
 import {WalkingMotor,configureWalkingController} from '../shared/walking.mjs';
 import {WalkMotion} from '../shared/walk-motion.mjs';
 
-const initialized=RAPIER.init();
+const initialized=loadPhysics();
 function boxMesh(min,max){
  const [x,y,z]=min,[X,Y,Z]=max;
  return {positions:new Float32Array([x,y,z,X,y,z,X,y,Z,x,y,Z,x,Y,z,X,Y,z,X,Y,Z,x,Y,Z]),indices:new Uint32Array([0,1,2,0,2,3,4,6,5,4,7,6,0,5,1,0,4,5,3,2,6,3,6,7,0,3,7,0,7,4,1,5,6,1,6,2])};

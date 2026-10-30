@@ -1,9 +1,11 @@
 import {Icon,InspectorSection} from './icons';
+import {useEditorImport} from './editor-imports';
 import React,{useEffect,useState} from 'react';
 import type {PerformanceSettings,Project} from './model';
 import type {TourRuntime} from './runtime';
 import {defaultPerformance,PerformanceSettingsSchema,presetFile,tourPerformanceSettings} from '../shared/performance.mjs';
 const controls:[keyof PerformanceSettings,string,number,number,number,string][]=[
+ ['adaptiveTargetFps','Target frame rate',30,60,5,'Desktop frame-rate goal for automatic detail adjustment. VR uses the headset refresh rate.'],
  ['pixelRatio','Resolution cap',.5,2,.1,'Maximum desktop pixels per CSS pixel. Lower values reduce GPU load.'],
  ['lodSplatCount','Base splat target',0,8000000,100000,'0 uses Spark’s device-specific target. This is a detail target, not a GPU memory limit.'],
  ['lodSplatScale','Detail multiplier',.25,2,.05,'Multiplies the target. Higher values draw more splats.'],
@@ -21,6 +23,7 @@ const controls:[keyof PerformanceSettings,string,number,number,number,string][]=
  ['xrFoveation','XR compositor foveation',0,1,.1,'0 is sharpest; 1 favors speed. Headset/browser support varies.']
 ];
 const controlGroups:[string,(keyof PerformanceSettings)[],boolean][]=[
+ ['Automatic adjustment',['adaptiveTargetFps'],true],
  ['Precision & storage',[],true],
  ['Resolution',['pixelRatio'],true],
  ['Splat detail',['lodSplatCount','lodSplatScale','lodRenderScale','maxSh'],true],
@@ -31,7 +34,8 @@ const controlGroups:[string,(keyof PerformanceSettings)[],boolean][]=[
 ];
 export function PerformanceControls({value,onChange}:{value:PerformanceSettings;onChange:(value:PerformanceSettings)=>void}){
  return <div className="performance-controls">{controlGroups.map(([title,keys,open])=><InspectorSection key={title} title={title} icon={title==='VR rendering'?'head_mounted_device':'tune'} defaultOpen={open}>
-  {controls.filter(([key])=>keys.includes(key)).map(([key,label,min,max,step,help])=><label className="field" key={key}><span>{label}</span><input title={help} aria-label={label} type="number" min={min} max={max} step={step} value={value[key] as number} onChange={e=>{
+  {title==='Automatic adjustment'&&<><label className="check"><input type="checkbox" checked={value.adaptiveDetail??false} onChange={e=>{if(e.target.checked)onChange({...value,adaptiveDetail:true,adaptiveTargetFps:value.adaptiveTargetFps??60});else{const {adaptiveDetail,adaptiveTargetFps,...manual}=value;onChange(manual);}}}/>Automatically adjust detail for smoother movement</label><p className="muted">Temporarily lowers the splat target when viewing stays slow, then restores detail cautiously. Never exceeds your chosen detail budget. Does not alter source files or precision.</p></>}
+  {controls.filter(([key])=>keys.includes(key)).map(([key,label,min,max,step,help])=><label className="field" key={key}><span>{label}</span><input title={help} aria-label={label} type="number" min={min} max={max} step={step} disabled={key==='adaptiveTargetFps'&&!value.adaptiveDetail} value={key==='adaptiveTargetFps'?(value.adaptiveTargetFps??60):value[key] as number} onChange={e=>{
    if(e.target.value==='')return;const n=Number(e.target.value);if(!Number.isFinite(n)||n<min||n>max)return;
    const next={...value,[key]:n};if(key==='coneFov0'&&n>next.coneFov)next.coneFov=n;if(key==='coneFov'&&n<next.coneFov0)next.coneFov0=n;
    const result=PerformanceSettingsSchema.safeParse(next);if(result.success)onChange(result.data);
@@ -40,10 +44,10 @@ export function PerformanceControls({value,onChange}:{value:PerformanceSettings;
   {title==='Precision & storage'&&<><label className="check"><input type="checkbox" checked={value.pagedExtSplats} onChange={e=>onChange({...value,pagedExtSplats:e.target.checked})}/>Extended splat precision (ExtSplats)</label><p className="muted">Higher precision for streamed foreground and background splats. Uses 32 bytes per pooled splat instead of 16, with more memory and bandwidth. Changing this reloads the streaming pool while keeping your view.</p><p className="muted">This can reduce coordinate banding during loading; it cannot recover detail already lost in the source RAD.</p></>}
  </InspectorSection>)}</div>;
 }
-function PerformanceStats({runtime}:{runtime:TourRuntime|null}){const [text,setText]=useState('');useEffect(()=>{const t=setInterval(()=>{if(runtime)setText(`${Math.round(1000/runtime.frameMs)} FPS · ${runtime.spark.display.numSplats.toLocaleString()} displayed splats`);},500);return()=>clearInterval(t);},[runtime]);return <p className="muted" aria-live="off">{text||'Load a scene to measure performance.'}</p>;}
+function PerformanceStats({runtime}:{runtime:TourRuntime|null}){const [text,setText]=useState('');useEffect(()=>{const t=setInterval(()=>{if(runtime)setText(`${Math.round(1000/runtime.frameMs)} FPS · ${runtime.spark.display.numSplats.toLocaleString()} displayed splats${runtime.performanceSettings.adaptiveDetail?` · Auto detail ${Math.round(runtime.adaptiveDetailScale*100)}%`:''}`);},500);return()=>clearInterval(t);},[runtime]);return <p className="muted" aria-live="off">{text||'Load a scene to measure performance.'}</p>;}
 export interface PerformanceEditorSession {name:string;notice:string;source:string;}
 export function PerformanceEditor({project,change,runtime,session,setSession}:{project:Project;change:(fn:(p:Project)=>void)=>void;runtime:TourRuntime|null;session:PerformanceEditorSession|null;setSession:React.Dispatch<React.SetStateAction<PerformanceEditorSession|null>>}){
- const library=project.performance||defaultPerformance(),preset=library.presets.find(p=>p.id===library.defaultPresetId)!;
+ const transaction=useEditorImport(),library=project.performance||defaultPerformance(),preset=library.presets.find(p=>p.id===library.defaultPresetId)!;
  const draft=tourPerformanceSettings(library),source=JSON.stringify(preset);
  const initial:PerformanceEditorSession={name:preset.name,notice:'',source};
  const {name,notice}=session?.source===source?session:initial;
@@ -60,7 +64,7 @@ export function PerformanceEditor({project,change,runtime,session,setSession}:{p
    <option value="" disabled>Custom adjustments</option>{library.presets.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>
   <label className="field"><span>Preset name</span><input maxLength={80} value={name} onChange={e=>setName(e.target.value)}/></label>
   <div className="actions"><button disabled={!name.trim()} onClick={()=>save(false)}><Icon name="save"/>Save preset</button><button disabled={!name.trim()||library.presets.length>=100} onClick={()=>save(true)}><Icon name="content_copy"/>Save as new preset</button><button title={`Delete preset: ${preset.name}`} disabled={library.presets.length===1} onClick={()=>change(p=>{const next=structuredClone(p.performance||defaultPerformance());next.presets=next.presets.filter(v=>v.id!==preset.id);next.defaultPresetId=next.presets[0].id;delete next.defaultSettings;p.performance=next;})}><Icon name="delete"/>Delete preset</button></div>
-  <div className="actions"><button disabled={library.presets.length>=100} onClick={async()=>{try{const file=await window.studio!.importPerformancePreset();if(!file)return;const id=crypto.randomUUID();change(p=>{p.performance=structuredClone(p.performance||defaultPerformance());p.performance.presets.push({id,name:file.name,settings:file.settings});p.performance.defaultPresetId=id;delete p.performance.defaultSettings;});}catch(e){setNotice(String(e));}}}><Icon name="folder_open"/>Import preset…</button><button disabled={!name.trim()} onClick={async()=>{try{const file=await window.studio!.exportPerformancePreset(presetFile({name,settings:draft}));if(file)setNotice('Preset file saved.');}catch(e){setNotice(String(e));}}}><Icon name="ios_share"/>Export preset…</button></div>
+  <div className="actions"><button disabled={library.presets.length>=100} onClick={async()=>{try{await transaction(()=>window.studio!.importPerformancePreset(),file=>{const id=crypto.randomUUID();change(p=>{p.performance=structuredClone(p.performance||defaultPerformance());p.performance.presets.push({id,name:file.name,settings:file.settings});p.performance.defaultPresetId=id;delete p.performance.defaultSettings;});});}catch(e){setNotice(String(e));}}}><Icon name="folder_open"/>Import preset…</button><button disabled={!name.trim()} onClick={async()=>{try{const file=await window.studio!.exportPerformancePreset(presetFile({name,settings:draft}));if(file)setNotice('Preset file saved.');}catch(e){setNotice(String(e));}}}><Icon name="ios_share"/>Export preset…</button></div>
   {notice&&<p role="status">{notice}</p>}<PerformanceControls value={draft} onChange={apply}/></>;
 }
 export function ViewerPerformance({project,runtime}:{project:Project|null;runtime:TourRuntime|null}){

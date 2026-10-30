@@ -1,3 +1,4 @@
+import {loadPhysics} from '../shared/physics-loader.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BoxGeometry} from 'three';
@@ -9,6 +10,8 @@ import {transform} from 'esbuild';
 import {readFile} from 'node:fs/promises';
 
 function stair(height){const boxes=[new BoxGeometry(12,.2,8),new BoxGeometry(6,height+.2,8)];boxes[0].translate(0,-.1,0);boxes[1].translate(3,(height-.2)/2,0);const positions=[],indices=[];for(const box of boxes){const offset=positions.length/3;positions.push(...box.attributes.position.array);indices.push(...Array.from(box.index.array,value=>value+offset));box.dispose();}return {positions:new Float32Array(positions),indices:new Uint32Array(indices)};}
+
+await loadPhysics();
 
 test('walking routes and local refinements honor the configured world-meter step height',async()=>{
  assert.equal(DEFAULT_STEP_HEIGHT,.5334);assert.equal(navigationClimb(),10);assert.equal(navigationClimb(0),0);assert.throws(()=>navigationClimb(-1),/step/);

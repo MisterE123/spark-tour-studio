@@ -122,6 +122,7 @@ try{
  await blockedMovement('an initial configured GLB');
  await page.evaluate(ref=>{const r=window.tourRuntime,s=structuredClone(r.active);s.collider=ref;s.colliderTransform={position:[0,0,0],rotation:[0,0,0],scale:1};r.updateScene(s);},ref);
  releaseInitial();await page.evaluate(()=>window.initialTransition);
+ await page.waitForFunction(()=>{const r=window.tourRuntime;r.frame(r.last+20);return r.ready;},{},{timeout:15000});
  assert.ok(await page.evaluate(ref=>{const r=window.tourRuntime;return r.ready&&r.active.id==='initial'&&r.colliderSource===ref&&r.pagedCollider?.ready;},ref),'initial scene loading must reconcile a newer collider after the old request fails');
  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
  await page.screenshot({path:path.join(root,'replacement.png')});

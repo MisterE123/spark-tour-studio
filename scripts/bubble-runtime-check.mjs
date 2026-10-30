@@ -7,7 +7,7 @@ import {radFixture} from '../tests/fixtures.mjs';
 
 const output=path.resolve('test-output','bubble-runtime-'+Date.now());
 await fs.mkdir(output,{recursive:true});
-const server=await createServer({configFile:false,root:process.cwd(),server:{host:'127.0.0.1',port:0,watch:null},plugins:[{name:'bubble-check-fixtures',configureServer(server){server.middlewares.use((request,response,next)=>{const route=request.url.split('?')[0];if(route==='/bubble-test.rad'){response.setHeader('Content-Type','application/octet-stream');response.end(radFixture().rad);}else if(route==='/bubble-test'){response.setHeader('Content-Type','text/html');response.end('<html><body style="margin:0;background:linear-gradient(35deg,#40573f,#18263a)"></body></html>');}else next();});}}]});
+const server=await createServer({configFile:false,root:process.cwd(),cacheDir:path.join(output,'.vite'),optimizeDeps:{entries:['src/runtime.ts','shared/project.mjs','src/physics-loader.ts']},server:{host:'127.0.0.1',port:0,watch:null},plugins:[{name:'bubble-check-fixtures',configureServer(server){server.middlewares.use((request,response,next)=>{const route=request.url.split('?')[0];if(route==='/bubble-test.rad'){response.setHeader('Content-Type','application/octet-stream');response.end(radFixture().rad);}else if(route==='/bubble-test'){response.setHeader('Content-Type','text/html');response.end('<html><body style="margin:0;background:linear-gradient(35deg,#40573f,#18263a)"></body></html>');}else next();});}}]});
 await server.listen();
 const url='http://127.0.0.1:'+server.httpServer.address().port;
 const browser=await chromium.launch({channel:'msedge',headless:true,args:['--enable-webgl','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
@@ -50,7 +50,9 @@ try{
  assert.equal(await hit(),'info','the marker host surface near the endpoint does not occlude its bubble');
  // Slight endpoint burial and a partly exposed rim stay visible; a broad wall
  // still hides the complete marker after repeated observations.
- await page.evaluate(()=>{r.mesh.raycast=()=>{};r.world={castRay:(ray,limit)=>limit>2.55?{timeOfImpact:2.55}:null};r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);r.frame(r.last+200);});
+ // Real collider creation awaits the lazy engine. This synthetic world must
+ // honor that same contract before runtime constructs its Rapier ray.
+ await page.evaluate(async()=>{await (await import('/src/physics-loader.ts')).loadPhysics();r.mesh.raycast=()=>{};r.world={castRay:(ray,limit)=>limit>2.55?{timeOfImpact:2.55}:null};r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);r.frame(r.last+200);});
  assert.equal(await hit(),'info','rough geometry close to the surface placement is tolerated');
  await page.evaluate(()=>{r.world={castRay:ray=>ray.dir.y>.01?null:{timeOfImpact:1}};r.bubbleOcclusion=new WeakMap();r.frame(r.last+200);r.frame(r.last+200);});
  assert.equal(await hit(),'info','a visible upper rim is not culled by the center ray');

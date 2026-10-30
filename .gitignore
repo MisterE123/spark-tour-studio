@@ -1,6 +1,7 @@
 node_modules/
 dist/
 release/
+experimental-release/
 launcher/*.exe
 launcher/*.blob
 launcher/sea-config.json

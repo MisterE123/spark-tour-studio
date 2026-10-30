@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import RAPIER from '@dimforge/rapier3d-compat';
+import {physics as RAPIER} from '../shared/physics.mjs';import {loadPhysics} from '../shared/physics-loader.mjs';
 import {WalkingMotor,configureWalkingController,walkingMotionAllowed} from '../shared/walking.mjs';
 import {segmentBoxDistanceSquared} from '../shared/collision-stream.mjs';
 
-const initialized=RAPIER.init(),stepHeight=.5334;
+const initialized=loadPhysics(),stepHeight=.5334;
 async function fixture(height,{ceiling,wall,airborne=false,crouched=false,trimesh=false,direction={x:1,z:0}}={}){
  await initialized;const world=new RAPIER.World({x:0,y:-9.81,z:0});
  world.createCollider(RAPIER.ColliderDesc.cuboid(10,.1,10).setTranslation(0,-.1,0));

@@ -1,16 +1,39 @@
 import React,{useState,useEffect,useRef} from 'react';import {createRoot} from 'react-dom/client';
-import {TourRuntime} from './runtime';import type {Project,Hosting,TourScene,Mode,Page,Snapshot,Transform,Vec3} from './model';import {uid,emptyTransform} from './model';
+import type {TourRuntime} from './runtime';import {loadTourRuntime} from './runtime-loader';import type {Project,Hosting,TourScene,Mode,Page,Snapshot,Transform,Vec3} from './model';import {uid,emptyTransform} from './model';
 import {blankProject,newScene,validateProject,renderPage,ProjectSchema,HostingSchema} from '../shared/project.mjs';
-import {renderRichText} from '../shared/rich-text.mjs';
+import {renderRichText,resolveRichReference,resolveContentResource,normalizeContentReference} from '../shared/rich-text.mjs';
 import {Icon,IconButton,type IconName} from './icons';
 import './style.css';
 import './rich-text.css';
+import './runtime-startup.css';
 
 export function Button({children,onClick,primary=false,disabled=false,title}:React.PropsWithChildren<{onClick:()=>void;primary?:boolean;disabled?:boolean;title?:string}>){return <button title={title} className={primary?'primary':''} onClick={onClick} disabled={disabled}>{children}</button>;}
 export function Field({label,children}:React.PropsWithChildren<{label:string}>){return <label className="field"><span>{label}</span>{React.Children.map(children,child=>{if(!React.isValidElement(child)||!['input','select','textarea'].includes(String(child.type)))return child;const control=child as React.ReactElement<{'aria-label'?:string}>;return React.cloneElement(control,{'aria-label':control.props['aria-label']||label});})}</label>;}
 export function Vector({label,value,onChange}: {label:string;value:Vec3;onChange:(v:Vec3)=>void}){return <Field label={label}><div className="vector">{value.map((n,i)=><label key={i}><small>{'XYZ'[i]}</small><input aria-label={`${label} ${'XYZ'[i]}`} type="number" step="0.1" value={n} onChange={e=>{const next=[...value] as Vec3;next[i]=Number(e.target.value);onChange(next);}}/></label>)}</div></Field>;}
 export function TransformForm({value,onChange}: {value:Transform;onChange:(v:Transform)=>void}){return <><Vector label="Position · meters" value={value.position} onChange={position=>onChange({...value,position})}/><Vector label="Rotation · degrees" value={value.rotation.map(x=>Math.round(x*180/Math.PI*100)/100) as Vec3} onChange={r=>onChange({...value,rotation:r.map(x=>x*Math.PI/180) as Vec3})}/><Field label="Uniform scale"><input type="number" min="0.0001" step="0.1" value={value.scale} onChange={e=>onChange({...value,scale:Math.max(.0001,Number(e.target.value))})}/></Field></>;}
-export function Stage({onReady,onError}:{onReady:(r:TourRuntime)=>void;onError?:(message:string)=>void}){const host=useRef<HTMLDivElement>(null);const [error,setError]=useState('');useEffect(()=>{let r:TourRuntime;try{r=new TourRuntime(host.current!);onReady(r);}catch(e){const message=String(e);setError(message);onError?.(message);}return()=>r?.dispose();},[]);return <div className="stage" data-guide="scene" ref={host}>{error&&!onError&&<div className="stage-error">WebGL2 could not start.<br/>{error}</div>}</div>;}
+export function Stage({onReady,onError,retryKey=0}:{onReady:(r:TourRuntime|null)=>void;onError?:(message:string)=>void;retryKey?:number}){
+ const host=useRef<HTMLDivElement>(null),callbacks=useRef({onReady,onError});callbacks.current={onReady,onError};
+ const [error,setError]=useState(''),[preparing,setPreparing]=useState(true),[attempt,setAttempt]=useState(0);
+ useEffect(()=>{
+  let canceled=false,started=false,runtime:TourRuntime|undefined,afterPaint:ReturnType<typeof setTimeout>|undefined;
+  setError('');setPreparing(true);callbacks.current.onError?.('');callbacks.current.onReady(null);
+  const warm=()=>{
+   if(canceled||started)return;started=true;clearTimeout(fallback);
+   void loadTourRuntime().then(({TourRuntime})=>{
+    if(canceled||!host.current)return;
+    runtime=new TourRuntime(host.current);setPreparing(false);callbacks.current.onReady(runtime);
+   }).catch(error=>{
+    if(canceled)return;runtime?.dispose();runtime=undefined;callbacks.current.onReady(null);
+    const message=String(error);setError(message);setPreparing(false);callbacks.current.onError?.(message);
+   });
+  };
+  // React's title/config effects run immediately. Yield a visible frame before
+  // evaluating Spark or allocating a GPU context; hidden windows still warm up.
+  const frame=requestAnimationFrame(()=>{afterPaint=setTimeout(warm,0);}),fallback=setTimeout(warm,100);
+  return()=>{canceled=true;cancelAnimationFrame(frame);clearTimeout(afterPaint);clearTimeout(fallback);runtime?.dispose();callbacks.current.onReady(null);};
+ },[retryKey,attempt]);
+ return <div className="stage" data-guide="scene" ref={host}>{!onError&&(error||preparing)&&<div className="stage-startup" role={error?'alert':'status'}>{error?<><span>{/webgl|graphics context/i.test(error)?'WebGL 2 could not start. Use a device and browser that support WebGL 2.':'The 3D viewer could not load.'}</span><Button onClick={()=>setAttempt(value=>value+1)}>Retry 3D viewer</Button></>:'Preparing 3D viewer…'}</div>}</div>;
+}
 function ControlHint({icon,title,keys,children}:{icon:IconName;title:string;keys?:string;children:React.ReactNode}){return <div className="control-hint"><Icon name={icon} size={22}/><div><strong>{title}</strong>{keys&&<kbd>{keys}</kbd>}<span>{children}</span></div></div>;}
 export function ControlHints({mode,touch=false}:{mode:Mode;touch?:boolean}){return <div className="control-hints">
  <ControlHint icon="visibility" title="Look around" keys={touch?'Drag':'Left drag'}>{touch?'Drag the scene to look.':'Drag the scene with the cursor free.'}</ControlHint>
@@ -36,9 +59,31 @@ export function TouchPad({runtime,enabled,mode}:{runtime:TourRuntime|null;enable
  return <div className="mobile-controls"><div className="touch-pad" aria-label="Touch movement pad" data-active={active.current!==null} style={{'--stick-x':knob.x,'--stick-y':knob.y} as React.CSSProperties} onPointerDown={event=>{if(active.current!==null)return;event.preventDefault();event.currentTarget.setPointerCapture(event.pointerId);active.current=event.pointerId;move(event);}} onPointerMove={event=>{if(active.current===event.pointerId)move(event);}} onPointerUp={stop} onPointerCancel={stop} onLostPointerCapture={stop}><span className="touch-stick" aria-hidden="true"/></div><div className="touch-actions">{navigation==='explore'?<><TouchAction label="Crouch" down={()=>runtime?.setTouchCrouch(true)} up={()=>runtime?.setTouchCrouch(false)}/><TouchAction label="Jump" down={()=>runtime?.requestJump()} up={()=>{}}/></>:<><TouchAction label="Fly up" down={()=>runtime?.setTouchLift(1)} up={()=>runtime?.setTouchLift(0)}/><TouchAction label="Fly down" down={()=>runtime?.setTouchLift(-1)} up={()=>runtime?.setTouchLift(0)}/></>}</div></div>;
 }
 
-function contentUrl(value:string,base:string){try{const url=new URL(value,base);return ['http:','https:'].includes(url.protocol)?url.href:'';}catch{return '';}}
 export function ContentModal({page,base,onClose,runtime}:{page:Page;base:string;onClose:()=>void;runtime:TourRuntime|null}){
- const frame=useRef<HTMLIFrameElement>(null);
- useEffect(()=>{if(runtime)runtime.blocked=true;const listen=(e:MessageEvent)=>{if(e.source!==frame.current?.contentWindow)return;const data=e.data;if(!data||data.type!=='spark-tour-action')return;if(data.action==='close')onClose();else if(data.action==='scene'&&runtime?.project?.scenes.some(s=>s.id===data.sceneId)){void runtime.selectScene(data.sceneId,data.viewpointId);onClose();}else if(data.action==='viewpoint'&&runtime?.active?.viewpoints.some(v=>v.id===data.viewpointId)){runtime.jump(data.viewpointId);onClose();}};window.addEventListener('message',listen);return()=>{window.removeEventListener('message',listen);if(runtime){runtime.blocked=false;if(!runtime.renderer.xr.isPresenting)runtime.closeContent(page.id);}};},[page,runtime]);
- return <div className="modal-shade"><section className="content-modal" role="dialog" aria-modal="true" aria-label={page.title}><header><h2>{page.title}</h2><IconButton icon="close" label="Close content" onClick={onClose}>Close</IconButton></header>{page.html?<iframe className="custom-content-frame" ref={frame} title={page.title} sandbox="allow-scripts allow-forms allow-popups" src={contentUrl(page.html,base)}/>:<div className="content-body">{page.blocks.map((block,index)=>block.type==='text'?(block.richText?<div key={index} className="rich-content" dangerouslySetInnerHTML={{__html:renderRichText(block.richText,base)}}/>:<p key={index}>{block.text}</p>):block.type==='image'?<figure key={index}>{block.url&&<img src={contentUrl(block.url,base)} alt={block.text}/>}{block.text&&<figcaption>{block.text}</figcaption>}</figure>:block.type==='link'?<p key={index}><a href={contentUrl(block.url,base)} target="_blank" rel="noopener noreferrer">{block.text||block.url}</a></p>:<iframe key={index} className="content-embed" title={block.text||'Embedded content'} src={contentUrl(block.url,base)} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" allow="fullscreen"/>)}</div>}</section></div>;
+ const frame=useRef<HTMLIFrameElement>(null),dialog=useRef<HTMLElement>(null),close=useRef(onClose);close.current=onClose;
+ useEffect(()=>{
+  const opener=document.activeElement instanceof HTMLElement?document.activeElement:null;
+  const controls=()=>Array.from(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),iframe,[tabindex]')||[]).filter(element=>element.tabIndex>=0&&element.getClientRects().length>0);
+  const focusFirst=()=>{(controls()[0]||dialog.current)?.focus({preventScroll:true});};
+  const key=(event:KeyboardEvent)=>{
+   if(event.defaultPrevented||event.altKey||event.ctrlKey||event.metaKey)return;
+   if(event.key==='Escape'){event.preventDefault();event.stopPropagation();close.current();return;}
+   if(event.key!=='Tab')return;
+   const items=controls(),first=items[0],last=items.at(-1),active=document.activeElement;
+   if(!first){event.preventDefault();dialog.current?.focus();return;}
+   if(!dialog.current?.contains(active)||event.shiftKey&&active===first||!event.shiftKey&&active===last){event.preventDefault();(event.shiftKey?last:first)?.focus();}
+  };
+  const retainFocus=(event:FocusEvent)=>{if(!dialog.current?.contains(event.target as Node))focusFirst();};
+  document.addEventListener('keydown',key,true);document.addEventListener('focusin',retainFocus);focusFirst();
+  return()=>{document.removeEventListener('keydown',key,true);document.removeEventListener('focusin',retainFocus);if(opener?.isConnected)opener.focus({preventScroll:true});};
+ },[page.id]);
+ useEffect(()=>{if(runtime)runtime.blocked=true;const listen=(e:MessageEvent)=>{if(e.source!==frame.current?.contentWindow)return;const data=e.data;if(!data||data.type!=='spark-tour-action')return;if(data.action==='close')close.current();else if(data.action==='scene'){const scene=runtime?.project?.scenes.find(s=>s.id===data.sceneId);if(scene&&(data.viewpointId===undefined||typeof data.viewpointId==='string'&&scene.viewpoints.some(v=>v.id===data.viewpointId))){void runtime?.selectScene(scene.id,data.viewpointId);close.current();}}else if(data.action==='viewpoint'&&runtime?.active?.viewpoints.some(v=>v.id===data.viewpointId)){runtime.jump(data.viewpointId);close.current();}};window.addEventListener('message',listen);return()=>{window.removeEventListener('message',listen);if(runtime){runtime.blocked=false;if(!runtime.renderer.xr.isPresenting)runtime.closeContent(page.id);}};},[page,runtime]);
+ const custom=resolveContentResource(page.html,base);
+ return <div className="modal-shade"><section ref={dialog} tabIndex={-1} className="content-modal" role="dialog" aria-modal="true" aria-label={page.title}><header><h2>{page.title}</h2><IconButton icon="close" label="Close content" onClick={onClose}>Close</IconButton></header>{custom?<iframe className="custom-content-frame" ref={frame} title={page.title} sandbox="allow-scripts allow-forms allow-popups" src={custom}/>:<div className="content-body" role="region" aria-label="Story content" tabIndex={0}>{page.blocks.map((block,index)=>{
+  if(block.type==='text')return block.richText?<div key={index} className="rich-content" dangerouslySetInnerHTML={{__html:renderRichText(block.richText,base)}}/>:<p key={index}>{block.text}</p>;
+  const url=block.type==='link'?resolveRichReference(block.url,base):resolveContentResource(block.url,base);
+  if(block.type==='image')return url||block.text?<figure key={index}>{url&&<img src={url} alt={block.text}/>}{block.text&&<figcaption>{block.text}</figcaption>}</figure>:null;
+  if(block.type==='link')return url||block.text?<p key={index}>{url?<a href={url} target="_blank" rel="noopener noreferrer">{block.text||normalizeContentReference(block.url)}</a>:block.text}</p>:null;
+  return url?<iframe key={index} className="content-embed" title={block.text||'Embedded content'} src={url} sandbox="allow-scripts allow-same-origin allow-forms allow-popups" allow="fullscreen"/>:block.text?<p key={index}>{block.text}</p>:null;
+ })}</div>}</section></div>;
 }

@@ -57,13 +57,17 @@ function summary(samples){
 function log(name,stats){const {maxEyeDelta,maxBodyDelta,verticalReversals,start,end}=stats;console.log(name,JSON.stringify({maxEyeDelta,maxBodyDelta,verticalReversals,start:start.body,end:end.body,eye:end.eye}));}
 try{
  page=await browser.newPage({viewport:{width:1280,height:800}});page.on('pageerror',error=>errors.push(error.message));page.setDefaultTimeout(30000);await page.goto(url+'?diagnostics=1');await page.getByRole('button',{name:'Enter tour'}).click();await page.waitForFunction(()=>window.tourRuntime?.ready);
- await page.evaluate(()=>{const r=window.tourRuntime;r.renderer.setAnimationLoop(null);r.renderer.render=()=>{};});
+ await page.evaluate(()=>{const r=window.tourRuntime;r.renderer.setAnimationLoop(null);window.walkingTestRender=r.renderer.render;r.renderer.render=()=>{};});
  async function select(id,fps=60){
-  await page.evaluate(async id=>{const r=window.tourRuntime;r.setTouch(0,0);await r.selectScene(id);r.renderer.setAnimationLoop(null);r.renderer.render=()=>{};r.rig.rotation.set(0,0,0);r.camera.rotation.set(0,0,0);r.setMode('explore');await r.modeTransition;
+  await page.evaluate(async id=>{const r=window.tourRuntime;r.setTouch(0,0);r.renderer.render=window.walkingTestRender;await r.selectScene(id);},id);
+  // The first-view cover now waits for real display output. Drive those frames
+  // before taking deterministic movement samples with rendering disabled.
+  await page.waitForFunction(()=>{const r=window.tourRuntime;r.frame(r.last+20);return r.ready&&!r.loading;});
+  await page.evaluate(async()=>{const r=window.tourRuntime;r.renderer.render=()=>{};r.rig.rotation.set(0,0,0);r.camera.rotation.set(0,0,0);r.setMode('explore');await r.modeTransition;
    // Each fixture has an authored, known-clear starting floor. Place there
    // directly so mode-switch floor searches cannot move a ceiling fixture.
    const start=r.rig.position.clone().fromArray(r.active.viewpoints[0].position);start.y-=r.viewHeight;r.placeFeet(start);
-  },id);await sample(1,[0,0],fps);
+  });await sample(1,[0,0],fps);
  }
  async function sample(seconds,input,fps){
   const samples=[];

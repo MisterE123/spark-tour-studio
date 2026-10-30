@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import RAPIER from '@dimforge/rapier3d-compat';
+import {physics as RAPIER} from '../shared/physics.mjs';import {loadPhysics} from '../shared/physics-loader.mjs';
 import {teleportWalkingFeet} from '../shared/walking.mjs';
 
-await RAPIER.init();
+await loadPhysics();
 const up={x:0,y:1,z:0},rotation={x:0,y:0,z:0,w:1};
 const floor=world=>world.createCollider(RAPIER.ColliderDesc.cuboid(5,.1,5).setTranslation(0,-.1,0));
 const fixture=run=>{const world=new RAPIER.World({x:0,y:-9.81,z:0});try{return run(world);}finally{world.free();}};

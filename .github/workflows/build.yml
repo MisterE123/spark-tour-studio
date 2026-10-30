@@ -2,7 +2,7 @@ name: Build 3DGS Perspectives Studio
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/experimental-*']
     tags: ['v*']
   pull_request:
     branches: [main]
@@ -19,7 +19,9 @@ jobs:
   windows:
     name: Windows x64 checks and package
     runs-on: windows-2025
-    timeout-minutes: 60
+    # Native/browser checks now exceed the former one-hour budget. Keep the
+    # complete suite and its individual assertions/timeouts enabled.
+    timeout-minutes: 90
     defaults:
       run:
         shell: pwsh
@@ -130,6 +132,78 @@ jobs:
         run: node scripts/viewpoint-xr-comfort-check.mjs
       - name: Check partial collision failure and same-session recovery
         run: node scripts/collision-recovery-check.mjs
+      - name: Check responsive canceled VR targeting and shared collision support
+        run: node scripts/teleport-cancellation-check.mjs
+      - name: Check responsive stereo XR frames during wall-grazing teleport
+        run: node scripts/xr-teleport-liveness-check.mjs
+      - name: Check Drone head clearance, scaled preparation and canceled XR targets
+        run: node scripts/xr-drone-teleport-check.mjs
+      - name: Check tracked controller hover and safe pose-loss recovery
+        run: node scripts/xr-controller-tracking-check.mjs
+      - name: Check optional automatic detail and immutable authored presets
+        run: node scripts/adaptive-detail-check.mjs
+      - name: Check authored entry paging and first-frame loading presentation
+        run: node scripts/startup-presentation-check.mjs
+      - name: Check concurrent panorama loading and stale-image cancellation
+        run: node scripts/panorama-loading-check.mjs
+      - name: Check responsive title paint and retryable local runtime warm-up
+        run: node scripts/runtime-warmup-check.mjs
+      - name: Check runtime warm-up cancellation and one renderer lifecycle
+        run: node scripts/stage-lifecycle-check.mjs
+      - name: Check deferred physics, offline chunks and same-session retry
+        run: node scripts/lazy-physics-check.mjs
+      - name: Check story keyboard focus and validated local content actions
+        run: node scripts/content-dialog-check.mjs
+      - name: Check incomplete content stays inert across browser, XR and export
+        run: node scripts/content-resource-check.mjs
+      - name: Check selection-safe editor actions and in-queue imports
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/editor-workflow-check.mjs
+      - name: Check pending image, audio and preset imports survive authoring changes
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/editor-imports-check.mjs
+      - name: Check close waits for authorized imports or permits explicit discard
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/editor-close-check.mjs
+      - name: Check editing stays safe while the 3D runtime prepares
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/editor-warmup-check.mjs
+      - name: Check encoded asset filenames through import, export and reopen
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/asset-filenames-check.mjs
+      - name: Check pending native imports retain their project ownership
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/import-ownership-check.mjs
+      - name: Check canceling Save As preserves edits, Undo and recovery
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/editor-save-cancel-check.mjs
+      - name: Check rich text histories stay with their story and imported images
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/richtext-history-check.mjs
+      - name: Check editor focus stops held movement without breaking controls
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/input-focus-check.mjs
+      - name: Check title, editor and XR audio lifecycle and mute state
+        run: node scripts/audio-lifecycle-check.mjs
+      - name: Check exported viewer audio stays silent behind its landing page
+        run: node scripts/audio-export-check.mjs
+      - name: Check portable HTML resource completeness and ordinary links
+        run: node scripts/portable-resources-check.mjs
+      - name: Check remote RAD companion bytes load offline in Spark
+        run: node scripts/remote-rad-export-check.mjs
+      - name: Check Studio build identity stays out of exported viewer dependencies
+        env:
+          SPARK_PACKAGED: '1'
+        run: node scripts/studio-build-check.mjs
       - name: Check compact portrait and landscape touch viewer
         run: node scripts/mobile-viewer-check.mjs
       - name: Check precision reloads and persistent XR tracking

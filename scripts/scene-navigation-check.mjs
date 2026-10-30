@@ -36,26 +36,33 @@ try{
  await page.evaluate(async()=>{
   const r=window.tourRuntime,require=(value,message)=>{if(!value)throw Error(message);};
   r.renderer.setAnimationLoop(null);
+  // selectScene resolves resource preparation. Keep rendering actual frames
+  // until the first-view cover is ready to reveal, without bypassing that gate.
+  const displayed=async()=>{const deadline=performance.now()+15000;while(!r.ready&&!r.status&&performance.now()<deadline){r.frame(r.last+20);await new Promise(resolve=>setTimeout(resolve,8));}require(r.ready||!!r.status,'Scene did not display before the test deadline');};
+  const select=async(...args)=>{await r.selectScene(...args);if(r.firstDisplay)require(!r.ready&&!!r.loading,'Prepared resources stay covered until a real frame is available');await displayed();};
   for(const mode of ['fly','explore','jumps']){
-   r.setMode(mode);await r.modeTransition;await r.selectScene('b');require(r.mode===mode&&r.ready,mode+' preserved into second scene');
-   await r.selectScene('a');require(r.mode===mode&&r.ready,mode+' preserved back to first scene');
+   r.setMode(mode);await r.modeTransition;await select('b');require(r.mode===mode&&r.ready,mode+' preserved into second scene');
+   await select('a');require(r.mode===mode&&r.ready,mode+' preserved back to first scene');
   }
-  r.setMode('fly');await r.modeTransition;await Promise.all([r.selectScene('b'),r.selectScene('a')]);require(r.active.id==='a'&&r.mode==='fly'&&r.ready,'Rapid selections preserve mode');
-  r.project.scenes.find(s=>s.id==='bad').source='missing.rad';await r.selectScene('bad');require(!r.ready&&r.mode==='fly','Failure preserves selected mode');
-  r.active.source='main.rad';await r.selectScene('bad');require(r.ready&&r.mode==='fly','Retry preserves mode');
-  await r.selectScene('c');require(r.mode==='jumps'&&r.ready,'Disabled mode falls back to enabled mode');
-  await r.selectScene('a','hidden');require(r.currentViewpoint==='hidden','Unlisted scene entry remains reachable');
-  r.setMode('explore');await r.modeTransition;await r.selectScene('b','hidden');require(r.mode==='explore'&&Math.abs(r.rig.position.x-4)<.03,'Walk scene links ground at explicit entry');
+  r.setMode('fly');await r.modeTransition;await Promise.all([r.selectScene('b'),r.selectScene('a')]);await displayed();require(r.active.id==='a'&&r.mode==='fly'&&r.ready,'Rapid selections preserve mode');
+  r.project.scenes.find(s=>s.id==='bad').source='missing.rad';await select('bad');require(!r.ready&&r.mode==='fly','Failure preserves selected mode');
+  r.active.source='main.rad';await select('bad');require(r.ready&&r.mode==='fly','Retry preserves mode');
+  await select('c');require(r.mode==='jumps'&&r.ready,'Disabled mode falls back to enabled mode');
+  await select('a','hidden');require(r.currentViewpoint==='hidden','Unlisted scene entry remains reachable');
+  r.setMode('explore');await r.modeTransition;await select('b','hidden');require(r.mode==='explore'&&Math.abs(r.rig.position.x-4)<.03,'Walk scene links ground at explicit entry');
   r.setMode('fly');await r.modeTransition;r.activate(r.bubbles.children[0]);require(r.currentViewpoint==='hidden','Unlisted viewpoint bubble remains reachable');
   const target=r.project.scenes.find(s=>s.id==='a');target.entry='hidden';
-  r.setMode('jumps');await r.modeTransition;await r.selectScene('a');require(r.currentViewpoint==='hidden','Ordinary scene arrival uses unlisted entry');
+  r.setMode('jumps');await r.modeTransition;await select('a');require(r.currentViewpoint==='hidden','Ordinary scene arrival uses unlisted entry');
   r.setMode('explore');await r.modeTransition;const second=r.project.scenes.find(s=>s.id==='b');second.collider='';
-  await r.selectScene('b');require(r.mode==='jumps'&&r.ready,'Missing collider falls back without collision-free walking');second.collider='floor.glb';
-  await r.selectScene('a');r.setMode('explore');await r.modeTransition;require(r.mode==='explore','Walk active before invalid destination');second.viewpoints[0].position=[30,1.7,30];await r.selectScene('b');
+  await select('b');require(r.mode==='jumps'&&r.ready,'Missing collider falls back without collision-free walking');second.collider='floor.glb';
+  await select('a');r.setMode('explore');await r.modeTransition;require(r.mode==='explore','Walk active before invalid destination');second.viewpoints[0].position=[30,1.7,30];await select('b');
   require(r.mode==='jumps'&&r.ready,'Invalid walking start falls back to enabled Viewpoints');second.viewpoints[0].position=[0,1.7,3];
-  await r.selectScene('a');
-  target.viewpoints.forEach(v=>v.listed=false);await r.selectScene('a');require(r.ready&&r.currentViewpoint==='hidden','All unlisted scenes remain usable');
+  await select('a');
+  target.viewpoints.forEach(v=>v.listed=false);await select('a');require(r.ready&&r.currentViewpoint==='hidden','All unlisted scenes remain usable');
   target.viewpoints[0].listed=true;
+  // Reload authored fixture data through a real selection. The viewer's React
+  // state cannot observe this test's direct in-place project mutation alone.
+  await select('b');await select('a');
   const xr=r.renderer.xr,original=xr.isPresenting,button=r.button,labels=[];
   xr.isPresenting=true;r.menuOpen=true;r.menuTab='views';r.button=function(text,...args){labels.push(text);return button.call(this,text,...args);};
   try{r.refreshHud();require(labels.some(t=>t.includes('Starting view'))&&!labels.some(t=>t.includes('Private entry')),'XR menu filters unlisted views');}

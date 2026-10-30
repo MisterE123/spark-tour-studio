@@ -1,9 +1,11 @@
-import React,{useEffect,useState} from 'react';
+import React,{useState,useSyncExternalStore} from 'react';
 import type {TourRuntime,SceneLoadState} from './runtime';
 
+const noSubscription=()=>()=>{},noLoading=():SceneLoadState|null=>null;
+export function useSceneLoading(runtime:TourRuntime|null){return useSyncExternalStore(runtime?.subscribeLoading||noSubscription,runtime?.getLoadingSnapshot||noLoading);}
+
 export function SceneLoading({runtime}:{runtime:TourRuntime|null}){
- const [loading,setLoading]=useState<SceneLoadState|null>(null),[failedCovers,setFailedCovers]=useState<string[]>([]);
- useEffect(()=>{if(!runtime)return;setLoading(runtime.loading);runtime.onLoading=setLoading;return()=>{if(runtime.onLoading===setLoading)runtime.onLoading=()=>{};};},[runtime]);
+ const loading=useSceneLoading(runtime),[failedCovers,setFailedCovers]=useState<string[]>([]);
  if(!loading)return null;
  const cover=[loading.cover,loading.fallbackCover].find(value=>value&&!failedCovers.includes(value))||'';
  return <section className="scene-loading" aria-label={'Loading '+loading.name} aria-busy="true">

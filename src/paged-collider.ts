@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import RAPIER from '@dimforge/rapier3d-compat';
+import type Rapier from '@dimforge/rapier3d-compat';
+import {physics as RAPIER} from '../shared/physics.mjs';
 import {CollisionStream,segmentBoxDistanceSquared} from '../shared/collision-stream.mjs';
 import {collisionTileKey} from '../shared/paged-collision.mjs';
 import {collisionPhysicsChunkConfig,localPhysicsChunks} from '../shared/collision-physics.mjs';
@@ -10,7 +11,7 @@ import {CollisionOverview} from './collision-overview';
 type Point={x:number;y:number;z:number};
 type Chunk={key:string;coord:number[];cells:number;bounds:{min:number[];max:number[]}};
 type Surface={key:string;positions:Float32Array;indices:Uint32Array;complete:boolean};
-type Resident={mesh:THREE.Mesh;collider:RAPIER.Collider;triangles:number};
+type Resident={mesh:THREE.Mesh;collider:Rapier.Collider;triangles:number};
 type FocusWindow={point:THREE.Vector3;body?:THREE.Vector3;samples?:THREE.Vector3[]};
 export type PhysicsLease={release():void};
 const MAX_TRIANGLES=600000,MAX_CHUNKS=2048,BATCH=4;
@@ -23,10 +24,10 @@ export class PagedCollider {
  private surfaces=new Map<string,Resident>();private prepared=new Set<string>();private desired=new Map<string,Chunk>();private skipped=new Set<string>();
  private requests=new Map<number,{resolve:(surfaces:Surface[])=>void;reject:(error:Error)=>void}>();
  private workerPages=new Map<string,unknown>();private leases=new Map<number,FocusWindow>();private leaseSequence=0;
- private primary?:FocusWindow;private centers:THREE.Vector3[]=[];private primaryCenters:THREE.Vector3[]=[];private focusKey='';private planKey='';private revision=0;private sequence=0;private work?:Promise<void>;
+ private primary?:FocusWindow;private centers:THREE.Vector3[]=[];private primaryCenters:THREE.Vector3[]=[];private focusKey='';private planKey='';private revision=0;private sequence=0;private work?:Promise<void>;private buildAbort?:AbortController;
  private focusError?:Error;private coreSquared=1.5625;private config:{cells:number;size:number};private dead=false;private failure='';private lastUpdate=0;private updating?:Promise<void>;
  onError=(message:string)=>{};onChange=()=>{};
- constructor(readonly manifest:any,readonly url:string,readonly world:RAPIER.World){
+ constructor(readonly manifest:any,readonly url:string,readonly world:Rapier.World){
   this.config=collisionPhysicsChunkConfig(manifest.detail,manifest.tileCells);
   this.group.name='paged-collision';this.group.matrixAutoUpdate=false;this.group.matrix.copy(sceneMatrix(manifest.sourceTransform).invert());this.group.matrixWorldNeedsUpdate=true;
   this.overview=new CollisionOverview(manifest,this.group);
@@ -42,9 +43,9 @@ export class PagedCollider {
  private scale(){this.updateFrame();return this.group.matrixWorld.getMaxScaleOnAxis();}
  toGeneration(point:Point){this.updateFrame();return vector(point).applyMatrix4(this.group.matrixWorld.clone().invert());}
  fromGeneration(point:Point){this.updateFrame();return vector(point).applyMatrix4(this.group.matrixWorld);}
- async raycast(ray:THREE.Ray,isCurrent=()=>true,{maxDistance=100,retryDelay=0}={}){
+ async raycast(ray:THREE.Ray,isCurrent=()=>true,{maxDistance=100,retryDelay=0,signal=undefined}:{maxDistance?:number;retryDelay?:number;signal?:AbortSignal}={}){
   const origin=this.toGeneration(ray.origin),direction=this.toGeneration(ray.origin.clone().add(ray.direction)).sub(origin),scale=direction.length();
-  const hit=await raycastCollision(this.stream,origin.toArray(),direction.toArray(),{maxDistance:maxDistance*scale,retryDelay,isCurrent:()=>!this.dead&&isCurrent()});
+  const hit=await raycastCollision(this.stream,origin.toArray(),direction.toArray(),{maxDistance:maxDistance*scale,retryDelay,signal,isCurrent:()=>!this.dead&&isCurrent()});
   return hit?{point:this.fromGeneration({x:hit.point[0],y:hit.point[1],z:hit.point[2]}),normal:new THREE.Vector3(...hit.normal).applyNormalMatrix(new THREE.Matrix3().getNormalMatrix(this.group.matrixWorld))}:null;
  }
  private owner(chunk:Chunk){return collisionTileKey(chunk.coord.map(value=>Math.floor(value*chunk.cells/this.manifest.tileCells)));}
@@ -68,17 +69,18 @@ export class PagedCollider {
   if(key===this.planKey)return;this.planKey=key;this.desired=new Map(sorted.map(chunk=>[chunk.key,chunk]));this.revision++;this.skipped.clear();
   let removed=false;for(const existing of [...this.prepared])if(!this.desired.has(existing)){this.prepared.delete(existing);this.remove(existing);removed=true;}
   for(const existing of [...this.surfaces.keys()])if(!this.desired.has(existing)){this.remove(existing);removed=true;}
-  this.pinPages();if(removed)this.onChange();this.schedule();
+  this.pinPages();this.buildAbort?.abort();this.stream.releaseUnpinned();if(removed)this.onChange();this.schedule();
  }
  private nearChunks(center:THREE.Vector3,radii:number[],depth=0):Chunk[]{const size=this.config.size,point=center.toArray(),count=point.reduce((total,value,i)=>total*(Math.floor((value+radii[i])/size)-Math.floor((value-radii[i])/size)+1),1);if(count<=4096)return localPhysicsChunks(center,radii,this.config) as Chunk[];if(depth>=6||count>65536)throw Error('The local collision scale exceeds its bounded physics window.');const axis=radii.indexOf(Math.max(...radii)),half=[...radii];half[axis]*=.5;const first=center.clone(),second=center.clone();first.setComponent(axis,first.getComponent(axis)-half[axis]);second.setComponent(axis,second.getComponent(axis)+half[axis]);return [...this.nearChunks(first,half,depth+1),...this.nearChunks(second,half,depth+1)];}
  private pinPages(){this.stream.pinned=new Set([...this.desired.values()].map(chunk=>this.owner(chunk)).filter(key=>this.stream.entries.has(key)));}
  /** Primary support pins update synchronously, including while queries load. */
  focus(point:Point,body?:Point){if(this.dead)return;this.primary={point:vector(point),body:body?vector(body):undefined};try{this.plan();this.focusError=undefined;}catch(error){this.focusKey='';this.focusError=error instanceof Error?error:Error(String(error));this.notice(error);}}
  /** Destination preparation preserves the visitor's current support. */
- async prepare(point:Point,_radius=4):Promise<PhysicsLease>{
-  if(this.dead)throw new DOMException('Collision scene disposed.','AbortError');if(this.leases.size>=4)throw new DOMException('A newer navigation request is being prepared.','AbortError');const id=++this.leaseSequence;
+ async prepare(point:Point,_radius=4,{signal}:{signal?:AbortSignal}={}):Promise<PhysicsLease>{
+  if(this.dead||signal?.aborted)throw new DOMException('Collision preparation cancelled.','AbortError');if(this.leases.size>=4)throw new DOMException('A newer navigation request is being prepared.','AbortError');const id=++this.leaseSequence;
   this.leases.set(id,{point:vector(point)});let released=false;const lease={release:()=>{if(released)return;released=true;this.leases.delete(id);try{this.plan();}catch(error){this.focusKey='';this.notice(error);}}};
-  try{this.plan();await this.flush();if(this.dead)throw new DOMException('Collision scene disposed.','AbortError');return lease;}catch(error){lease.release();throw error;}
+  let cancelled:(()=>void)|undefined;
+  try{this.plan();await new Promise<void>((resolve,reject)=>{cancelled=()=>{lease.release();reject(new DOMException('Collision preparation cancelled.','AbortError'));};signal?.addEventListener('abort',cancelled,{once:true});if(signal?.aborted)cancelled();else this.flush().then(resolve,reject);});if(this.dead||signal?.aborted)throw new DOMException('Collision preparation cancelled.','AbortError');return lease;}catch(error){lease.release();throw error;}finally{if(cancelled)signal?.removeEventListener('abort',cancelled);}
  }
  async ensure(point:Point,_radius=4){if(this.dead)throw new DOMException('Collision scene disposed.','AbortError');this.focus(point);if(this.focusError)throw this.focusError;this.schedule();await this.flush();return [...this.stream.pinned];}
  async routeParts(start:Point,end:Point,signal:AbortSignal){
@@ -96,7 +98,7 @@ export class PagedCollider {
  private async rebuild(){
   while(!this.dead){
    const revision=this.revision,entries=[...new Set([...this.desired.values()].map(chunk=>this.owner(chunk)))].flatMap(key=>{const entry=this.stream.entries.get(key);return entry?[entry]:[];});
-   this.pinPages();const loaded=await Promise.allSettled(entries.map(entry=>this.stream.load(entry,{retryDelay:3000})));if(this.dead)return;if(revision!==this.revision)continue;const failed=loaded.find(result=>result.status==='rejected');if(failed?.status==='rejected')this.notice(failed.reason);else this.failure='';
+   this.pinPages();const controller=new AbortController();this.buildAbort=controller;const loaded=await Promise.allSettled(entries.map(entry=>this.stream.load(entry,{retryDelay:3000,signal:controller.signal})));if(this.dead)return;if(revision!==this.revision)continue;const failed=loaded.find(result=>result.status==='rejected');if(failed?.status==='rejected')this.notice(failed.reason);else this.failure='';
    // A failed neighbor is solid, never a fatal scene error. Build the healthy
    // owners (including their closed boundary) and leave failed owners unprepared.
    // Arrival on a later retry invalidates skipped chunks and opens only verified
@@ -143,5 +145,5 @@ export class PagedCollider {
  get residentTriangles(){return this.physicsTriangles;}
  get residentTiles(){return this.stream.resident.size;}
  get residentBytes(){return this.stream.bytes;}
- dispose(){if(this.dead)return;this.dead=true;this.overview.dispose();this.stream.dispose();this.worker.terminate();for(const request of this.requests.values())request.reject(new DOMException('Collision scene disposed.','AbortError'));this.requests.clear();this.leases.clear();this.prepared.clear();this.workerPages.clear();for(const key of [...this.surfaces.keys()])this.remove(key);this.group.removeFromParent();}
+ dispose(){if(this.dead)return;this.dead=true;this.buildAbort?.abort();this.overview.dispose();this.stream.dispose();this.worker.terminate();for(const request of this.requests.values())request.reject(new DOMException('Collision scene disposed.','AbortError'));this.requests.clear();this.leases.clear();this.prepared.clear();this.workerPages.clear();for(const key of [...this.surfaces.keys()])this.remove(key);this.group.removeFromParent();}
 }

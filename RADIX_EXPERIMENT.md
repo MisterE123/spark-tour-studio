@@ -13,6 +13,29 @@ identity, full component notices and checksums. The standalone EXE and runtime
 ZIP remain separate downloads as well. CI verifies the complete archive before
 uploading it; a missing editor bundle fails publication.
 
+## Current verified delivery — October 30
+
+The GPU-preferred importer and corrected native packaging are compiled at
+`29c38edfe332dfb617bcca9e7fa6cfaf65cdc0bf`, with clean build metadata.
+[Experimental CI 41063088479](https://github.com/MisterE123/spark-tour-studio/actions/runs/41063088479)
+passed all 492 tests, actual pre/post-package conversion, rendering/selectors,
+collision meshers, XR continuity, native queued authoring/export, retained RAD
+scene replacement, portable launch and full ZIP verification. The gated
+[experimental prerelease](https://github.com/MisterE123/spark-tour-studio/releases/tag/radix-sogs-experiment-5-1-29c38edf)
+is published; its complete Windows ZIP matches its published checksum manifest.
+
+Local portable: `experimental-release/3DGS Perspectives Studio 1.23.0 Experimental 29c38edf.exe`.
+SHA-256: `9f61a6413468a0172466ebf9f1a912efd93773dad4da500ac84a9a70786c4dab`.
+Local complete ZIP: `experimental-artifacts/3DGS-Perspectives-Studio-1.23.0-Radix-SOGS-Experimental-29c38edf-windows-x64.zip`.
+SHA-256: `7dd9926ac473d8ea96603b1cdee49adbae28ab4839665d451928950cf3533616`.
+GitHub's independently built ZIP SHA-256:
+`cd5df0a7d7c40b33d34e19c262a0c7edb62ad93cacbd1e1d073180fddbff0c4a`.
+Local actual portable startup/About/normal close and packaged Studio identity/
+visitor graph checks pass in `test-output/portable smoke 1793367259132` and
+`test-output/studio-build-1793367392936`. Full archive and publication checksum
+gates pass in `test-output/sogs-gpu-delivery-zip.log` and
+`test-output/sogs-gpu-local-publish-gates.log`.
+
 ## Scope and provenance
 
 The shared viewer uses **Radix 0.0.1** behind `src/rendering/backend.ts`.
@@ -178,7 +201,7 @@ dependency graph, then publishes an experimental prerelease with checksums.
 Portable packaging and the complete branch CI have passed. This remains an
 experiment, not a claim of complete Spark API parity.
 
-Clean-source local preview: `experimental-release/3DGS Perspectives Studio
+Initial clean-source local preview: `experimental-release/3DGS Perspectives Studio
 1.23.0 Experimental b7e028db.exe`, compiled from
 `b7e028dbebaa4693fe298716b7920a8f138c8823`, `dirty=false`.
 SHA-256: `b04f913f80b9d929bc519e034ab8600b102a2048e6b38315e8248d9a407c711d`.
@@ -196,7 +219,7 @@ graphics validation errors, deleted textures and unknown warnings remain failure
 This repair changes tests and documentation only; the compiled application above
 remains current.
 
-Final delivery verification:
+Initial delivery verification:
 
 - Full branch [CI 41007920729](https://github.com/MisterE123/spark-tour-studio/actions/runs/41007920729)
   passed at `dcb13f9fc3bf0a6e9ed8ae820e9701dd2a996094`, including all 462 tests,
@@ -268,3 +291,53 @@ Local follow-up checkpoint: 490/490 unit/integration tests pass in
 in `test-output/sogs-conversion-1793365938726/result.json`: both paths produce
 2,047 / 1,024 / 512 Gaussians, preserve the finest signed coordinates and SH1
 colors within measured compression error, and pass fallback/cancellation tests.
+
+The exact packaged tools also pass real GPU/CPU SH1 and SH3 round trips,
+offline operation without Node on PATH, missing-native fallback, strict GPU-only
+failure, active cancellation and all native dependency/license hashes:
+`test-output/sogs-conversion-1793366916220/result.json` and
+`test-output/sogs-conversion-1793367568102/result.json`. SH3 retains all 45
+harmonic coefficients; measured maximum coefficient error is below 0.000155.
+Actual native GUI Processing choices, queue execution details after acknowledgment,
+replacement, cancellation, Save/reopen and portable export all pass in
+`test-output/radix-authoring-1793366045205/result.json`.
+
+### Full-size Hungars Aerial validation
+
+A separate byte-copy of the supplied 3,471,052,437-byte PLY converted on the
+RTX 3090 using required WebGPU, adaptive reduction, SH0, five total levels and
+one compression iteration. It completed and validated 1,201 graph files in
+3,284.5 seconds (about 55 minutes), with no CPU fallback. Report:
+`test-output/aerial-gpu-1793364522744/result.json`. This is an actual conversion
+time for those settings, not a CPU/GPU speed comparison or a promise for other
+hardware/default compression settings. Disk partitioning and CPU work remain.
+
+The long run began before the odd-budget rounding improvement, so its reduced
+counts use floor rounding: 13,996,173 / 6,998,086 / 3,499,043 / 1,399,617 /
+699,808. The current packaged tool rounds reduced budgets upward by at most
+one point and is independently exercised on both CPU and GPU. Finest detail
+count is unchanged. The original PLY's complete SHA-256, size and modification
+time remain unchanged; final hash:
+`60f1013f8b0e9200eb847e99903f46dd52170f14b1b29f3f5948f7a97b1a0f06`.
+Before/after records are in the same evidence directory.
+
+The complete generated scene loads and renders in the built WebGPU viewer,
+including the original isolated Hungars Aerial authored camera poses. Two views
+share one runtime/canvas/renderer and stream actual metadata/textures without
+external requests, HTTP failures, page errors or GPU errors:
+`test-output/aerial-sogs-render-1793368321967/result.json` and
+`test-output/aerial-sogs-render-1793368413907/result.json`. These deliberately
+small-budget checks establish loading and coordinate continuity, not final image
+quality or frame rates. Mandatory coarse coverage can exceed the requested
+budget (about 700,000 coarse splats for this default five-level output); more
+reduced levels can provide lighter overview data for large scenes.
+
+A separate higher-detail pass using the preserved authored cameras also passes:
+`test-output/aerial-sogs-render-1793368547338/result.json`. With 2M selected /
+4M resident limits, actual selected/shown splats rise to 939,375 from the coarse
+699,823, with paging settled and 36 chunk metadata files / 180 texture requests.
+The screenshots show the church/property in the expected orientation. Runtime,
+renderer, canvas, camera and rig identities remain unchanged between views;
+there are no failed/external requests, page errors or GPU errors. Those limits
+are upper budgets, not a claim that two million splats were drawn or an FPS
+benchmark. Physical Quest behavior and comparative performance remain user tests.

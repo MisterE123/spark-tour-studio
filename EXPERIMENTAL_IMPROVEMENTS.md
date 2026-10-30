@@ -26,15 +26,39 @@ move the visitor later. Current floor support and the existing XR session stay
 intact. In the controlled stalled-request regression, a new aim reached green
 in 49 ms; this is a test result, not a Quest hardware latency promise.
 
-### October 29: Drone targeting corrected; physical Walk freeze still open
+### October 29: physical freeze traced to old shared export; Drone targeting corrected
 
-The latest physical Quest report is distinct from the October 28 cached-query
-reproduction below. In North Graveyard, Drone targets were usually red, and a
-second Walk teleport after switching from Drone produced a white marker and
-froze the scene. **The new physical Walk freeze is not yet diagnosed or fixed.**
-Yesterday's `b96a242` browser/package regression and green CI remain valid for
-their tested conditions; they do not establish that this new hardware report is
-resolved.
+The North Graveyard physical freeze now has a captured cause. Although a newer
+dated export existed, port 8443 was still served by the old
+`Downloads/tst_exp_out-10-28-26/Launch Tour.exe` process (PID 41608). The Quest
+loaded `assets/runtime-DeGdIXAE.js`, whose SHA-256
+`d81341ccfc233b11266bba38a916b7399e5debceb0e9617ad4c19624d72ab6d9`
+matches that old export exactly. A fresh host request returned HTTP 200 with
+those same bytes and their October 28 modification date. Refreshing the page
+therefore reloaded the old runtime from the active server; the new files in the
+October 29 folder were not being served.
+
+The actual Quest CPU trace captures the original cached-query completion loop:
+92.31% of 20,560 sampled stacks include the old teleport completion closure,
+whose `finally` calls `updateTeleport()` again. The loaded script lacks the
+corrected exact-ray retention. Evidence is recorded in
+`test-output/quest-trace-1793329883313/trace.json`, `profile-analysis.json`,
+`old-runtime-proof.json` and `freeze-conclusion.json`. This confirms the October
+28 failure below on physical hardware; it does not demonstrate a new failure
+in `b96a242`.
+
+The dated `Downloads/tst_exp_out-10-29-26` export contains the corrected
+`runtime-CyOvULPW.js`, SHA-256
+`a9ddfc569b54b9b0117389c40fd4b1058f97470aa927dd586ba324308de0ab6b`,
+matching the verified `b96a242` runtime. Both launchers had been running: the new
+export initially used port 51966 while yesterday's launcher retained 8443.
+After restarting sharing, port 8443 belongs to the October 29 export (PID 38540).
+Read-only inspection of the actual Quest page confirms it loaded
+`runtime-CyOvULPW.js`, at
+`test-output/quest-correct-runtime-1793330941204/result.json`.
+The user reports no freeze on this corrected version, and reports successful
+export and desktop viewing. Yesterday's browser/package regression and green
+CI remain valid. No additional Walk product change is justified by this capture.
 
 The Drone false-red cause is confirmed. Its paged-collision check required a
 standing walking capsule above the picked splat, even though Drone movement uses
@@ -75,13 +99,13 @@ request cancellation and full scaled head-safety regressions also pass at
 `test-output/teleport cancellation 1793328413344/` and
 `test-output/xr head collision 1793328413916/`.
 
-Physical-device evidence already confirms a busy renderer during the reported
-freeze: `test-output/quest-capture-1793326598459/renderer19364-threads.txt`
+The earlier device capture at
+`test-output/quest-capture-1793326598459/renderer19364-threads.txt`
 records `CrRendererMain` at 100% CPU, with the renderer process near 99% in
-`browser-cpu-live.txt`. This identifies a stalled busy renderer, not its exact
-JavaScript/WASM call stack. Wi-Fi debugging and profiler capture are armed at
-`test-output/quest-armed-1793327893865/`; another physical reproduction is
-pending. The user's original projects and exports remain unchanged.
+`browser-cpu-live.txt`. The subsequent live Wi-Fi profiler trace above resolves
+that busy renderer to the old JavaScript completion loop, rather than an
+unidentified graphics stall. The user's original projects and export files
+remain unchanged; choosing the correct launcher changes which folder is served.
 
 For the next user test, re-export using the replacement preview once provided.
 In North Graveyard, aim in Drone around low obstacles and at nearby/distant
@@ -89,9 +113,11 @@ surfaces: safe camera positions should reach green; a cold check should first
 be neutral; a head that actually intersects geometry should stay red. Hold the
 trigger while retargeting, open the menu, switch hands/modes, and release;
 canceled results must not move the visitor later. Repeat with authored VR scale
-overrides. Then separately repeat the reported Drone → Walk → second teleport
-sequence while physical profiling is active. The Walk freeze remains an open
-acceptance failure until its cause is captured and a hardware retest succeeds.
+overrides. The Walk hardware retest on the corrected October 29 runtime now has
+the user's successful confirmation. The additional Drone clearance correction
+in `979a895` remains separately browser/emulated-XR verified; its specific
+clearance behavior still merits a short physical Quest check in the replacement
+preview.
 
 ### October 28: cached wall-grazing Walk query loop
 
@@ -576,8 +602,9 @@ skipped. No application source changed during these fixture/CI-budget repairs.
 The October 28 cached wall-grazing query loop is fixed and verified in
 `b96a242`, including the tested Drone → Walk sequence and same-session stereo
 rendering. That green run and preview supersede this pre-fix baseline. The
-subsequent physical North Graveyard freeze is a separate open report, as
-recorded in the October 29 follow-up above.
+subsequent physical North Graveyard freeze was traced to the old export still
+being served on port 8443, as recorded in the October 29 follow-up above. The
+user's corrected-runtime Quest retest and export/desktop checks now pass.
 
 Full source CI for `134bd61` completed at
 [run 40659512940](https://github.com/MisterE123/spark-tour-studio/actions/runs/40659512940).

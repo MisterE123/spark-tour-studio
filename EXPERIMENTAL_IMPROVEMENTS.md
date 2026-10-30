@@ -90,14 +90,34 @@ session/renderer/camera/rig/stereo identities. Only the physical XR platform and
 controlled asynchronous hold/rejection are emulated; Spark picking, paged
 coverage and Rapier head clearance are real. The focused check is registered
 beside the existing XR liveness check in branch CI. Build evidence:
-`test-output/build-quest-drone-2026-10-29.log`. A replacement packaged preview
-is still pending. The combined source checkpoint passes **436/436** unit and
+`test-output/build-quest-drone-2026-10-29.log`. The combined source checkpoint passes **436/436** unit and
 integration tests in 132.7 seconds at
 `test-output/unit-quest-drone-2026-10-29.log`. Existing Walk stereo liveness,
 request cancellation and full scaled head-safety regressions also pass at
 `test-output/XR teleport liveness 1793328311137/`,
 `test-output/teleport cancellation 1793328413344/` and
 `test-output/xr head collision 1793328413916/`.
+
+The current clean-source Windows preview is
+`experimental-release/3DGS Perspectives Studio 1.22.3 Experimental 17238ddb.exe`,
+compiled from `17238ddb50280e498edcacddfd96617cb0b4162b` with `dirty=false`.
+Its runtime matches source correction `979a895`; the later commit records only
+the real-device diagnosis and successful user retest. SHA-256:
+`137b02f84a399740cbcbc3746210fa8551be61fb9268a434a4c19d7dedc67295`.
+The actual portable launch/About/normal-close check passes at
+`test-output/portable smoke 1793331431977/`; packaged experimental identity and
+the visitor dependency graph pass at `test-output/studio-build-1793331432151/`.
+The stable 1.22.3 executable hash remains
+`c0cde256a9a0c0fea4ca01c778ce1e0fa348ae979c71a6c6507ce7c7d1759507`.
+Full branch CI for source `979a895` is running without reported failures at
+[run 40994195022](https://github.com/MisterE123/spark-tour-studio/actions/runs/40994195022).
+Wait for its green result before merging. Main remains unchanged; a merge has
+not been authorized. Verification-only documentation pushes are held while
+that source run finishes.
+
+Headset USB trust and keep-awake were ADB device settings for diagnosis, not
+app or exported-tour behavior. Temporary Wi-Fi ADB and its host forward were
+disabled after capture; the user-requested USB trust/keep-awake remain enabled.
 
 The earlier device capture at
 `test-output/quest-capture-1793326598459/renderer19364-threads.txt`

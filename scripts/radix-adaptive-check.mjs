@@ -81,8 +81,8 @@ state.settle=async()=>{
  }
  return state.snapshot();
 };
-state.feedback=async(duration,fps)=>{
- const step=1000/fps;for(let i=0;i<Math.ceil(duration/step);i++){state.time+=step;runtime.updateAdaptivePerformance(state.time,step,runtime.renderer.xr.isPresenting,runtime.xrInputSuspended,0);}
+state.feedback=async(duration,fps,fadeEvery=0)=>{
+ const start=state.time,step=1000/fps;for(let i=0;i<Math.ceil(duration/step);i++){state.time+=step;const opacity=fadeEvery&&(state.time-start)%fadeEvery<220?.95:0;runtime.updateAdaptivePerformance(state.time,step,runtime.renderer.xr.isPresenting,runtime.xrInputSuspended,opacity);}
  return state.settle();
 };
 state.startXR=async()=>{runtime.renderer.backend.makeXRCompatible=async()=>{};runtime.renderer.setAnimationLoop((time,frame)=>runtime.frame(time,frame));await runtime.enterXR();state.xrRefs={renderer:runtime.renderer,camera:runtime.camera,rig:runtime.rig,manager:runtime.renderer.xr};const before=state.time;state.time=Math.max(state.time,performance.now());if(state.time<before||state.time<(runtime.mesh?.stream?.selectedAt||0))throw Error('The isolated cadence clock must remain monotonic across XR entry');runtime.last=state.time;};
@@ -163,7 +163,9 @@ try{
    state=await page.evaluate(()=>test.feedback(12000,20));assert.equal(state.scale,.01);assert.equal(state.budget,50000);assert.equal(state.session,true);assert.deepEqual(state.xrIdentity,{renderer:true,camera:true,rig:true,manager:true});await record('XR feedback passes the old quarter-budget floor without replacing its session or renderer',state);
    state=await page.evaluate(()=>{test.reset({});test.runtime.toggleMenu();return test.feedback(2300,20);});assert.equal(state.menuOpen,true);assert.ok(state.scale<1,'immersive menu rendering remains actual headset load');assert.equal(state.session,true);await record('Automatic detail remains active behind an open XR menu',state);
    state=await page.evaluate(()=>{test.reset({});test.runtime.jump(test.runtime.active.entry,false);test.runtime.openViewDetails();return test.feedback(2300,20);});assert.equal(state.contentOpen,true);assert.equal(state.menuOpen,true);assert.ok(state.scale<1,'immersive description rendering must not indefinitely suspend automatic detail');assert.equal(state.session,true);await record('Automatic detail remains active behind actual XR viewpoint content',state);
-   state=await page.evaluate(()=>{test.reset({});return test.feedback(20000,20);});await record('XR reaches a lower effective budget while retaining mandatory source imagery',state);assert.equal(state.scale,.01);assert.equal(state.budget,500);assert.ok(state.selected<original);assert.ok(state.shown>=8192,'source coarse coverage is retained even below the requested adaptive budget');
+   state=await page.evaluate(()=>{test.reset({});test.sessions[0].frameRate=90;return test.feedback(20000,20);});await record('XR stops reducing at the actual mandatory source coverage',state);assert.equal(state.scale,8192/50000);assert.equal(state.budget,8192);assert.ok(state.selected<original);assert.ok(state.shown>=8192,'mandatory coarse coverage is retained');
+   state=await page.evaluate(()=>test.feedback(55000,90,5000));assert.ok(state.budget>8192,'brief teleport-sized fades cannot erase all recovery evidence');assert.ok(state.selected>8192,'healthy delivery with repeated fades must refine actual production LoD selection');assert.equal(state.session,true);assert.deepEqual(state.xrIdentity,{renderer:true,camera:true,rig:true,manager:true});await record('Healthy XR recovery refines real imagery despite repeated220ms fades',state);
+   state=await page.evaluate(()=>{test.reset({radix:{lodRangeMin:0,lodRangeMax:0}});return test.feedback(20000,20);});assert.equal(state.budget,32768);assert.equal(state.selected,32768);await record('Authored single-level XR range uses its effective coverage floor',state);
    state=await page.evaluate(()=>{test.reset({});test.sessions[0].visibilityState='visible-blurred';return test.feedback(10000,20);});assert.equal(state.scale,1,'system-menu suspension cannot lower scene budget');await record('XR system-menu suspension excludes samples',state);
    await page.evaluate(async()=>{test.sessions[0].visibilityState='visible';await test.sessions[0].end();test.runtime.renderer.setAnimationLoop(null);});
   }

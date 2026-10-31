@@ -73,7 +73,7 @@ export class TourRuntime {
  readonly framePerformance=new FramePerformanceTracker();
  get adaptiveDetailScale(){return this.adaptiveDetail.scale;}
  subscribePerformance(listener:(settings:PerformanceSettings)=>void){this.performanceListeners.add(listener);return()=>{this.performanceListeners.delete(listener);};}
- private adaptiveScale=1;private pendingDestination?:{id:string;viewpoint?:string};
+ private adaptiveScale=1;private adaptiveBaseBudget=4_000_000;private pendingDestination?:{id:string;viewpoint?:string};
  private lastViewpoints=new Map<string,string>();private selectedViewpoint='';
  get currentViewpoint(){return this.selectedViewpoint;}
  set currentViewpoint(id:string){if(id===this.selectedViewpoint)return;this.selectedViewpoint=id;this.applyScenePerformance();}
@@ -360,14 +360,17 @@ export class TourRuntime {
   for(const listener of this.performanceListeners)listener(s);
  }
  private resetAdaptivePerformance(immersive:boolean){
+  this.adaptiveBaseBudget=radixPerformanceSettings(this.performanceSettings).selectedSplatBudget;
   this.adaptiveScale=immersive?radixAdaptiveXrEntryScale(this.performanceSettings):1;
   this.adaptiveDetail.reset(this.adaptiveScale);this.backend.applySettings(radixRenderSettings(this.performanceSettings,this.adaptiveScale));
  }
  private updateAdaptivePerformance(time:number,frameMs:number,xr:boolean,suspended:boolean,opacity:number){
   if(!this.performanceSettings.adaptiveDetail)return;
   const refresh=(this.renderer.xr.getSession() as (XRSession&{frameRate?:number})|null)?.frameRate,targetFps=xr?(refresh||72):(this.performanceSettings.adaptiveTargetFps??60);
-  const eligible=this.ready&&!this.loading&&!!this.active&&this.backend.stats.shown>0&&!document.hidden&&!this.editing&&!this.blocked&&!this.flight&&!this.preparingMode&&!this.colliderLoading&&!suspended&&(xr||!this.menuOpen&&!this.currentPage)&&opacity===0;
-  const scale=this.adaptiveDetail.sample({time,frameMs,targetFps,eligible,immersive:xr,context:this.generation+':'+(xr?'xr:'+targetFps:'desktop')});
+  const observable=this.ready&&!this.loading&&!!this.active&&this.backend.stats.shown>0&&!document.hidden&&!this.editing&&!this.blocked&&!this.flight&&!this.preparingMode&&!this.colliderLoading&&!suspended&&(xr||!this.menuOpen&&!this.currentPage);
+  const eligible=observable&&(xr||opacity===0),paused=xr&&observable&&opacity>0;
+  const minimumScale=xr?Math.min(1,(this.backend.stats.selectionFloor??0)/this.adaptiveBaseBudget):0;
+  const scale=this.adaptiveDetail.sample({time,frameMs,targetFps,eligible,paused,minimumScale,immersive:xr,context:this.generation+':'+(xr?'xr:'+targetFps:'desktop')});
   if(scale!==this.adaptiveScale){this.adaptiveScale=scale;this.backend.applySettings(radixRenderSettings(this.performanceSettings,scale));}
  }
  setQuality(q:number){const settings=radixPerformanceSettings(this.performanceBase),factor=THREE.MathUtils.clamp(q,.25,2);this.applyPerformance({...this.performanceBase,radix:{...settings,selectedSplatBudget:Math.max(50000,Math.min(settings.residentSplatBudget,Math.round(settings.selectedSplatBudget*factor/this.quality)))}});this.quality=factor;}

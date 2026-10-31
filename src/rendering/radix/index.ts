@@ -5,7 +5,7 @@ import {radixSourceIssue} from '../../../shared/radix-source.mjs';
 import {SplatAssetGroup,type SplatAssetMetadata,type SplatAssetOptions,type SplatAssetStats,type SplatBackend,type SplatBackendStats,type RadixBackendOptions,type RadixRenderSettings} from '../backend';
 import {createRenderer,getGpuCaps,SplatRenderer,SplatCollection,WorkerPool,type AnySplatObject} from './vendor/radix.module.js';
 import {openSogInput} from './sog/sog';
-import {parseLod,defaultLodSettings,type LodSettings} from './sog/lod';
+import {parseLod,defaultLodSettings,levelChains,type LodSettings} from './sog/lod';
 import {SogLodStream} from './sog/lodStream';
 import {decodeSogGpu} from './sog/gpuDecode';
 import {sogObject,type SogArrays,type SogSelection} from './sog/sh';
@@ -98,6 +98,12 @@ class RadixAsset extends SplatAssetGroup {
  applySettings(settings:RadixRenderSettings){
   this.ownSettings={...settings};this.updateDistances();
   Object.assign(this.lod,{splatBudget:settings.selectedSplatBudget,residentBudget:settings.residentSplatBudget,multiplier:settings.lodMultiplier,behindPenalty:settings.lodBehindPenalty,underfillLimit:settings.lodUnderfill,rangeMin:settings.lodRangeMin,rangeMax:settings.lodRangeMax,budgetMode:settings.lodBudgetMode,updateAngle:settings.lodUpdateAngle});
+  if(this.stream){
+   const tree=this.stream.tree,rangeMax=Math.max(0,Math.min(this.lod.rangeMax,tree.levels-1)),rangeMin=Math.max(0,Math.min(this.lod.rangeMin,rangeMax));
+   // Match selectLevels, including sparse-level fallback. This cached chain
+   // calculation runs on metadata/settings changes, never per-frame per leaf.
+   this.stats.selectionFloor=levelChains(tree,rangeMin,rangeMax).coarsest;
+  }
   this.setMaxSh(this.degree);this.stream?.invalidate();
  }
  private updateDistances(){
@@ -130,7 +136,7 @@ class RadixAsset extends SplatAssetGroup {
   if(this.dead)return;this.dead=true;this.abort.abort();this.unlink?.();
   if(this.settled==='pending')this.reject(canceled());
   this.stream?.dispose();if(this.single&&!this.published)this.single.object.release?.();this.single?.resident.drop();this.selectionOwner.drop();this.proxy.dispose();
-  this.current=SplatCollection.EMPTY;this.stats.phase='disposed';this.removeFromParent();this.owner.forget(this);
+  this.current=SplatCollection.EMPTY;this.stats.phase='disposed';this.stats.selectionFloor=undefined;this.removeFromParent();this.owner.forget(this);
  }
 }
 
@@ -170,8 +176,13 @@ export class RadixBackend implements SplatBackend {
   this.head.matrixAutoUpdate=false;this.physicalView.matrixAutoUpdate=false;this.physicalView.matrixWorldAutoUpdate=false;this.applySettings(settings);
  }
  createAsset(url:string,options:SplatAssetOptions={}){if(this.dead)throw new Error('The splat renderer is closed.');options.signal?.throwIfAborted();const asset=new RadixAsset(this,url,options);this.assets.add(asset);return asset;}
- forget(asset:RadixAsset){this.assets.delete(asset);this.presented.delete(asset);}
+ forget(asset:RadixAsset){this.assets.delete(asset);this.presented.delete(asset);this.refreshSelectionFloor();}
  private attached(asset:RadixAsset){let root:THREE.Object3D=asset;for(;;){if(!root.visible)return false;if(!root.parent)break;root=root.parent;}let scene:THREE.Object3D=this.node;while(scene.parent)scene=scene.parent;return asset.parent!==null&&root===scene;}
+ private refreshSelectionFloor(){
+  let floor:number|undefined;
+  for(const asset of this.assets)if(this.attached(asset)&&asset.stats.selectionFloor!==undefined)floor=floor===undefined?asset.stats.selectionFloor:Math.min(floor,asset.stats.selectionFloor);
+  this.stats.selectionFloor=floor;
+ }
  private physicalCamera(camera:THREE.Camera):THREE.Camera{
   const array=camera as THREE.ArrayCamera;
   if(!array.isArrayCamera||array.cameras.length<2)return camera;
@@ -191,12 +202,13 @@ export class RadixBackend implements SplatBackend {
   this.head.aspect=Math.abs((eye?.projectionMatrix.elements[5]||1)/(eye?.projectionMatrix.elements[0]||1));
   const applied=this.node.sortMode==='gpu'||this.node.collection.count===0||this.node.view?.order?.collection===this.node.collection;
   const objects:AnySplatObject[]=[],members=new Set<RadixAsset>();
-  Object.assign(this.stats,{selected:0,shown:0,residentSplats:0,loading:0,failed:0});
+  Object.assign(this.stats,{selected:0,shown:0,residentSplats:0,loading:0,failed:0,selectionFloor:undefined});
   for(const asset of this.assets){
    if(!this.attached(asset))continue;
    if(applied)try{asset.update(time);}catch(error){asset.reportError(error);}
    objects.push(...asset.collection.objects.map(entry=>entry.object));if(asset.collection.count)members.add(asset);
    this.stats.selected+=asset.stats.selected;this.stats.shown+=asset.stats.shown;this.stats.residentSplats+=asset.stats.residentSplats;this.stats.loading+=asset.stats.loading;this.stats.failed+=asset.stats.failed;
+   if(asset.stats.selectionFloor!==undefined)this.stats.selectionFloor=this.stats.selectionFloor===undefined?asset.stats.selectionFloor:Math.min(this.stats.selectionFloor,asset.stats.selectionFloor);
   }
   if(objects.length!==this.composed.length||objects.some((object,i)=>object!==this.composed[i])){this.composed=objects;this.node.collection=objects.length?new SplatCollection(objects):SplatCollection.EMPTY;this.members=members;for(const asset of members)asset.notePublished();this.presented.clear();}
  }
@@ -221,6 +233,7 @@ export class RadixBackend implements SplatBackend {
   Object.assign(this.node.objectParams,{minPixelRadius:s.minPixelRadius,maxPixelRadius:s.maxPixelRadius,minContribution:s.minContribution,blurAmount:s.blurAmount,preBlurAmount:s.preBlurAmount,sortGuard:s.sortGuard,maxShDegree:s.maxShDegree});
   if(!this.renderer.xr.isPresenting)this.renderer.setPixelRatio(Math.min(devicePixelRatio,s.pixelRatio));
   for(const asset of this.assets)asset.applySettings(s);
+  this.refreshSelectionFloor();
  }
  dispose(){if(this.dead)return;this.dead=true;this.renderer.setAnimationLoop(null);for(const asset of [...this.assets])asset.dispose();this.node.dispose();this.node.removeFromParent();this.sortPool.dispose();this.members.clear();this.presented.clear();this.composed=[];this.renderer.dispose();this.renderer.domElement.remove();}
 }

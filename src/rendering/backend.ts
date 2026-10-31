@@ -12,6 +12,8 @@ export interface RadixRenderSettings {
 export interface SplatAssetMetadata {format:'sog'|'sogs'|'sog-lod';lod:boolean;splatCount:number;levels:number;bounds:THREE.Box3}
 export interface SplatAssetStats {
  phase:'loading'|'streaming'|'ready'|'error'|'disposed';selected:number;shown:number;residentSplats:number;residentFiles:number;loading:number;failed:number;error:string;
+ /** Mandatory selectable leaf coverage for this LoD asset; excludes fixed environment splats. */
+ selectionFloor?:number;
 }
 export interface SplatAssetOptions {signal?:AbortSignal;maxSh?:number;onProgress?:(fraction:number,stage:string)=>void;onError?:(error:Error)=>void}
 /** A renderer-independent authored transform and bounded surface-picking target. */
@@ -27,7 +29,11 @@ export abstract class SplatAssetGroup extends THREE.Group {
  abstract dispose():void;
  abstract retry():void;
 }
-export interface SplatBackendStats {backend:'webgpu'|'webgpu-gl';selected:number;shown:number;visible:number;residentSplats:number;loading:number;failed:number;frames:number}
+export interface SplatBackendStats {
+ backend:'webgpu'|'webgpu-gl';selected:number;shown:number;visible:number;residentSplats:number;loading:number;failed:number;frames:number;
+ /** Lowest per-asset LoD floor among attached visible assets. Undefined if none can adapt. */
+ selectionFloor?:number;
+}
 export interface SplatBackend {
  readonly renderer:WebGPURenderer;
  readonly node:THREE.Object3D;

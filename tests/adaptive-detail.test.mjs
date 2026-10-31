@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {AdaptiveDetailController} from '../shared/adaptive-detail.mjs';
 import {PerformanceSettingsSchema,PerformancePresetSchema,presetFile} from '../shared/performance.mjs';
 
-function harness(){const controller=new AdaptiveDetailController();let time=0;const trace=[];return {controller,trace,drive(duration,{fps=60,targetFps=60,eligible=true,context='scene:desktop',immersive=false}={}){const step=1000/fps,end=time+duration;for(;time<end;time+=step){const before=controller.scale;controller.sample({time,frameMs:step,targetFps,eligible,context,immersive});if(before!==controller.scale)trace.push({time,scale:controller.scale});}return controller.scale;},stall(ms){time+=ms;return controller.sample({time,frameMs:ms,targetFps:60,eligible:true,context:'scene:desktop'});}};}
+function harness(){const controller=new AdaptiveDetailController();let time=0;const trace=[];return {controller,trace,drive(duration,{fps=60,targetFps=60,eligible=true,context='scene:desktop',immersive=false,minimumScale=0,paused=false}={}){const step=1000/fps,end=time+duration;for(;time<end;time+=step){const before=controller.scale;controller.sample({time,frameMs:step,targetFps,eligible,context,immersive,minimumScale,paused});if(before!==controller.scale)trace.push({time,scale:controller.scale});}return controller.scale;},stall(ms){time+=ms;return controller.sample({time,frameMs:ms,targetFps:60,eligible:true,context:'scene:desktop'});}};}
 
 test('automatic detail is opt-in and survives old and new named preset round trips',()=>{
  const old=PerformanceSettingsSchema.parse({});assert.equal('adaptiveDetail' in old,false);assert.equal('adaptiveTargetFps' in old,false);
@@ -100,4 +100,38 @@ test('immersive safety exclusions and cautious recovery preserve a seeded device
 
 test('an isolated immersive screenshot-sized stall does not cut detail',()=>{
  const c=new AdaptiveDetailController();let time=0;for(let i=0;i<400;i++){const ms=i===100?500:1000/72;time+=ms;c.sample({time,frameMs:ms,targetFps:72,eligible:true,immersive:true});}assert.equal(c.scale,1);
+});
+
+test('immersive overload stops at mandatory source coverage instead of wasting recovery below it',()=>{
+ const minimumScale=748652/4000000,h=harness(),options={fps:20,targetFps:90,immersive:true,minimumScale,context:'source:xr'};
+ h.drive(30000,options);assert.equal(h.controller.scale,minimumScale);assert.equal(h.controller.scale*4000000,748652);assert.ok(h.trace.some(change=>change.scale<1),'levels above mandatory coverage remain reducible');assert.ok(h.trace.every(change=>change.scale>=minimumScale));
+ h.drive(12000,{...options,fps:90});assert.ok(h.controller.scale>minimumScale,'healthy recovery starts from real coverage, not an ineffective 1% request');
+ const belowFloor=harness();belowFloor.controller.reset(.15);belowFloor.drive(10000,{...options,minimumScale:748652/500000});assert.equal(belowFloor.controller.scale,1,'source coverage above the authored ceiling cannot authorize detail above that ceiling');
+ const desktop=harness();desktop.drive(7000,{fps:10,minimumScale:2});assert.equal(desktop.controller.scale,.75,'mandatory XR coverage does not change desktop policy');
+});
+
+test('90 Hz viewing recovers above its 750k seed despite recurring brief comfort fades',()=>{
+ const c=new AdaptiveDetailController(),minimumScale=748652/4000000;c.reset(750000/4000000);
+ const step=1000/90;for(let time=0;time<16000;time+=step){const paused=time>=5000&&time%5000<220;c.sample({time,frameMs:step,targetFps:90,eligible:true,immersive:true,minimumScale,paused,context:'walking:xr'});}
+ assert.ok(c.scale*4000000>750000,'a 220 ms fade every five seconds must not erase all healthy recovery evidence');assert.ok(c.scale<=.287501,'recovery remains gradual');
+});
+
+test('brief pauses contribute neither frame durations nor healthy elapsed time',()=>{
+ const c=new AdaptiveDetailController();c.reset(.2);let time=0;
+ const sample=(duration,paused=false,frameMs=10)=>{const end=time+duration;for(;time<end;time+=10)c.sample({time,frameMs,targetFps:90,eligible:true,immersive:true,paused,context:'pause:xr'});};
+ sample(8500);const fast=c.fastMs,average=c.average;assert.equal(c.scale,.2);
+ sample(300,true,1000);assert.equal(c.fastMs,fast);assert.equal(c.average,average,'covered-frame intervals must not become overload evidence');
+ sample(200);assert.equal(c.scale,.2,'the paused 300 ms must not complete the recovery decision window');assert.ok(c.fastMs-fast<=200,'only resumed visible intervals count');
+ sample(500);assert.equal(c.scale,.25,'retained healthy evidence resumes normally');
+});
+
+test('sustained covers, ordinary ineligibility and context changes require fresh observation',()=>{
+ const options={fps:90,targetFps:90,immersive:true,context:'source:xr'};
+ for(const reason of ['long cover','hidden or loading','new context']){
+  const h=harness();h.controller.reset(.2);h.drive(5000,options);
+  h.drive(reason==='long cover'?700:220,{...options,paused:true,...(reason==='hidden or loading'?{eligible:false}:{}),...(reason==='new context'?{context:'next:xr'}:{})});
+  assert.equal(h.controller.average,undefined,reason+' clears the prior observation');assert.equal(h.controller.fastMs,0);
+  const resumed={...options,...(reason==='new context'?{context:'next:xr'}:{})};h.drive(8000,resumed);assert.equal(h.controller.scale,.2,reason+' cannot borrow its previous healthy window');h.drive(2000,resumed);assert.equal(h.controller.scale,.25);
+ }
+ const c=new AdaptiveDetailController();c.reset(.2);for(let time=0;time<5000;time+=10)c.sample({time,frameMs:10,targetFps:90,eligible:true,immersive:true});c.sample({time:NaN,frameMs:10,targetFps:90,eligible:true,immersive:true,paused:true});assert.equal(c.average,undefined,'invalid clock safety also applies during a requested pause');assert.equal(c.fastMs,0);
 });

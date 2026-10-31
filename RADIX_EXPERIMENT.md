@@ -674,3 +674,62 @@ cost more. Production CPU selection reproduces this coarse-nearby behavior, whil
 budget/source-granularity limit, not that it caused the user's current session.
 Live capture paused while the headset was asleep; no request/camera defect is
 claimed without the matching live desired/shown/budget state.
+
+### Coverage-aware XR refinement and teleport recovery
+
+A follow-up reproduced two automatic-detail defects without network variation.
+After sustained overload, the controller could request less than a source's
+mandatory coarse coverage. North still draws 748,652 splats even when asked for
+40,000; recovering through those ineffective requests delayed visible detail.
+Separately, a 220 ms comfort fade every five seconds repeatedly erased the eight
+seconds of healthy evidence needed to recover. Even otherwise steady 90 Hz
+viewing could remain at the 750k entry seed indefinitely. These are demonstrated
+controller problems; they are not proof of the cause of the older live session's
+individual missing refinements.
+
+The backend now exposes its effective selectable coverage floor, using exactly
+the selector's allowed level range and sparse-level fallback. Cached level chains
+avoid a new per-frame leaf scan. Fixed environment/non-LoD splats are excluded.
+Because the budget applies separately to each asset, the shared reduction stops
+at the smallest attached visible LoD floor: another asset can still become
+cheaper below a larger asset's floor. This does not raise authored ceilings or
+change residency, distance settings, source files or the streaming/sort ownership
+guards. Desktop/mobile policy is unchanged.
+
+Brief visible XR fades now pause observation instead of discarding it. Covered
+frames and elapsed time do not count as healthy or slow evidence. Covers longer
+than 500 ms, hidden/system-menu state, loading, tracking loss and invalid clocks
+still require fresh observation. Detail increases remain gradual.
+
+The production-browser regression uses actual selection and Three's XR manager:
+`test-output/radix adaptive 1793418897463/result.json`. Overload stops at 8,192
+mandatory fixture splats; healthy viewing with repeated 220 ms fades increases
+actual selected detail to 16,384 in the same session. Constrained single-level
+coverage and both rendering backends are checked. Stereo controls/session
+regressions pass at `test-output/radix XR 1793418951816/result.json` and
+`test-output/radix XR layers 1793418965466/result.json`. These are bounded fixture
+proofs, not measured Quest frame-rate or hosted time-to-detail claims.
+
+A read-only production-selector check on North's actual metadata holds the same
+2 m approach, distance settings and 90-degree reference FOV. At 750k, both
+containing leaves remain at L4. With current feedback at 90 FPS and the same
+recurring fades, the request reaches 950k after 9.23 seconds; both leaves then
+select finest L0. Evidence:
+`test-output/north-selection-cpu-1793417496232/adaptive-recovery.json`.
+The original metadata hash is unchanged. This isolates selection/recovery, not
+the headset's actual cadence, download completion or exact eye FOV.
+
+User test: make a fresh export with automatic detail enabled. Enter North in VR,
+check grip menu visibility and stick movement, then approach nearby features and
+teleport every few seconds. With healthy delivery, nearby detail should recover
+instead of remaining stuck because of the fades. Repeat with Hungars Aerial and
+with automatic detail disabled to compare the authored distance/level limits.
+The earlier temporary headset correction disappears on refresh; the new export
+contains the permanent fixes. Original exports and tour assets remain untouched.
+
+Combined checkpoint: all 523 unit/integration tests pass in 185.6 seconds
+(`test-output/unit-radix-xr-coverage-fades-2026-10-31.log`), production
+build/type-check passes, and the stereo/adaptive checks above pass after the
+coverage/fade integration. An independent review found no additional ownership,
+authored-ceiling, per-frame leaf-traversal or suspension issue. Physical Quest
+validation of this newly exported build is still required.

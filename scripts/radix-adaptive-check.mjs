@@ -97,13 +97,47 @@ await build({entryPoints:{harness:path.join(output,'harness.ts'),'navigation.wor
 const {server,url}=await startServer({root:output}),report={output,scope:'Controlled cadence through actual production feedback and Radix backend, with raw-interval production-frame probe; synthetic assets and headset hardware boundary only.',backends:[]};let browser;
 const watchdog=setTimeout(()=>{console.error('Adaptive regression exceeded its180-second bound');void browser?.close();},180000);
 try{
- browser=await chromium.launch({...(process.env.SPARK_BROWSER_EXECUTABLE?{executablePath:process.env.SPARK_BROWSER_EXECUTABLE}:{channel:process.env.SPARK_TEST_BROWSER_CHANNEL==='bundled'?undefined:process.env.SPARK_TEST_BROWSER_CHANNEL||'msedge'}),headless:true,timeout:30000,args:['--enable-webgl','--enable-unsafe-webgpu',...(process.env.RADIX_BACKEND_HARDWARE==='1'?[]:['--enable-unsafe-swiftshader','--use-webgpu-adapter=swiftshader'])]});
+ // Windows headless ANGLE's automatic SwiftShader path can leave Dawn with no
+ // WebGPU adapters. Keep the two software APIs explicit: D3D11 WARP for ANGLE,
+ // Vulkan SwiftShader for actual WebGPU. These flags affect this fixture only.
+ const launchOptions={...(process.env.SPARK_BROWSER_EXECUTABLE?{executablePath:process.env.SPARK_BROWSER_EXECUTABLE}:{channel:process.env.SPARK_TEST_BROWSER_CHANNEL==='bundled'?undefined:process.env.SPARK_TEST_BROWSER_CHANNEL||'msedge'}),headless:true,timeout:30000,args:['--enable-automation','--enable-webgl','--enable-unsafe-webgpu',...(process.env.RADIX_BACKEND_HARDWARE==='1'?[]:['--enable-unsafe-swiftshader','--use-webgpu-adapter=swiftshader',...(process.platform==='win32'?['--use-angle=d3d11-warp']:[])])]};
+ report.launch={selection:launchOptions.executablePath?'explicit executable':launchOptions.channel||'bundled Chromium',channel:launchOptions.channel??null,requestedExecutable:launchOptions.executablePath??(launchOptions.channel?null:chromium.executablePath()),headless:launchOptions.headless,args:launchOptions.args,hardwareAllowed:process.env.RADIX_BACKEND_HARDWARE==='1'};
+ browser=await chromium.launch(launchOptions);report.browser=browser.version();
+ // Capture the browser's own GPU diagnosis before constructing any renderer.
+ // This distinguishes a missing test adapter from a feedback regression while
+ // retaining the strict actual-backend assertions below.
+ let browserCdp;
+ try{
+  browserCdp=await browser.newBrowserCDPSession();
+  try{const command=await browserCdp.send('Browser.getBrowserCommandLine');report.launch.actualExecutable=command.arguments?.[0]??null;}
+  catch(error){report.commandLineDiagnosticsError={name:error.name??'Error',message:error.message??String(error)};}
+  try{report.gpuSystemInfo=(await browserCdp.send('SystemInfo.getInfo')).gpu;}
+  catch(error){report.gpuSystemInfoError={name:error.name??'Error',message:error.message??String(error)};}
+ }catch(error){report.browserDiagnosticsError={name:error.name??'Error',message:error.message??String(error)};}
+ finally{await browserCdp?.detach().catch(()=>{});}
+ await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));
+ console.log('Adaptive browser: '+JSON.stringify({version:report.browser,...report.launch}));
  for(const backend of ['webgpu','webgpu-gl']){
   const page=await browser.newPage({viewport:{width:256,height:128}});page.setDefaultTimeout(30000);const errors=[],messages=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(['warning','error'].includes(m.type()))messages.push(m.text());});const results={backend,cases:[],messages};report.backends.push(results);
   const record=async(name,result)=>{results.cases.push({name,...result});console.log(backend+': '+name+'; scale='+result.scale+', budget='+result.budget+', selected='+result.selected);return result;};
   await page.goto(url+'index.html?radixBackend='+backend);await page.waitForFunction(()=>test?.ready&&test.runtime.ready&&test.runtime.backend.stats.loading===0);await page.evaluate(()=>test.halt());
-  results.gpu=await page.evaluate(async()=>{const adapters=[];for(const options of [{featureLevel:'compatibility',xrCompatible:true},{featureLevel:'compatibility',xrCompatible:false},{}]){try{const a=await navigator.gpu?.requestAdapter(options);adapters.push({options,adapter:a?{...a.info,vendor:a.info.vendor,device:a.info.device,description:a.info.description,isFallbackAdapter:a.info.isFallbackAdapter}:null});}catch(error){adapters.push({options,error:String(error)});}}return adapters;});report.browser=browser.version();
-  let state=await page.evaluate(async()=>{test.reset({});return test.settle();});await record('Initial actual backend and coverage',state);assert.equal(state.backend,backend);assert.equal(state.scale,1);const original=state.selected;assert.ok(original>12500,'actual scene exceeds adaptive minimum budget');
+  results.gpu=await page.evaluate(async()=>{
+   const info=value=>value?{vendor:value.vendor,architecture:value.architecture,device:value.device,description:value.description,isFallbackAdapter:value.isFallbackAdapter}:null;
+   const actual=test.runtime.renderer.backend,device=actual.device,gl=actual.gl;
+   const renderer={backend:test.runtime.backend.stats.backend,isWebGPUBackend:actual.isWebGPUBackend===true,device:device?{adapterInfo:info(device.adapterInfo),features:[...device.features],limits:{maxBufferSize:device.limits.maxBufferSize,maxStorageBufferBindingSize:device.limits.maxStorageBufferBindingSize,maxComputeWorkgroupStorageSize:device.limits.maxComputeWorkgroupStorageSize}}:null};
+   if(gl){const debug=gl.getExtension('WEBGL_debug_renderer_info');renderer.webgl={vendor:gl.getParameter(gl.VENDOR),renderer:gl.getParameter(gl.RENDERER),unmaskedVendor:debug?gl.getParameter(debug.UNMASKED_VENDOR_WEBGL):null,unmaskedRenderer:debug?gl.getParameter(debug.UNMASKED_RENDERER_WEBGL):null};}
+   const adapters=[];
+   for(const options of [{featureLevel:'compatibility',xrCompatible:true},{featureLevel:'compatibility',xrCompatible:false},{}]){
+    const result={options};adapters.push(result);
+    try{
+     const adapter=await navigator.gpu?.requestAdapter(options);result.adapter=info(adapter?.info);
+     if(adapter){let candidate;try{candidate=await adapter.requestDevice();result.requestDevice={success:true,adapterInfo:info(candidate.adapterInfo),features:[...candidate.features]};}catch(error){result.requestDevice={success:false,name:error.name??'Error',message:error.message??String(error)};}finally{candidate?.destroy();}}
+    }catch(error){result.error={name:error.name??'Error',message:error.message??String(error)};}
+   }
+   return {available:!!navigator.gpu,renderer,adapters};
+  });
+  await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));
+  let state=await page.evaluate(async()=>{test.reset({});return test.settle();});await record('Initial actual backend and coverage',state);assert.equal(state.backend,backend,'This fixture requires the actual '+backend+' renderer; received '+state.backend+'. Browser, GPU service, renderer device and candidate-adapter diagnostics are recorded in result.json.');assert.equal(state.scale,1);const original=state.selected;assert.ok(original>12500,'actual scene exceeds adaptive minimum budget');
   await record('Real SOG scene starts at authored budget',state);
   state=await page.evaluate(()=>test.feedback(7000,20));assert.equal(state.scale,.75);assert.equal(state.budget,37500);assert.equal(state.base.radix.selectedSplatBudget,50000);await record('20 FPS below30 target reduces actual stream budget',state);
   state=await page.evaluate(()=>test.feedback(6000,20));assert.ok(state.scale<.75);assert.ok(state.selected<original,'actual LoD selection decreases, not just UI metadata');await record('Sustained slow cadence reduces selected splats',state);
@@ -130,5 +164,5 @@ try{
   assert.deepEqual(errors,[]);results.errors=errors;results.pass=true;await page.evaluate(()=>test.runtime.dispose());await page.close();
  }
  report.pass=true;await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));console.log('PASS: adaptive Radix production-frame/selection/coverage and headset goal integration; '+output);
-}catch(error){report.error=String(error);await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));throw error;}
+}catch(error){report.error=String(error);report.failure={name:error.name??'Error',message:error.message??String(error),...(error.code?{code:error.code}:{}),...(error.actual!==undefined?{actual:error.actual}:{}),...(error.expected!==undefined?{expected:error.expected}:{})};await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));throw error;}
 finally{clearTimeout(watchdog);await browser?.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

@@ -457,3 +457,24 @@ remains unchanged (`c25903f082020a619e9c3e09705931051cff1b32c4269241d95f2e754c7f
 No original project was saved or source asset changed by these checks; the
 existing Studio was left open and returned to the Aerial Front preview. Imports
 were never stopped, paused or canceled by the performance investigation.
+
+### Windows CI software graphics correction
+
+Run `41133043991` passed 509 units, packaging, both meshers, XR and scene/view
+policies, then failed the strict WebGPU adaptive check: the hosted Edge
+156.0.4314.56 returned null for every adapter request and correctly fell back to
+WebGL. The backend assertion was retained. An isolated local browser matrix
+reproduced the same failure in the pinned headless shell. Explicit D3D11 WARP
+for ANGLE plus SwiftShader for WebGPU creates genuine software devices without
+depending on the RTX 3090. CI now installs the full Chrome for Testing revision
+pinned by Playwright, runs this strict check before packaging, and retains Edge
+coverage in the other checks. Browser/version/path, GPU service and actual
+renderer/device diagnostics are captured independently on failure.
+
+All 31 adaptive/backend/stereo cases pass with Chrome 153.0.8010.12 and Edge
+156.0.4314.50 using those software paths:
+`test-output/radix adaptive 1793405748558/result.json` and
+`test-output/radix adaptive 1793405801748/result.json`.
+The actual WebGPU device reports Google/SwiftShader; the GL path reports
+Microsoft Basic Render Driver/WARP. These changes affect test configuration
+only. The verified `de76b6f4` local executable and developer handoff are unchanged.

@@ -12,9 +12,10 @@
     "nativeApplicationRuntime": {
       "name": "Electron",
       "version": "44.4.5",
-      "versionSource": "Packaged application's pinned Electron dependency",
-      "chromiumVersion": null,
-      "qualification": "The native application's trace is separate from the isolated Edge diagnostic. Its DevTools export identifies source and trace times but does not provide an exact Chromium version; no Chromium version is inferred from Edge."
+      "originalCaptureApplicationCommit": "29c38edfe332dfb617bcca9e7fa6cfaf65cdc0bf",
+      "versionSource": "Pinned packaged dependency; independently verified using process.versions in a clean, isolated packaged-editor follow-up",
+      "chromiumVersion": "152.0.7977.130",
+      "qualification": "The original native DevTools export does not itself identify Chromium's version. A clean follow-up using the same pinned Electron 44.4.5 package directly reports Chromium 152.0.7977.130. This is separate from the isolated Edge 156 diagnostic, not inferred from Edge."
     },
     "diagnosticAdapter": {
       "vendor": "nvidia",
@@ -35,11 +36,20 @@
     },
     "integration": {
       "renderer": "Three WebGPURenderer with Radix SplatRenderer in a shared Three scene; directCanvas:false",
-      "diagnosticViewportCssPixels": [1280, 720],
-      "diagnosticPixelRatio": 2,
-      "diagnosticBackingPixels": [2560, 1440],
+      "diagnosticViewportCssPixels": [
+        1280,
+        720
+      ],
+      "diagnosticRequestedPixelRatio": 2,
+      "diagnosticContextDeviceScaleFactor": 1,
+      "diagnosticEffectivePixelRatioInferred": 1,
+      "diagnosticBackingPixelsInferred": [
+        1280,
+        720
+      ],
+      "pixelRatioQualification": "The setting is a cap: the integration applies Math.min(devicePixelRatio, configuredRatio). The isolated Playwright contexts used their default deviceScaleFactor of 1. Backing dimensions were not directly recorded in those initial runs; the inferred backing is 1280x720, not 2560x1440. Native trace metadata also reports hostDPR 1, but its canvas dimensions differ with the editor layout.",
       "navigation": "Desktop walking using a Rapier kinematic capsule against streamed collision geometry",
-      "measurement": "Actual hardware WebGPU rendering; CPU profiler sampling and application frame instrumentation. No simulated network delay or synthetic product workload was added."
+      "measurement": "Actual hardware WebGPU rendering with CPU sampling and application frame instrumentation. Original and clean natural-workload observations are distinguished from the explicitly labeled later external synthetic-compute counterfactual. No simulated network delay or synthetic workload was added to the product."
     }
   },
   "radixSettings": {
@@ -72,12 +82,27 @@
   "observations": {
     "progressiveRefinementAllocationHitch": {
       "status": "Observed in the integration; renderer scratch allocation is directly present in CPU samples. The accompanying synthetic test isolates whether it also occurs without the application or its assets.",
-      "initialRunVisibleFrameCpuMs": [71.2, 143.2],
-      "secondRunVisibleFrameCpuMs": [56.1, 116.1],
+      "initialRunVisibleFrameCpuMs": [
+        71.2,
+        143.2
+      ],
+      "secondRunVisibleFrameCpuMs": [
+        56.1,
+        116.1
+      ],
       "phase": "Stationary immediately after the scene became visible, while progressively refined SOG chunks were landing",
-      "initialRunShownSplatsAtHitches": [2150062, 4268263],
-      "initialRunResidentSplatsAtHitches": [3354616, 7745874],
-      "initialRunInFlightChunksAtHitches": [4, 4],
+      "initialRunShownSplatsAtHitches": [
+        2150062,
+        4268263
+      ],
+      "initialRunResidentSplatsAtHitches": [
+        3354616,
+        7745874
+      ],
+      "initialRunInFlightChunksAtHitches": [
+        4,
+        4
+      ],
       "dominantSampledLeafFunctions": [
         "GPUDevice.createBuffer (native)",
         "Three WebGPUAttributeUtils.createAttribute",
@@ -119,12 +144,104 @@
         "qualification": "Shown-splat counts are application draw statistics, not an instrumented scratch-buffer capacity. The power-of-two relationship is suggestive, not a direct capacity measurement. CPU sample time windows use approximate profile/page-clock alignment; the recorded callback durations are direct measurements."
       }
     },
+    "cleanReadbackFollowUp": {
+      "status": "The large idle-main gaps were not reproduced in this clean, single-viewer minimal-runtime comparison. Disabling count readback showed no improvement; it is not supported as a remedy by this experiment.",
+      "runtime": "Isolated Edge 156.0.4314.50 with the same actual scene and authored Radix rendering settings, without the native editor UI; both Studio and the converter were closed",
+      "sequentialEpochSeconds": [
+        120.1066,
+        120.0859
+      ],
+      "eachEpoch": "60 seconds at the same stationary camera, then 60 seconds of identical held-key walking inputs; one renderer, scene and physics world retained throughout",
+      "readbackOn": {
+        "frames": 7179,
+        "frameIntervalP99Ms": 16.8,
+        "frameIntervalMaxMs": 50,
+        "callbackCpuMaxMs": 17.9,
+        "actualGpuReadbacks": 119
+      },
+      "readbackOff": {
+        "frames": 7187,
+        "frameIntervalP99Ms": 16.8,
+        "frameIntervalMaxMs": 66.7,
+        "callbackCpuMaxMs": 14.1,
+        "actualGpuReadbacks": 0
+      },
+      "stationaryShownSplatsBothEpochs": 4991732,
+      "sortScratchCapacityDuringBothEpochs": 8445312,
+      "measuredScratchGrowthEventsBothEpochs": 0,
+      "readbackBypass": "Kept the application's normal once-per-second schedule and promise continuation, returning the cached count while skipping the actual readback. It did not change selection, projection, drawing, or performance settings; automatic detail was off.",
+      "renderSizedTexturesDirectlyRecorded": {
+        "width": 1280,
+        "height": 720,
+        "formats": [
+          "rgba16float",
+          "depth24plus"
+        ]
+      },
+      "limitations": [
+        "The pre-existing minimal-runtime helper omitted UI-owned walking settings: both epochs used default eye height 1.7 m and default step height, rather than the scene's authored 1.45 m and 0.52 m. The two epochs are controlled relative to each other, not an exact native walking-view reproduction.",
+        "Walking routes used identical held inputs and entry resets but diverged slightly at corners with timing. Their stationary camera and shown count were exactly the same.",
+        "The comparison removes both the converter and native Electron/editor context; it does not identify which difference caused the earlier large gaps.",
+        "The separate clean native full-editor follow-up below uses the authored walking settings and directly records Electron/Chromium, DPR and drawing dimensions."
+      ]
+    },
+    "cleanNativeEditorFollowUp": {
+      "status": "The large idle-main gaps were also not reproduced in the full native editor with normal glass styling and real count readback enabled. This weakens native Electron/editor/glass by itself as the explanation; it does not causally prove conversion contention.",
+      "applicationVersion": "1.23.0 experimental",
+      "compiledApplicationCommit": "de76b6f4aa22baa40fa7f6e17778827849787632",
+      "electronVersion": "44.4.5",
+      "chromiumVersion": "152.0.7977.130",
+      "adapter": "Actual NVIDIA Ampere WebGPU device",
+      "visibleWindowSize": [
+        1536,
+        1000
+      ],
+      "canvasAndDrawingBufferSizeDirectlyRecorded": [
+        1520,
+        935
+      ],
+      "devicePixelRatioDirectlyRecorded": 1,
+      "rendererPixelRatioDirectlyRecorded": 1,
+      "authoredWalkHeightMeters": 1.45,
+      "authoredStepHeightMeters": 0.52,
+      "setup": "A separately owned packaged-editor process with a fresh isolated profile and disposable project config. Large source assets were exposed through read-only external mappings. Normal preview UI and glass styling were retained; the original project was never opened for authoring. No converter or second diagnostic viewer was running.",
+      "warmup": "Detail preparation, a real held-key walking route, restored entry and settling before measurement",
+      "measuredSeconds": 150.1317,
+      "measuredPhases": "60 seconds stationary, 60 seconds held-key physical walking, 30 seconds stationary after the route",
+      "frameCount": 8563,
+      "frameIntervalMs": {
+        "median": 16.7,
+        "p95": 33.1,
+        "p99": 33.4,
+        "max": 66.6
+      },
+      "callbackCpuMs": {
+        "median": 7.8,
+        "p95": 10.1,
+        "p99": 11.1,
+        "max": 14.7
+      },
+      "intervalsOver100Ms": 0,
+      "actualCountReadbacks": 149,
+      "maxAsyncReadbackLatencyMs": 63.7,
+      "maxWarmWorldStepMs": 0.5,
+      "sortScratchGrowthEvents": 0,
+      "maxSynchronousNativeGpuApiCallMs": 1.6,
+      "maxSynchronousSogWorkMs": 3.5,
+      "pageOrGpuErrors": 0,
+      "originalTourHostingAndSourceRegistryHashesUnchanged": true,
+      "glassDisabledComparison": "Not run: the predeclared trigger of at least two intervals over 100 ms did not occur.",
+      "qualification": "This is a bounded clean reproduction attempt, not proof that the intermittent issue is impossible. Native versus minimal runtime differ in browser version, viewport size, editor UI and camera/navigation setup, so their ordinary FPS statistics are not an identical rendering benchmark. The clean packaged editor also contains the later application changes identified by its compiled commit, whereas the original capture used 29c38edf; the pinned Radix renderer is unchanged. The previously observed 250–383 ms stalls remain real; those traces still included a running conversion job."
+    },
     "warmWalkingPhysics": {
       "status": "Measured separately; does not explain the long visible frame gaps in the tested walking routes",
       "rapierVersion": "0.21.0",
       "firstRunWarmWorldStepMaxMs": 0.8,
       "secondRunWarmWorldStepMaxMs": 2.8,
-      "coldFirstCharacterStepMs": [112.8, 84.1],
+      "coldFirstCharacterStepMs": [
+        112.8,
+        84.1
+      ],
       "qualification": "Cold character initialization is a distinct one-time cost. It completed before these isolated walking measurement windows. Required world.step calls were retained."
     },
     "longFrameGapsWithMainThreadIdle": {
@@ -159,12 +276,178 @@
         "sampledMainThreadIdleMs": 376.522,
         "longestConcurrentCrGpuMainTaskMs": 154.177
       },
-      "readbackCorrelation": "readSortedCount/readCount/getArrayBufferAsync/mapAsync appear in the CPU profile. Sampled calls do not establish correlation with the largest gap clusters; no readback-disabled A/B has yet been run.",
+      "readbackCorrelation": "readSortedCount/readCount/getArrayBufferAsync/mapAsync appear in the original CPU profile. Sampled calls do not establish correlation with its largest gap clusters. The later clean readback ON/OFF follow-up above did not reproduce the large pauses in either condition and did not support disabling readback as a remedy.",
       "qualification": "GPUTask is a Chrome GPU-process CPU task duration, not a hardware GPU timestamp. Long gaps with an idle renderer main thread and busy CrGpuMain do not by themselves identify Radix, Three, Dawn, driver scheduling, GPU conversion contention, or present/backpressure as the root cause. The capture included normal application activity and profiling overhead."
+    },
+    "controlledExternalComputeFollowup": {
+      "status": "Completed and independently reviewed. This specific bounded compute load reversibly reduced ordinary frame cadence but did not reproduce the historical 250 ms walking pauses.",
+      "captureDateUtc": "2026-10-31",
+      "runtime": {
+        "electron": "44.4.5",
+        "chromium": "152.0.7977.130",
+        "adapter": "NVIDIA GeForce RTX 3090 / Ampere / D3D12 driver 32.0.16.1088",
+        "canvasAndDrawingBufferPixels": [
+          1520,
+          935
+        ],
+        "devicePixelRatio": 1,
+        "rendererPixelRatio": 1,
+        "walkingEyeHeightMeters": 1.45,
+        "stepHeightMeters": 0.52
+      },
+      "protocol": "One isolated packaged editor with a disposable config and read-only original assets. Normal editor glass UI and real once-per-second count readback remained enabled. Detail, physics and sort capacities were warmed. Three sequential 60-second epochs used the same fixed position and continuous sinusoidal yaw of +/-0.12 radians over a 30-second period. No translation was applied during these epochs. All measured rows are retained.",
+      "intervalBoundaryHandling": "Two animation frames were awaited before each start mark. Exactly one interval crossing the start boundary was excluded per epoch from interval percentiles; its raw frame row and callback CPU timing remain saved. Per-phase trace transfer and serialization occurred after the end mark and outside the measurement windows.",
+      "workload": {
+        "kind": "Generic integer-register hash compute, not the production converter or its allocation/memory-traffic workload",
+        "implementation": "A separate hardware Dawn/WebGPU process using the same NVIDIA adapter",
+        "preallocatedStateBytes": 8388608,
+        "uniformBytes": 16,
+        "workgroups": 32768,
+        "workgroupSize": 64,
+        "iterations": 2048,
+        "dispatchesPerBatch": 3,
+        "pulseOnSeconds": 3,
+        "pulseOffSeconds": 2,
+        "measuredLoadSeconds": 60,
+        "batchesCompleted": 749,
+        "maxSubmissionsInFlight": 1,
+        "completionPolicy": "Each batch awaited queue.onSubmittedWorkDone before the next submission, with a 1 ms event-loop yield. The predeclared 200 ms wall-time stop guard was not reached.",
+        "calibratedSingleDispatchGpuMs": 5.24288,
+        "calibratedThreeDispatchBatchGpuMs": 16.842752,
+        "calibratedBatchWallMs": 17.1366,
+        "sharedGpuMeasuredBatchWallMs": {
+          "median": 33.44,
+          "p95": 56.479,
+          "max": 68.603
+        },
+        "timestampQualification": "Hardware timestamp queries were used only during calibration. The measured sharing phase recorded wall-clock batch completion; it did not add timestamp readbacks."
+      },
+      "epochs": [
+        {
+          "name": "baseline-no-compute",
+          "measuredSeconds": 60.016,
+          "eligibleFrameIntervals": 3583,
+          "frameIntervalMs": {
+            "median": 16.7,
+            "p95": 16.8,
+            "p99": 16.9,
+            "max": 33.5
+          },
+          "frameCallbackCpuMs": {
+            "median": 6.1,
+            "p99": 9,
+            "max": 13.1
+          },
+          "intervalsOver100Ms": 0,
+          "actualCountReadbacks": 60,
+          "maxAsyncReadbackLatencyMs": 76.9,
+          "maxWarmWorldStepMs": 0.7,
+          "sortScratchGrowthEvents": 0,
+          "sortScratchCapacityBytesUnchanged": true,
+          "maxSynchronousNativeGpuApiMs": 0.1,
+          "sampledSystemGpuUtilizationPercent": {
+            "samples": 59,
+            "median": 51,
+            "p95": 57,
+            "max": 59
+          }
+        },
+        {
+          "name": "pulsed-generic-compute",
+          "measuredSeconds": 60.016,
+          "eligibleFrameIntervals": 3396,
+          "frameIntervalMs": {
+            "median": 16.7,
+            "p95": 33.2,
+            "p99": 33.4,
+            "max": 66.6
+          },
+          "frameCallbackCpuMs": {
+            "median": 5.8,
+            "p99": 8.1,
+            "max": 11.7
+          },
+          "intervalsOver100Ms": 0,
+          "actualCountReadbacks": 59,
+          "maxAsyncReadbackLatencyMs": 97.3,
+          "maxWarmWorldStepMs": 0.4,
+          "sortScratchGrowthEvents": 0,
+          "sortScratchCapacityBytesUnchanged": true,
+          "maxSynchronousNativeGpuApiMs": 0.1,
+          "sampledSystemGpuUtilizationPercent": {
+            "samples": 60,
+            "median": 86,
+            "p95": 91,
+            "max": 94
+          }
+        },
+        {
+          "name": "recovery-no-compute",
+          "measuredSeconds": 60.009,
+          "eligibleFrameIntervals": 3578,
+          "frameIntervalMs": {
+            "median": 16.7,
+            "p95": 16.8,
+            "p99": 16.8,
+            "max": 49.9
+          },
+          "frameCallbackCpuMs": {
+            "median": 6,
+            "p99": 9.5,
+            "max": 12.5
+          },
+          "intervalsOver100Ms": 0,
+          "actualCountReadbacks": 59,
+          "maxAsyncReadbackLatencyMs": 52.2,
+          "maxWarmWorldStepMs": 0.8,
+          "sortScratchGrowthEvents": 0,
+          "sortScratchCapacityBytesUnchanged": true,
+          "maxSynchronousNativeGpuApiMs": 0.1,
+          "sampledSystemGpuUtilizationPercent": {
+            "samples": 60,
+            "median": 52,
+            "p95": 54,
+            "max": 57
+          }
+        }
+      ],
+      "fixedInputs": {
+        "shownSplats": 4991574,
+        "residentSplats": 15881104,
+        "inFlightChunkCount": 0,
+        "maximumHorizontalCameraDriftMeters": 0,
+        "activeTrustedInputEvents": 0,
+        "intrusions": 0,
+        "keysHeldAtPeriodicCheckpoints": 0,
+        "periodicCheckpoints": 183
+      },
+      "pageOrGpuErrors": 0,
+      "originalTourHostingAndSourceRegistryHashesUnchanged": true,
+      "cleanup": "The owned editor, helper and sampler exited after evidence was saved. No user process or original tour file was modified.",
+      "independentReview": "Frame filtering, fixed position, input checkpoints, constant detail and bounded helper submission were independently checked against raw saved metrics.",
+      "qualifications": [
+        "No interval exceeded 100 ms in any of these epochs. This does not reproduce or explain the historical 250 ms idle-main pauses.",
+        "This generic compute test does not model the real converter's spatial decimation, GPU allocations, uploads, readbacks or queue behavior. Its negative result cannot rule those interactions out, and its modest cadence change is not proof of the historical cause.",
+        "An unrelated approximately 10-second CPU-only read of an existing trace by another diagnostic occurred around the baseline/trace-transfer period; its exact wall time was not recorded. No rows were removed for it. No additional GPU renderer or conversion job was started.",
+        "The earlier interrupted controlled-load attempt was excluded because the user confirmed interacting with and closing its temporary window. It is not evidence of a product crash.",
+        "These are desktop Windows measurements, not physical Quest or hosted-network benchmarks."
+      ]
+    },
+    "originalConversionFilesystemBounds": {
+      "actualConversionSourceSplats": 20274227,
+      "sourceShDegree": 0,
+      "reportedEffectiveBackend": "WebGPU",
+      "reportedAdapter": "NVIDIA GeForce RTX 3090 / D3D12 driver 32.0.16.1088",
+      "cpuFallbackReported": false,
+      "attemptDirectoryCreationTimeUtc": "2026-10-30T20:27:36Z",
+      "reportAndLogLastWriteTimeUtc": "2026-10-30T21:30:37Z",
+      "nativeCaptureStartUtc": "2026-10-30T20:57:58.721Z",
+      "nativeCaptureDurationSeconds": 140.52539,
+      "interpretation": "The native trace falls between filesystem timestamps for a real conversion attempt. The attempt directory is created before spawning the converter; the later report identifies WebGPU on the same adapter. These timestamps are not per-stage job telemetry, do not establish exact job start/end, and do not prove continuous GPU execution or a dispatch at a particular long frame gap."
     }
   },
   "confoundsAndLimits": [
-    "The user's GPU conversion/import remained running throughout, as requested. Shared-card conversion contention was not removed.",
+    "The user's conversion/import job remained running in the original traces and initial isolated probes, as requested; shared-card conversion contention was not removed in those measurements. Both the converter and user Studio were closed before the explicitly labeled clean follow-ups.",
     "The two isolated hardware probes added a second renderer alongside the user application: total GPU utilization reached 98–99%, falling to 44% after the probe closed. They cannot establish the native application's normal saturation or a before/after FPS improvement.",
     "The native-only capture was taken before those extra diagnostic renderers; its long idle-main gaps are independently real, but the converter was still active.",
     "The two scripted walking routes diverged later because timing changes affected corner collisions. They are not an exact spatial performance A/B.",

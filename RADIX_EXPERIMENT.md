@@ -406,7 +406,7 @@ Preview keeps metadata locked while Frame performance Reset remains usable:
 integration checkpoint passes 509/509 tests in 251.9 seconds, and the production
 web build passes. The subsequent bounded-window resume guard is verified by the
 eleven-case lifecycle check above. These checks are included in experimental CI;
-no new CI/package result is claimed here before that run completes.
+the successful repaired source/Windows job is recorded below.
 
 Remaining hitch limit: the original Aerial collision data was served read-only to
 an isolated CPU browser probe, without loading splats or stopping the user's
@@ -478,3 +478,91 @@ All 31 adaptive/backend/stereo cases pass with Chrome 153.0.8010.12 and Edge
 The actual WebGPU device reports Google/SwiftShader; the GL path reports
 Microsoft Basic Render Driver/WARP. These changes affect test configuration
 only. The verified `de76b6f4` local executable and developer handoff are unchanged.
+
+The repaired source/Windows build job passed in run
+[`41149470779`](https://github.com/MisterE123/spark-tour-studio/actions/runs/41149470779),
+including strict real software WebGPU, selector/mesh/XR checks, scene/view
+performance controls, packaged authoring/export, unsupported-scene recovery,
+portable launch and full experimental ZIP artifact. Separate prerelease
+publication was not monitored. The fix changes no application runtime code.
+
+### Clean follow-up for the roughly 250 ms pauses
+
+After the user finished conversion and closed Studio, one owned viewer at a time
+retested North Graveyard at its saved 5M selected/16M resident settings. The
+minimal Edge runtime measured two sequential 120-second epochs: normal count
+readback had a 50.0 ms maximum frame interval; bypassing actual GPU readback had
+66.7 ms. Both had zero intervals over 100 ms, and no sorting scratch growth.
+Normal readback remains enabled in the product: this comparison does not support
+disabling it as a stutter fix. Evidence:
+`test-output/North walk readback AB 1793406096550/controlled-analysis.json`.
+Both epochs contain stationary and held-key walking sections, but this older
+helper used default walking height/step; routes also diverged slightly at
+collisions. It is a controlled readback comparison, not an exact native camera
+benchmark.
+
+The full packaged Electron editor then retained its normal glass UI, real count
+readback and authored 1.45 m height/0.52 m step. Across 150 seconds (stationary,
+walking, stationary), the maximum interval was 66.6 ms, walking maximum 50.0 ms,
+and maximum synchronous rendering callback 14.7 ms, with zero intervals over
+100 ms or page/GPU errors. Directly recorded Electron 44.4.5/Chromium
+152.0.7977.130, NVIDIA hardware WebGPU and 1520×935/DPR-one drawing dimensions
+avoid confusing this native test with the separate Edge browser. Original tour,
+hosting and source-registry hashes are unchanged. Evidence:
+`test-output/North native editor clean 1793406776769/controlled-analysis.json`.
+The original minimal-browser pixel-ratio setting was a cap of two on a DPR-one
+context; its effective backing was 1280×720, not 2560×1440. The developer report
+and sanitized evidence correct that distinction.
+
+These bounded clean tests did not reproduce the original 250–383 ms idle-main
+gaps. They weaken warm physics, periodic readback, or Electron/glass alone as
+explanations. The original native capture included a running GPU conversion;
+contention remains plausible, not proven. The clean editor contains later
+application changes (`de76b6f4` versus `29c38edf`) while the pinned Radix module
+is unchanged. No speculative runtime change or claim that all stutters are
+fixed follows from the negative tests. The separately reproduced buffer-growth
+callback hitch remains distinct.
+
+The final controlled native comparison retains one fixed walking position,
+4,991,574 shown/15,881,104 resident splats and zero pending loads while gently
+turning ±0.12 radians every 30 seconds. Three measured 60-second windows use
+normal glass/readback: baseline, bounded pulsed WebGPU compute on the same RTX
+3090, and recovery. Frame p95 is 16.8/33.2/16.8 ms; worst intervals are
+33.5/66.6/49.9 ms, with zero intervals over 100 ms. CPU maxima are
+13.1/11.7/12.5 ms. The fixed-capacity helper preallocates 8 MiB, uses one awaited
+batch at a time, and completes 749 batches in 60.011 seconds. It degrades cadence
+and then recovers without reproducing the historical pause.
+
+Final evidence: `test-output/North native controlled final 1793408302832/`.
+Each phase has independently saved raw frame/metrics, CPU profile and GPU-process
+trace; incremental checkpoints, input/lifecycle logs, GPU samples and calibrated
+external-helper logs survive interruption. Independent review confirms zero
+measured input/drift, constant counts, and exactly one cross-boundary interval
+excluded per phase. All in-window rows remain. A prior run interrupted by the
+user's confirmed interaction is excluded; two startup/guard fixture mistakes
+were corrected before the final measured load ran. No product crash is inferred.
+
+Limits: this is a stationary Walk position with active yaw, not a physical
+walking/teleport route. Preallocated arithmetic does not reproduce the actual
+converter's allocations, uploads or queue depth. An unrelated roughly 10-second
+CPU/file audit read has uncertain overlap with baseline/load; no data was removed
+because of it. Trace transfer occurs outside measurements, so starting yaw can
+differ despite each window covering two full cycles. Filesystem timestamps for
+the identified same-card WebGPU conversion encompass the original capture,
+but no per-stage wall times establish exact GPU-dispatch overlap. The report
+keeps this uncertainty separate from the demonstrated sorting-allocation hitch.
+
+Updated developer handoff:
+`artifacts/radix-buffer-growth-repro-2026-10-30-v2.zip`, 2,584,620 bytes,
+SHA-256 `768a9f74f27dc47078e5788a14fa26381ee88f7ab565f8f4962d06c7db8219ed`.
+The original ZIP remains unchanged. Revision two adds the clean comparisons,
+corrected browser/pixel metadata and sanitized limitations; its reproduction
+`app.js` is byte-identical to the original handoff. All 30 entries and dependency
+notices were checked, the JSON parses, and the four reproduction metrics tests
+pass. Private assets and full native traces are not included.
+
+The current `de76b6f4` experimental executable is unchanged and remains the
+verified local application; no runtime change or new version follows from this
+diagnostic follow-up. Its SHA-256 and the stable 1.23.0 executable's hash were
+rechecked and match the checkpoints above. Owned native/helper/sampler processes
+exited normally, and all three original project metadata hashes are unchanged.

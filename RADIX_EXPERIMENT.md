@@ -779,7 +779,7 @@ All 525 unit/integration tests pass in 158.8 seconds at
 Actual browser selection with periodic missed refreshes refines from 8,192 to
 16,384 fixture splats in the same XR session:
 `test-output/radix adaptive 1793445606179/result.json`. Independent review found
-no additional concern. This follow-up has not yet been packaged as a local EXE.
+no additional concern. The verified follow-up preview is recorded below.
 
 USB ADB repeatedly disappears despite Windows reporting a healthy WinUSB
 interface. Screenshot attempts returned no PNG; no screenshot was captured, and
@@ -816,8 +816,39 @@ headset performance or an explanation of why the budget originally fell.
 
 A bounded independent desktop GPU control used that position and approximate
 heading/projection with stable residency and real GL timer queries:
-`test-output/aerial overdraw desktop control1793462744824/result.json`.
+`test-output/aerial overdraw desktop control 1793462744824/result.json`.
 It does not establish a coarse-LoD overdraw trap as the Quest cause. It is neither
 exact headset orientation nor physical Quest GPU timing. All owned desktop test
 browsers are closed. The remaining decisive test needs a visible, responsive
 physical XR session and matching budget/desired/shown/cadence data during motion.
+
+The final bounded reconnection attempt reports the physical Quest `offline`:
+`test-output/quest-remote-connect-1793463050146/result.json`. Neither foreground
+launch nor the movement sequence completed. Do not treat these attempts as a
+successful unattended device run. A later user-side USB/wake recovery is needed.
+
+The approved diagnostic listener remains available, with two explicit routes:
+`https://192.168.1.25:8444/?diagnostics=1` serves the unchanged current export;
+`https://192.168.1.25:8444/patched/?diagnostics=1` serves the new viewer code while
+reading the same original tour configuration/assets. It requires no re-export.
+The patched route changes the recovery policy; the instrumentation itself only
+records state. Both routes pass an isolated desktop title/control-policy check
+at `test-output/quest-diagnostic-ab-1793463363201/result.json`: the baseline holds
+its .1875 seed under periodic missed refreshes, while the patched controller
+reaches .3875. This synthetic-cadence check is not physical Quest performance.
+No actual Quest rows have arrived through the LAN copy; initial rows are desktop
+checks. Current diagnostic output: `test-output/quest-lod-network-1793463296088/`.
+Do not rebuild `dist` while using the patched comparison route.
+
+Latest clean-source local preview:
+`experimental-release/3DGS Perspectives Studio 1.23.0 Experimental 1246cb39.exe`,
+compiled `1246cb39788c255ca6c7a5d7885ca19b2a9367d9`, `dirty=false`.
+SHA-256: `8ebcb16d3f722f60b5e3dd9152811754decf1da7685a4342b317f3fcd6c75b8f`.
+Actual portable launch/About/normal close passes at
+`test-output/portable smoke 1793463362700/result.json`; packaged identity and
+visitor graph pass at `test-output/studio-build-1793463391750/result.json`.
+This improves a proven recovery defect and is not claimed to cure the still
+unverified active-headset performance problem. Stable executable and main remain
+unchanged. Source is pushed on the experimental branch; release results are not
+being monitored. All owned test browsers and bounded USB helpers are closed;
+the explicitly approved diagnostic server remains running for the next test.

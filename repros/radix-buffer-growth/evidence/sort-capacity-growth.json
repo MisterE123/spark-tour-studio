@@ -1,0 +1,46 @@
+{
+  "schemaVersion": 1,
+  "scope": "Standalone Radix sorting scratch-capacity growth only",
+  "preparedDateAmericaNewYork": "2026-10-30",
+  "versions": {
+    "radix": "0.0.1",
+    "radixCommit": "e36742ee524a844ca79fbec8ea910d5598123690",
+    "radixModuleSha256": "8633fa532e88358df44b907dc2d01d7cc6206c4f0fa5ceed7f56bf26161442e6",
+    "three": "0.186.1",
+    "browser": "Microsoft Edge 156.0.4314.50",
+    "os": "Windows x64",
+    "gpu": "NVIDIA GeForce RTX 3090",
+    "driver": "610.88",
+    "actualWebGpuAdapter": "NVIDIA Ampere; hardware WebGPU"
+  },
+  "controls": {
+    "syntheticInput": true,
+    "inputPreparedAndUploadedBeforeTiming": true,
+    "persistentSorterAcrossGrowthAndReplay": true,
+    "freshPagePerCondition": true,
+    "warmupSeconds": 5,
+    "counts": [250000, 750000, 1750000, 3600000, 5000000],
+    "sorterCpuProfiler": false,
+    "countReadback": false,
+    "externalAssetRequests": 0,
+    "knownStudioConverterHelperOrOtherDiagnosticRendererProcesses": 0,
+    "ambientDesktopGpuUtilizationPercent": [16, 24, 23, 25, 24, 24]
+  },
+  "fiveMillionKeyComparison": [
+    {"condition": "Instrumented", "secondsPerCount": 3, "growthCallbackMs": 73.4, "sameSorterReplayMaxCallbackMs": 0.9, "nativeCreateBufferCallsDuringGrowthCallback": 6, "nativeCreateBufferTotalMs": 47.9, "replayCreateBufferCalls": 0, "replayCapacityGrowths": 0},
+    {"condition": "Instrumentation disabled", "secondsPerCount": 3, "growthCallbackMs": 74.0, "sameSorterReplayMaxCallbackMs": 0.9, "nativeCreateBufferCallsDuringGrowthCallback": null, "nativeCreateBufferTotalMs": null, "replayCreateBufferCalls": null, "replayCapacityGrowths": null},
+    {"condition": "Fresh instrumented repeat", "secondsPerCount": 1, "growthCallbackMs": 73.2, "sameSorterReplayMaxCallbackMs": 0.6, "nativeCreateBufferCallsDuringGrowthCallback": 6, "nativeCreateBufferTotalMs": 45.9, "replayCreateBufferCalls": 0, "replayCapacityGrowths": 0}
+  ],
+  "instrumentedGrowth": {
+    "fourPrimaryScratchBuffers": {"capacityBeforeElements": 3600000, "capacityAfterElements": 7200000, "bytesEachAfter": 28800000},
+    "additionalBufferBytes": [14064, 3600384],
+    "allSixBuffersMappedAtCreation": true,
+    "allocationOccursInside": "WgpuSplatSorter.sort -> compaction/radix sort -> Three storage attributes -> GPUDevice.createBuffer"
+  },
+  "supplementaryVisibleRenderer": {
+    "actualLitPixels": 9990,
+    "cpuProfileEnabled": true,
+    "purpose": "Corroborate the same path with procedural visible splats; not the unprofiled timing control"
+  },
+  "qualification": "Wall-clock callback/allocation measurements, not hardware GPU timestamps. Radix requests synchronous scratch growth; native allocation cost is shared with Three/browser/driver/hardware. Timings are setup-specific. No unrelated application failure is included."
+}

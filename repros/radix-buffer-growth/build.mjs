@@ -10,6 +10,7 @@ const args=process.argv.slice(2);let output,evidence;
 for(let i=0;i<args.length;i++){if(args[i]==='--zip')continue;if(args[i]==='--evidence-dir'){evidence=args[++i];if(!evidence)throw new Error('--evidence-dir requires a directory.');}else if(!output&&!args[i].startsWith('--'))output=args[i];else throw new Error('Unknown build argument: '+args[i]);}
 const out=path.resolve(output||path.join(root,'test-output','radix-buffer-growth-standalone'));
 if(out===root||out===here||!out.startsWith(root+path.sep)||out===path.join(root,'release')||out.startsWith(path.join(root,'release')+path.sep))throw new Error('Choose a dedicated output directory inside the workspace, outside release/.');
+try{if((await fs.readdir(out)).length)throw new Error('Choose a new or empty output directory; stale investigation files must not enter the developer handoff.');}catch(error){if(error.code!=='ENOENT')throw error;}
 await fs.mkdir(out,{recursive:true});
 await build({entryPoints:[path.join(here,'app.js')],outfile:path.join(out,'app.js'),bundle:true,format:'esm',platform:'browser',target:'es2022',sourcemap:true,minify:false,legalComments:'eof',metafile:true}).then(async result=>{
  await fs.writeFile(path.join(out,'bundle-inputs.json'),JSON.stringify({inputs:Object.keys(result.metafile.inputs)},null,2));
@@ -17,11 +18,14 @@ await build({entryPoints:[path.join(here,'app.js')],outfile:path.join(out,'app.j
  if(forbidden.length)throw new Error('Unexpected application input: '+forbidden.join(', '));
 });
 for(const name of ['index.html','README.md','REPORT.md','server.mjs'])await fs.copyFile(path.join(here,name),path.join(out,name));
-await fs.cp(path.join(here,'evidence'),path.join(out,'evidence'),{recursive:true});
+// The upstream handoff includes only the standalone allocation reproduction.
+// Never copy the directory wholesale: it also retains internal investigations.
+await fs.mkdir(path.join(out,'evidence'),{recursive:true});
+await fs.copyFile(path.join(here,'evidence/sort-capacity-growth.json'),path.join(out,'evidence/sort-capacity-growth.json'));
 if(evidence){
  const folder=path.resolve(evidence),target=path.join(out,'evidence/synthetic');await fs.mkdir(target,{recursive:true});
- for(const name of ['result.json','smoke-sort.json','sort-growth.json','render-growth.json','sort-uninstrumented.json','render-growth-cpu.json.gz','sort-growth.png','render-growth.png','sort-uninstrumented.png'])await fs.copyFile(path.join(folder,name),path.join(target,name));
- for(const name of ['lifecycle.json','smoke-render-readback.json','smoke-render-readback-active.png'])try{await fs.copyFile(path.join(folder,name),path.join(target,name));}catch(error){if(error.code!=='ENOENT')throw error;}
+ for(const name of ['result.json','sort-growth.json','render-growth.json','sort-uninstrumented.json'])await fs.copyFile(path.join(folder,name),path.join(target,name));
+ for(const name of ['environment.json','gpu-samples.csv','repeat-sort-growth.json','repeat-gpu-samples.csv','sort-growth.png','render-growth.png','render-growth-active.png','sort-uninstrumented.png','render-growth-cpu.json.gz'])try{await fs.copyFile(path.join(folder,name),path.join(target,name));}catch(error){if(error.code!=='ENOENT')throw error;}
 }
 await fs.mkdir(path.join(out,'licenses'),{recursive:true});
 await fs.copyFile(path.join(root,'src/rendering/radix/vendor/LICENSE'),path.join(out,'licenses/RADIX-MIT.txt'));

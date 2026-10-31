@@ -552,7 +552,7 @@ the identified same-card WebGPU conversion encompass the original capture,
 but no per-stage wall times establish exact GPU-dispatch overlap. The report
 keeps this uncertainty separate from the demonstrated sorting-allocation hitch.
 
-Updated developer handoff:
+Historical developer handoff (superseded by the Radix-only revision below):
 `artifacts/radix-buffer-growth-repro-2026-10-30-v2.zip`, 2,584,620 bytes,
 SHA-256 `768a9f74f27dc47078e5788a14fa26381ee88f7ab565f8f4962d06c7db8219ed`.
 The original ZIP remains unchanged. Revision two adds the clean comparisons,
@@ -566,3 +566,45 @@ verified local application; no runtime change or new version follows from this
 diagnostic follow-up. Its SHA-256 and the stable 1.23.0 executable's hash were
 rechecked and match the checkpoints above. Owned native/helper/sampler processes
 exited normally, and all three original project metadata hashes are unchanged.
+
+### Upstream handoff narrowed to experimentally isolated Radix behavior
+
+The user requested a report containing only issues pinned to Radix's own path.
+`repros/radix-buffer-growth/REPORT.md` and its README now cover one reproducible
+performance issue: synchronous scratch-capacity growth inside sorting. Native
+Studio freezes, the unassigned 250 ms waits, collision work, conversion timing
+and generic contention experiments are internal investigations, excluded from
+the developer handoff. Earlier bundles are historical, not the current handoff.
+
+Fresh standalone measurements with no Studio, converter, compute helper or
+peer diagnostic renderer reproduce the five-million-key transition. Normal
+desktop activity remains documented (16–25% ambient GPU); no exclusive-idle-OS
+claim is made. Unprofiled sorter timings are 73.4/0.9 ms growth/replay with
+instrumentation, 74.0/0.9 ms without wrappers, and 73.2/0.6 ms in an independent
+repeat. Six allocations total 47.9 ms within the first callback: four 28.8 MB
+key/value buffers plus offsets/histograms. Same-sorter replay creates no buffers
+and grows no capacity. The report identifies Radix's synchronous allocation
+placement while keeping native allocator costs properly attributed across
+Three/browser/driver/hardware. Supplementary visible-renderer evidence is
+explicitly separated from the unprofiled timing controls.
+
+Clean source evidence: `test-output/radix clean standalone 1793409240696/` and
+the independent repeat `test-output/radix clean repeat 1793409365491/`.
+The new tracked `evidence/sort-capacity-growth.json` is a concise standalone
+summary. The builder copies that summary and an explicit raw-file allowlist;
+it never copies internal integration evidence and refuses nonempty output
+directories to prevent stale investigation files being carried forward.
+
+Current developer ZIP: `artifacts/radix-buffer-growth-repro-2026-10-30-v4.zip`,
+2,565,286 bytes / 31 entries. SHA-256:
+`aa9fb93c8a425b150e97c10d10bb21c7996b8af4454fb51dba9fc326336d0d6d`.
+It contains only the standalone source/page, clean measurements, supplementary
+profile/screenshots, provenance and licenses. No previous bundle was overwritten.
+Reproduction `app.js` is byte-identical to revision two; this changes report scope
+and packaging, not the viewer/editor renderer. Four metrics tests pass. Local
+archive verification checks raw completion/errors, pins/notices, exclusion of
+internal evidence in both default/measured builds, and rejection of nonempty
+outputs without changing the existing ZIP:
+`test-output/radix-only-handoff-verification.json`.
+The request acknowledges Radix's existing `SplatRenderer.prepare(camera)` for the
+current collection and specifically asks about reserving future scratch capacity.

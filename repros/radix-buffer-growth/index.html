@@ -29,7 +29,7 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; background:#08
 <label>Prebuilt counts<input id="counts" type="text" value="250000,750000,1750000,3600000,5000000"></label>
 <label>Seconds per count<input id="seconds" type="number" min="1" max="15" step="1" value="3"></label>
 <label class="check"><input id="instrument" type="checkbox" checked>Record buffer allocation and capacity changes</label>
-<label class="check"><input id="readback" type="checkbox">Read visible count once per second (application-style control)</label>
+<label class="check"><input id="readback" type="checkbox">Optional visible-count readback once per second</label>
 </fieldset>
 <div class="actions"><button id="run">Run growth + replay</button><button id="stop" disabled>Stop</button><button id="download" disabled>Download report JSON</button></div>
 <p id="status" role="status">Ready. Keep this tab visible. Close unrelated GPU workloads for a clean comparison.</p>
@@ -39,7 +39,7 @@ pre { white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; background:#08
 <p class="hint">Graph: blue = raw frame interval, amber = synchronous render/sort callback; vertical markers = count changes. Values include scheduling and GPU backpressure. They are not GPU execution timings. Instrumentation adds overhead; repeat with it disabled. The first warm-up is excluded from comparisons.</p>
 <table><thead><tr><th>Pass / count</th><th>Frames</th><th>Frame p95 / max</th><th>CPU p95 / max</th><th>createBuffer calls / max</th><th>Capacity growths</th></tr></thead><tbody id="summary"></tbody></table>
 <pre id="log">No measurement yet.</pre>
-<p class="hint">Dependencies and licenses are local. See README.md for the pinned source commits, procedure, memory caveats and original observed stacks. No result is automatically uploaded.</p>
+<p class="hint">Dependencies and licenses are local. See README.md and REPORT.md for pinned source versions, the procedure and measured growth-versus-replay evidence. No result is automatically uploaded.</p>
 </main>
 <script type="module" src="./app.js"></script>
 </html>

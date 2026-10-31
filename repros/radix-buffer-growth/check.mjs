@@ -40,6 +40,6 @@ try{
   if(config.instrument){const growth=state.run.events.filter(e=>e.type==='bufferCapacity'&&state.run.stages[e.stage]?.pass==='growth'),replay=state.run.events.filter(e=>e.type==='bufferCapacity'&&state.run.stages[e.stage]?.pass==='replay');assert.ok(growth.length>0,'actual sorter capacity grows');assert.equal(replay.length,0,'fixed-capacity replay does not grow');assert.ok(state.run.events.some(e=>e.type==='createBuffer'),'actual allocation calls captured');}
   console.log('PASS',config.name,state.environment.adapterInfo,'maxCPU',Math.max(...state.run.frames.filter(f=>f.pass!=='warmup').map(f=>f.cpu)));await page.close();page=undefined;
  }
- await fs.writeFile(path.join(out,'result.json'),JSON.stringify({browser:browser.version(),args,confound:'Existing user Studio/import remains running. Shared GPU contention is possible and no other process was stopped.',results},null,2));console.log('PASS',out);
+ await fs.writeFile(path.join(out,'result.json'),JSON.stringify({browser:browser.version(),args,workloadQualification:'This runner does not control external GPU workloads. Accompany published timings with a separately recorded workload inventory.',results},null,2));console.log('PASS',out);
 }catch(error){await fs.writeFile(path.join(out,'failure.json'),JSON.stringify({error:error.stack,results},null,2));if(page)await page.screenshot({path:path.join(out,'failure.png')}).catch(()=>{});throw error;}
 finally{clearTimeout(watchdog);await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}

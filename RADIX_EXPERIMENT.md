@@ -595,9 +595,9 @@ summary. The builder copies that summary and an explicit raw-file allowlist;
 it never copies internal integration evidence and refuses nonempty output
 directories to prevent stale investigation files being carried forward.
 
-Current developer ZIP: `artifacts/radix-buffer-growth-repro-2026-10-30-v4.zip`,
-2,565,286 bytes / 31 entries. SHA-256:
-`aa9fb93c8a425b150e97c10d10bb21c7996b8af4454fb51dba9fc326336d0d6d`.
+Current developer ZIP: `artifacts/radix-buffer-growth-repro-2026-10-30-v5.zip`,
+2,565,453 bytes / 31 entries. SHA-256:
+`46a16c7ecdbd5396bf6bb56deda7f5890aa029f4bdfd897b33073431d950fd30`.
 It contains only the standalone source/page, clean measurements, supplementary
 profile/screenshots, provenance and licenses. No previous bundle was overwritten.
 Reproduction `app.js` is byte-identical to revision two; this changes report scope
@@ -608,3 +608,5 @@ outputs without changing the existing ZIP:
 `test-output/radix-only-handoff-verification.json`.
 The request acknowledges Radix's existing `SplatRenderer.prepare(camera)` for the
 current collection and specifically asks about reserving future scratch capacity.
+Revision five adds a plain-language Problem statement above Reproduced issue;
+the measured evidence and reproduction code are unchanged.

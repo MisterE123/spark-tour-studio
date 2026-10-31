@@ -2,6 +2,14 @@
 
 Prepared for the Radix developers, 30 October 2026.
 
+## Problem statement
+
+When Radix needs to sort more splats than its temporary memory can hold, it
+expands that memory while updating the view. This can interrupt smooth motion:
+the standalone test records about 73 ms spent in that update, versus under 1 ms
+for the same work once the memory is ready. The issue is the memory expansion
+interrupting an otherwise fast update.
+
 ## Reproduced issue
 
 Increasing the working count causes `WgpuSplatSorter.sort` to grow scratch

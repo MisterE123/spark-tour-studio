@@ -63,6 +63,8 @@ jobs:
         run: node scripts/radix-collision-check.mjs
       - name: Check persistent XR manager, stereo navigation and resolution settings
         run: node scripts/radix-xr-check.mjs
+      - name: Check visible XR menus in both projection-layer eyes
+        run: node scripts/radix-xr-layers-check.mjs
       - name: Check inherited scene performance policies and live runtime changes
         run: node scripts/scene-performance-check.mjs
       - name: Check scene overrides and visitor performance controls

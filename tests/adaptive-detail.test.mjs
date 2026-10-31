@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {AdaptiveDetailController} from '../shared/adaptive-detail.mjs';
 import {PerformanceSettingsSchema,PerformancePresetSchema,presetFile} from '../shared/performance.mjs';
 
-function harness(){const controller=new AdaptiveDetailController();let time=0;const trace=[];return {controller,trace,drive(duration,{fps=60,targetFps=60,eligible=true,context='scene:desktop'}={}){const step=1000/fps,end=time+duration;for(;time<end;time+=step){const before=controller.scale;controller.sample({time,frameMs:step,targetFps,eligible,context});if(before!==controller.scale)trace.push({time,scale:controller.scale});}return controller.scale;},stall(ms){time+=ms;return controller.sample({time,frameMs:ms,targetFps:60,eligible:true,context:'scene:desktop'});}};}
+function harness(){const controller=new AdaptiveDetailController();let time=0;const trace=[];return {controller,trace,drive(duration,{fps=60,targetFps=60,eligible=true,context='scene:desktop',immersive=false}={}){const step=1000/fps,end=time+duration;for(;time<end;time+=step){const before=controller.scale;controller.sample({time,frameMs:step,targetFps,eligible,context,immersive});if(before!==controller.scale)trace.push({time,scale:controller.scale});}return controller.scale;},stall(ms){time+=ms;return controller.sample({time,frameMs:ms,targetFps:60,eligible:true,context:'scene:desktop'});}};}
 
 test('automatic detail is opt-in and survives old and new named preset round trips',()=>{
  const old=PerformanceSettingsSchema.parse({});assert.equal('adaptiveDetail' in old,false);assert.equal('adaptiveTargetFps' in old,false);
@@ -62,4 +62,42 @@ test('a healthy new scene recovers its full budget within a minute with bounded 
 test('desktop/XR or scene changes restart the window and respect the supplied refresh goal',()=>{
  const h=harness();h.drive(7000,{fps:30,targetFps:30});assert.equal(h.controller.scale,1);h.drive(5000,{fps:30,targetFps:90,context:'scene:xr:90'});assert.equal(h.controller.scale,1);h.drive(2000,{fps:30,targetFps:90,context:'scene:xr:90'});assert.equal(h.controller.scale,.75);h.drive(5000,{fps:30,targetFps:90,context:'next:xr:90'});assert.equal(h.controller.scale,.75);
  assert.equal(h.controller.reset(),1);h.drive(5000,{fps:10});assert.equal(h.controller.scale,1,'applying a preset restores its full target and restarts observation');
+});
+
+test('immersive overload sheds a desktop-sized ceiling promptly and can pass the old quarter-budget floor',()=>{
+ for(const fps of [20,36]){
+  const h=harness(),options={fps,targetFps:72,immersive:true,context:'scene:xr:72'};
+  h.drive(1700,options);assert.equal(h.controller.scale,.5,'a sustained overloaded headset should reduce within two seconds');
+  h.drive(3500,options);assert.ok(h.controller.scale<=.125,'High detail should reach source-coverage-sized budgets within five seconds');
+  h.drive(12000,options);assert.equal(h.controller.scale,.01,'the old .25 floor must not retain a million-splat desktop request');
+  assert.ok(h.trace.every(entry=>entry.scale>=.01&&entry.scale<=1));
+  for(let i=1;i<h.trace.length;i++)assert.ok(h.trace[i].time-h.trace[i-1].time>=1500-1e-6,'headset changes retain a bounded cooldown');
+ }
+ const desktop=harness();desktop.drive(1700,{fps:20,targetFps:72});assert.equal(desktop.controller.scale,1,'the existing desktop observation period is unchanged');
+});
+
+test('immersive feedback detects missed 72/90 Hz delivery instead of accepting a 60 FPS desktop goal',()=>{
+ for(const targetFps of [72,90]){const h=harness();h.drive(2000,{fps:60,targetFps,immersive:true,context:'headset'});assert.ok(h.controller.scale<1,'60 FPS misses '+targetFps+' Hz and should adapt');}
+ const h=harness();h.drive(30000,{fps:72,targetFps:72,immersive:true,context:'headset'});assert.equal(h.controller.scale,1,'stable delivery at the headset refresh retains authored detail');
+});
+
+test('repeated severe immersive stalls still drive recovery after comparable-frame confirmation',()=>{
+ for(const fps of [2,.5]){const h=harness();h.drive(22000,{fps,targetFps:72,immersive:true,context:'headset'});assert.ok(h.controller.scale<.25,'repeated '+fps+' FPS headset delivery must not remain at the old floor');assert.ok(h.controller.scale>=.01);}
+});
+
+test('immersive safety exclusions and cautious recovery preserve a seeded device-local ceiling',()=>{
+ const h=harness();assert.equal(h.controller.reset(.15),.15);h.drive(30000,{fps:20,targetFps:72,immersive:true,eligible:false});assert.equal(h.controller.scale,.15);
+ h.drive(1000,{fps:20,targetFps:72,immersive:true});assert.equal(h.controller.scale,.15,'suspended time cannot complete the new observation window');
+ h.drive(2000,{fps:20,targetFps:72,immersive:true});assert.ok(h.controller.scale<.15);
+ h.drive(20000,{fps:20,targetFps:72,immersive:true});assert.equal(h.controller.scale,.01);
+ const recoveryStart=h.trace.length;h.drive(40000,{fps:72,targetFps:72,immersive:true});
+ const recovery=h.trace.slice(recoveryStart);assert.ok(recovery.length>=2);let previous=.01;
+ for(let i=0;i<recovery.length;i++){assert.ok(recovery[i].scale>previous&&recovery[i].scale-previous<=.050001);if(i)assert.ok(recovery[i].time-recovery[i-1].time>=10000-1e-6);previous=recovery[i].scale;}
+ assert.ok(h.controller.scale<.3,'recovery must not immediately return a headset to an excessive detail request');
+ const c=new AdaptiveDetailController();c.reset(.005);for(let time=0;time<10000;time+=50)c.sample({time,frameMs:50,targetFps:72,eligible:true,immersive:true});assert.equal(c.scale,.005,'an already lower explicit seed cannot be increased by a slow-frame floor clamp');
+ assert.equal(c.reset(),1);for(const value of [0,-1,1.1,NaN,Infinity])assert.throws(()=>c.reset(value),/Initial automatic detail/);
+});
+
+test('an isolated immersive screenshot-sized stall does not cut detail',()=>{
+ const c=new AdaptiveDetailController();let time=0;for(let i=0;i<400;i++){const ms=i===100?500:1000/72;time+=ms;c.sample({time,frameMs:ms,targetFps:72,eligible:true,immersive:true});}assert.equal(c.scale,1);
 });

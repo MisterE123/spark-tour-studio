@@ -610,3 +610,67 @@ The request acknowledges Radix's existing `SplatRenderer.prepare(camera)` for th
 current collection and specifically asks about reserving future scratch capacity.
 Revision five adds a plain-language Problem statement above Reproduced issue;
 the measured evidence and reproduction code are unchanged.
+
+### Quest XR overlays, controls and automatic detail
+
+The actual Quest 3 capture identified repeated exceptions in the tour's manual
+`renderer.clearDepth()` call, after the splat draw and before the overlay pass.
+Three's common renderer creates a clear-only context with no camera; its WebGL
+array-depth path then dereferences that camera. The device was using genuine
+OVR multiview and an array-backed XR target. This aborted every affected frame
+before menus/bubbles, readiness completion and automatic-detail feedback. It can
+also block movement through incomplete readiness or an invisible open menu.
+This is an integration fix, separate from the Radix developer handoff above.
+
+All overlay materials now explicitly ignore scene depth, including controller
+rays. The redundant standalone depth clear is removed without changing vendor
+code, tracked poses or XR session ownership. A temporary in-memory correction
+in the user's existing Quest tab restored UI and frame rate, confirmed by the
+user. Their export files were not modified. Before/after evidence is local in
+`test-output/quest-radix-snapshot-1793416725914/` and
+`test-output/quest-radix-depth-proof-1793416990102/`.
+
+Automatic detail now has an explicit immersive policy: opted-in XR starts with
+a temporary selected budget of at most 750,000 per asset, responds to sustained
+overload promptly, uses the headset refresh rate, and recovers detail cautiously.
+It can reduce below the old quarter-budget limit and continues sampling while
+XR menus/content are open. Authored presets are unchanged; opting out keeps the
+chosen manual ceiling. Desktop/mobile behavior retains its existing policy.
+Source coarse coverage can exceed the requested budget, so no frame-rate
+guarantee is made. Actual stereo selection tests retain that coverage instead
+of silently dropping chunks to satisfy a number.
+
+The animation loop also ignores Three's timestamp-less bootstrap callback.
+Previously an actual session-end bootstrap poisoned the average frame time with
+NaN even though later timestamps recovered. The expanded real-manager test
+reproduces the old failure and verifies finite timing through exit/re-entry and
+failed-session recovery.
+
+Verification: 515/515 unit/integration tests pass in 162.4 seconds at
+`test-output/unit-radix-xr-fix-2026-10-30.log`; production build/type-check passes.
+The expanded fallback XR fixture covers both hands, Drone/Walk movement, vertical
+movement, snap turning, grip and wrist-menu actions, menu movement blocking,
+visible menu pixels in both eyes and all original scene/teleport/session checks:
+`test-output/radix XR 1793417271604/result.json`. A new projection-layer fixture
+checks real eye textures on hardware and CI software rendering, and is included
+in branch CI: `test-output/radix XR layers 1793416928262/result.json` and
+`test-output/radix XR layers 1793417019536/result.json`. Desktop ANGLE advertises
+OVR without the multisample entry point required by pinned Three, so these tests
+explicitly report genuine multiview unavailable rather than emulating it. The
+Quest capture/user confirmation provides the physical multiview evidence.
+
+Adaptive tests use actual Three XRManager, production streaming and one shared
+session/camera/rig: `test-output/radix adaptive 1793417108345/result.json`.
+They assert the XR entry seed, prompt overload response, continued menu/content
+feedback, actual reduced selected counts and source coverage. A synthetic-clock
+rewind in the fixture was corrected; no backend ownership gate was removed.
+
+Remaining live LoD investigation: the user reports inconsistent nearby refinement
+after UI recovery. North's mandatory coarse coverage is 748,652 splats, leaving
+only 1,348 refinement headroom at a 750,000 budget; tied nearby promotions can
+cost more. Production CPU selection reproduces this coarse-nearby behavior, while
+1M budgets refine containing leaves through the sampled 0–10 m approaches:
+`test-output/north-selection-cpu-1793417496232/result.json`. This demonstrates a
+budget/source-granularity limit, not that it caused the user's current session.
+Live capture paused while the headset was asleep; no request/camera defect is
+claimed without the matching live desired/shown/budget state.

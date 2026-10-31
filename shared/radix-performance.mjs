@@ -49,6 +49,15 @@ export const SceneRadixPerformanceSettingsSchema=z.object({
 /** @param {{radix?:unknown}|undefined} settings */
 export function radixPerformanceSettings(settings){return RadixPerformanceSettingsSchema.parse(settings?.radix===undefined?{}:settings.radix);}
 
+/** Start an opted-in immersive session below a desktop-sized detail ceiling.
+ * This is temporary device-local selection, not an authored preset change.
+ * Mandatory source coverage may still exceed this requested budget.
+ * @param {{adaptiveDetail?:boolean,radix?:unknown}|undefined} settings
+ */
+export function radixAdaptiveXrEntryScale(settings){
+ return settings?.adaptiveDetail?Math.min(1,750000/radixPerformanceSettings(settings).selectedSplatBudget):1;
+}
+
 const common=z.object({
  pixelRatio:number(.5,2,1.5),maxSh:integer(0,3,3),
  minAlpha:number(0,.1,.5/255),maxStdDev:number(2,3,Math.sqrt(8)),

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {z} from 'zod';
-import {RadixPerformanceSettingsSchema,SceneRadixPerformanceSettingsSchema,radixPerformanceSettings,radixRenderSettings} from '../shared/radix-performance.mjs';
+import {RadixPerformanceSettingsSchema,SceneRadixPerformanceSettingsSchema,radixPerformanceSettings,radixRenderSettings,radixAdaptiveXrEntryScale} from '../shared/radix-performance.mjs';
 import {PerformanceSettingsSchema,PerformancePresetSchema,ScenePerformanceSettingsSchema,ViewpointPerformanceSettingsSchema,defaultPerformance,presetFile,tourPerformanceSettings,scenePerformanceSettings,viewpointPerformanceSettings} from '../shared/performance.mjs';
 import {blankProject,newScene,ProjectSchema} from '../shared/project.mjs';
 
@@ -58,6 +58,16 @@ test('automatic detail changes only effective selection and never saved settings
  assert.equal(radixRenderSettings(settings,Number.MIN_VALUE).selectedSplatBudget,1);
  assert.deepEqual(settings,before);
  for(const scale of [0,-1,1.01,Infinity,NaN])assert.throws(()=>radixRenderSettings(settings,scale),/Automatic detail scale/);
+});
+
+test('automatic immersive entry starts below a desktop-sized ceiling without changing authored presets',()=>{
+ for(const budget of [50000,750000,4000000,5000000,32000000]){
+  const settings=PerformanceSettingsSchema.parse({adaptiveDetail:true,radix:{selectedSplatBudget:budget,residentSplatBudget:Math.max(budget,16000000)}}),before=structuredClone(settings),scale=radixAdaptiveXrEntryScale(settings),effective=radixRenderSettings(settings,scale);
+  assert.equal(effective.selectedSplatBudget,Math.min(budget,750000));assert.equal(effective.residentSplatBudget,settings.radix.residentSplatBudget);assert.deepEqual(settings,before);
+  assert.equal(radixAdaptiveXrEntryScale({...settings,adaptiveDetail:false}),1,'opting out retains the authored entry request');
+ }
+ assert.equal(radixAdaptiveXrEntryScale(undefined),1);assert.equal(radixAdaptiveXrEntryScale({}),1);
+ assert.equal(radixRenderSettings({adaptiveDetail:true},radixAdaptiveXrEntryScale({adaptiveDetail:true})).selectedSplatBudget,750000,'legacy presets use resolved Radix defaults without injecting metadata');
 });
 
 test('published Radix schema and example agree with runtime validation',async()=>{

@@ -135,3 +135,22 @@ test('sustained covers, ordinary ineligibility and context changes require fresh
  }
  const c=new AdaptiveDetailController();c.reset(.2);for(let time=0;time<5000;time+=10)c.sample({time,frameMs:10,targetFps:90,eligible:true,immersive:true});c.sample({time:NaN,frameMs:10,targetFps:90,eligible:true,immersive:true,paused:true});assert.equal(c.average,undefined,'invalid clock safety also applies during a requested pause');assert.equal(c.fastMs,0);
 });
+
+test('sporadic missed headset refreshes permit gradual recovery without requiring perfect cadence',()=>{
+ for(const missPeriod of [2000,4000]){
+  const c=new AdaptiveDetailController();c.reset(.1875);let time=0,nextMiss=missPeriod,frames=0;const changes=[];
+  while(time<120000){let frameMs=1000/90;if(time>=nextMiss){frameMs*=2;nextMiss+=missPeriod;}time+=frameMs;const before=c.scale;c.sample({time,frameMs,targetFps:90,eligible:true,immersive:true,minimumScale:.175,context:'sporadic:xr'});if(c.scale!==before)changes.push({time,scale:c.scale});frames++;}
+  const deliveredFps=frames*1000/time;assert.ok(deliveredFps>89.4&&deliveredFps<90,'the fixture is actual doubled refresh intervals, not an idealized constant average');
+  assert.ok(changes.length>=2,'one missed refresh every '+missPeriod+' ms must not hold the entry ceiling indefinitely');assert.ok(changes[0].time<30000);assert.ok(c.scale>.1875&&c.scale<=1);
+  let previous=.1875;for(let i=0;i<changes.length;i++){assert.ok(changes[i].scale>previous&&changes[i].scale-previous<=.050001);if(i)assert.ok(changes[i].time-changes[i-1].time>=10000-1e-6);previous=changes[i].scale;}
+ }
+});
+
+test('retained immersive recovery credit cannot increase quality during sustained hold or overload',()=>{
+ const c=new AdaptiveDetailController();c.reset(.2);let time=0;
+ const drive=(duration,fps)=>{const end=time+duration,frameMs=1000/fps;while(time<end){time+=frameMs;c.sample({time,frameMs,targetFps:90,eligible:true,immersive:true,minimumScale:.175,context:'hold:xr'});}};
+ drive(9000,90);drive(9700,90);assert.equal(c.scale,.25);const credit=c.fastMs;assert.ok(credit>8000,'healthy evidence may wait for its recovery cooldown');
+ drive(600,85);assert.ok(time-c.lastChange>10000,'the cooldown has elapsed while the average is in the hold band');assert.ok(c.average>1000/90*1.02&&c.average<1000/90*1.1);assert.ok(c.fastMs>8000&&c.fastMs<credit,'hold time decays earlier credit instead of counting as new healthy evidence');assert.equal(c.slowMs,0);assert.equal(c.scale,.25,'retained credit alone may not authorize an increase in the hold band');
+ drive(30000,85);assert.equal(c.scale,.25);assert.equal(c.fastMs,0,'sustained 85 FPS against 90 Hz drains retained recovery evidence');
+ drive(10000,80);assert.equal(c.scale,.175,'sustained overload still reduces detail to mandatory coverage');assert.equal(c.fastMs,0);
+});

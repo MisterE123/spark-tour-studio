@@ -755,3 +755,69 @@ exact in the export. The cold `/tour/` website renders all fixture scenes and
 bubble content with original files unavailable, external requests blocked, and
 no page errors, failed responses or WebGL audit errors. These use isolated test
 assets, not the user's projects/export. All owned test applications are closed.
+
+### Follow-up: nearby detail still coarse in the current Quest export
+
+The user reproduced this in Hungars Aerial by entering Viewpoints, changing to
+Drone and approaching the church. Read-only inspection confirms the live
+`192.168.1.25:8443` server serves the clean `f8030531` runtime byte-for-byte, with
+the scene's 25 m distance override inherited by both views. Mode changes do not
+reset that resolved policy. Evidence:
+`test-output/radix-export-policy-1793444754489/result.json`.
+
+A separate cadence proof finds another controller defect: one missed 90 Hz
+refresh every two/four seconds (89.5/89.8 FPS average) resets the eight-second
+recovery window indefinitely. The narrow correction decays prior healthy credit
+in the XR hold band instead of erasing it. Increasing detail still requires a
+currently healthy average; sustained 85 FPS holds, 80 FPS reduces, and desktop
+behavior is unchanged. Floors, fades, clock/visibility safety, cooldowns and step
+limits remain. This is a demonstrated policy defect, not yet a diagnosis of the
+current physical Quest session.
+
+All 525 unit/integration tests pass in 158.8 seconds at
+`test-output/unit-xr-recovery-credit-full-2026-10-31.log`; production build passes.
+Actual browser selection with periodic missed refreshes refines from 8,192 to
+16,384 fixture splats in the same XR session:
+`test-output/radix adaptive 1793445606179/result.json`. Independent review found
+no additional concern. This follow-up has not yet been packaged as a local EXE.
+
+USB ADB repeatedly disappears despite Windows reporting a healthy WinUSB
+interface. Screenshot attempts returned no PNG; no screenshot was captured, and
+the user canceled that request. The tour was neither stopped nor refreshed.
+A separate read-only diagnostic proxy passed its localhost-only check at
+`test-output/quest-lod-network-1793445171741/local-check.json`. Automatic approval
+review rejected enabling an additional LAN listener because it would expose the
+potentially private tour on another port. The user subsequently explicitly
+approved LAN access. The copy is running at `192.168.1.25:8444/?diagnostics=1`,
+verified locally with no rendering/settings changes, and original exports and
+the original server remain unchanged. Initial rows are desktop title warm-up
+only, not Quest evidence: `test-output/quest-lod-network-1793461538593/`.
+
+The user then authorized controlling the Quest while away. Restarting the owned
+ADB server without screenshots briefly restored the actual Quest connection.
+Meta's documented `com.oculus.vrpowermanager.prox_close` development broadcast and
+stay-awake command succeeded, but the XR session remained hidden and later USB
+commands stalled. Bounded wake/foreground attempts did not produce a sustained
+visible session; no screenshots, device reboot, driver replacement or fabricated
+tracking/visibility data were used. The official development command is described
+at https://developers.meta.com/vr/documentation/unity/meta-xr-operator/quest/ .
+
+Actual current-device capture at the reported Aerial Drone pose:
+`test-output/quest-radix-lod-watch-1793462091709/samples.jsonl`. Budget, selected,
+shown and applied CPU order are all 699,824; desired/shown are 3,318 leaves at L4
+and two sparse leaves at L3. The L4 metadata total alone is 699,809; sparse-level
+fallback explains the extra 15, not a different source dataset. Requests,
+prepared uploads, waiting tiers and failures are zero. This establishes that the
+current coarse appearance is requested by the budget rather than caused by a
+missing download or blocked CPU publication at that pose. The local selection
+eye matches the transformed physical head. The captured session is hidden and
+frames are stale, so its last frame history is not claimed as normal active
+headset performance or an explanation of why the budget originally fell.
+
+A bounded independent desktop GPU control used that position and approximate
+heading/projection with stable residency and real GL timer queries:
+`test-output/aerial overdraw desktop control1793462744824/result.json`.
+It does not establish a coarse-LoD overdraw trap as the Quest cause. It is neither
+exact headset orientation nor physical Quest GPU timing. All owned desktop test
+browsers are closed. The remaining decisive test needs a visible, responsive
+physical XR session and matching budget/desired/shown/cadence data during motion.

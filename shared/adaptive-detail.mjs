@@ -51,12 +51,16 @@ export class AdaptiveDetailController {
   // Even a confirmed very slow frame contributes at most one second. A single
   // interval must not satisfy the whole decision window by itself.
   const observed=Math.min(elapsed,1000);
+  const healthy=this.average<budget*(immersive?1.02:1.05);
   if(this.average>budget*(immersive?1.1:1.2)){this.slowMs+=observed;this.fastMs=0;}
-  else if(this.average<budget*(immersive?1.02:1.05)){this.fastMs+=observed;this.slowMs=0;}
-  else{this.slowMs=0;this.fastMs=0;}
+  else if(healthy){this.fastMs+=observed;this.slowMs=0;}
+  // One missed headset refresh can briefly move the average into the hold
+  // band. Decay earlier healthy evidence there instead of requiring eight
+  // uninterrupted seconds; sustained hold cadence still drains that credit.
+  else{this.slowMs=0;this.fastMs=immersive?Math.max(0,this.fastMs-observed):0;}
   let next=this.scale;
   if(this.slowMs>=(immersive?500:2000)&&time-this.lastChange>=(immersive?1500:5000))next=Math.max(floor,Math.min(this.scale,immersive?.01:.25),this.scale*(immersive&&this.average>budget*1.75?.5:.75));
-  else if(this.fastMs>=(immersive?8000:6000)&&time-this.lastChange>=(immersive?10000:6000))next=Math.min(1,this.scale+(immersive?.05:.1));
+  else if(healthy&&this.fastMs>=(immersive?8000:6000)&&time-this.lastChange>=(immersive?10000:6000))next=Math.min(1,this.scale+(immersive?.05:.1));
   if(next!==this.scale){const reduced=next<this.scale;this.scale=next;this.lastChange=time;this.slowMs=0;this.fastMs=0;if(reduced)this.settledSince=time;}
   return this.scale;
  }

@@ -733,3 +733,25 @@ build/type-check passes, and the stereo/adaptive checks above pass after the
 coverage/fade integration. An independent review found no additional ownership,
 authored-ceiling, per-frame leaf-traversal or suspension issue. Physical Quest
 validation of this newly exported build is still required.
+
+Current clean-source Windows preview:
+`experimental-release/3DGS Perspectives Studio 1.23.0 Experimental f8030531.exe`,
+compiled commit `f80305312eeba857c42101f1245bfdda250a2a42`, `dirty=false`.
+SHA-256: `a0c7302d541f3da6e1f00ad8994c8c41b9cdf0132990cbc2fd315effb32df8f1`.
+Actual portable launch/About/normal close passes at
+`test-output/portable smoke 1793419405111/result.json`; packaged identity and
+visitor dependency graph pass at `test-output/studio-build-1793419405415/result.json`.
+Stable `release/3DGS Perspectives Studio 1.23.0.exe` remains unchanged, SHA-256
+`c25903f082020a619e9c3e09705931051cff1b32c4269241d95f2e754c7fbd2b`.
+Main is unchanged. The Radix source commits are pushed; no stable release or
+version/tag change was made, and release results are not being monitored.
+
+Final packaged authoring/export regression passes at
+`test-output/radix-authoring-1793419406308/result.json`: queued SOGS import,
+replacement/cancel with annotations preserved, actual automatic WebGPU and
+explicit CPU conversions, Walk Preview, performance graph, Save/reopen, collision
+and authoring round trips. World Labs MIT notices and adapter provenance remain
+exact in the export. The cold `/tour/` website renders all fixture scenes and
+bubble content with original files unavailable, external requests blocked, and
+no page errors, failed responses or WebGL audit errors. These use isolated test
+assets, not the user's projects/export. All owned test applications are closed.

@@ -174,11 +174,27 @@ try{
   let state=await page.evaluate(async()=>{test.reset({});return test.settle();});await record('Initial actual backend and coverage',state);assert.equal(state.backend,backend,'This fixture requires the actual '+backend+' renderer; received '+state.backend+'. Browser, GPU service, renderer device and candidate-adapter diagnostics are recorded in result.json.');assert.equal(state.scale,1);const original=state.selected;assert.ok(original>12500,'actual scene exceeds adaptive minimum budget');
   await record('Real SOG scene starts at authored budget',state);
   state=await page.evaluate(()=>test.feedback(7000,20));assert.equal(state.scale,.75);assert.equal(state.budget,37500);assert.equal(state.base.radix.selectedSplatBudget,50000);await record('20 FPS below30 target reduces actual stream budget',state);
-  assert.equal(await page.evaluate(()=>test.runtime.mesh.stream.settings.adaptiveMaxSplats),50000,'reduced desktop selection receives the authored ceiling');
+  assert.deepEqual(await page.evaluate(()=>test.runtime.mesh.stream.settings.coverage),{mode:'whole-scene-with-allowance',authoredBudget:50000},'reduced desktop selection receives the authored ceiling');
   // Exercise the reported-pending-work gate independently of network timing;
   // all fixture files are local. Initial-cover loading is checked separately.
   state=await page.evaluate(()=>{test.runtime.mesh.stream.stats.loading=3;return test.feedback(9000,24);});assert.equal(state.scale,.5625,'reported refinement does not suppress a beneficial adjustment');assert.ok(state.selected<original,'actual LoD selection decreases, not just UI metadata');await record('Pending refinement count is not a feedback eligibility gate',state);
   state=await page.evaluate(()=>test.feedback(20000,24));assert.equal(state.scale,.75);assert.equal(state.budget,37500);await record('An ineffective second cut restores the last beneficial budget',state);
+  state=await page.evaluate(async()=>{
+   test.reset({});
+   const trial=await test.feedback(7000,20);
+   Object.defineProperty(document,'hidden',{configurable:true,value:true});
+   try{
+    document.dispatchEvent(new Event('visibilitychange'));
+    return {...test.snapshot(),trialBudget:trial.budget};
+   }finally{
+    delete document.hidden;
+    document.dispatchEvent(new Event('visibilitychange'));
+   }
+  });
+  assert.equal(state.trialBudget,37500);
+  assert.equal(state.scale,1);
+  assert.equal(state.budget,50000,'losing visibility during a trial immediately restores the last verified stream budget');
+  await record('Desktop visibility loss rolls back an unfinished budget trial before the next frame',state);
   state=await page.evaluate(async()=>{test.reset({});await test.tick(14000,.5);return test.settle();});assert.ok(state.scale<1,'repeated two-second render intervals must trial a detail reduction');assert.ok(state.budget<50000);await record('Sustained visible half-FPS cadence trials a reduced budget',state);
   // Restore each individual gate and restart feedback before the next probe.
   for(const gate of ['loading','editing','blocked','menuOpen']){
@@ -187,7 +203,7 @@ try{
   state=await page.evaluate(()=>{test.reset({adaptiveDetail:false});return test.feedback(15000,20);});assert.equal(state.scale,1);assert.equal(state.budget,50000);await record('Opt-out retains authored budget',state);
   state=await page.evaluate(()=>{test.reset({});return test.feedback(60000,scale=>10/scale**.65);});assert.equal(state.scale,.25);assert.equal(state.budget,12500);assert.ok(state.selected>=8192,'mandatory available coarse coverage remains visible');await record('Bounded beneficial reductions retain source coverage',state);
   state=await page.evaluate(()=>test.feedback(55000,60));assert.equal(state.scale,1);assert.equal(state.budget,50000);await record('Healthy cadence cautiously restores authored budget',state);
-  assert.equal(await page.evaluate(()=>test.runtime.mesh.stream.settings.adaptiveMaxSplats),undefined,'full desktop detail clears the temporary ceiling');
+  assert.deepEqual(await page.evaluate(()=>test.runtime.mesh.stream.settings.coverage),{mode:'whole-scene'},'full desktop detail clears the temporary allowance');
   state=await page.evaluate(()=>{test.reset({radix:{lodRangeMin:0,lodRangeMax:0}});return test.feedback(60000,20);});assert.equal(state.scale,1);assert.equal(state.budget,50000);assert.equal(state.selected,32768,'authored sole available level retains coverage');await record('A reduction with no frame-time benefit restores authored detail',state);
   assert.deepEqual(await page.evaluate(()=>[JSON.stringify(test.authored)===test.authoredBefore,JSON.stringify(test.project)===test.projectBefore]),[true,true],'feedback never edits saved preset or scene data');
   if(backend==='webgpu-gl'){
@@ -196,16 +212,64 @@ try{
    state=await page.evaluate(()=>{test.reset({});test.sessions[0].frameRate=undefined;return test.feedback(8000,50);});assert.ok(state.scale<1);assert.match(state.controller.context,/xr:72$/);assert.equal(state.session,true);await record('Headset without reported refresh uses72Hz goal in the same session',state);
    state=await page.evaluate(()=>{test.reset({radix:{selectedSplatBudget:5000000,residentSplatBudget:8000000}});return test.snapshot();});assert.equal(state.scale,.15);assert.equal(state.budget,750000);assert.equal(state.base.radix.selectedSplatBudget,5000000);assert.equal(state.settings.residentSplatBudget,8000000);await record('High detail during XR starts at temporary750k selection instead of a full5M request',state);
    state=await page.evaluate(()=>test.feedback(2000,20));assert.ok(state.scale<=.075);assert.ok(state.budget<=375000);await record('Sustained immersive overload reduces the seeded ceiling within two seconds',state);
-   assert.equal(await page.evaluate(()=>test.runtime.mesh.stream.settings.adaptiveMaxSplats),undefined,'immersive feedback retains its headset budget policy');
+   assert.deepEqual(await page.evaluate(()=>test.runtime.mesh.stream.settings.coverage),{mode:'guarded-view'},'immersive feedback retains its stereo coverage policy');
    state=await page.evaluate(()=>test.feedback(12000,20));assert.equal(state.scale,.01);assert.equal(state.budget,50000);assert.equal(state.session,true);assert.deepEqual(state.xrIdentity,{renderer:true,camera:true,rig:true,manager:true});await record('XR feedback passes the old quarter-budget floor without replacing its session or renderer',state);
    state=await page.evaluate(()=>{test.reset({});test.runtime.toggleMenu();return test.feedback(2300,20);});assert.equal(state.menuOpen,true);assert.ok(state.scale<1,'immersive menu rendering remains actual headset load');assert.equal(state.session,true);await record('Automatic detail remains active behind an open XR menu',state);
    state=await page.evaluate(()=>{test.reset({});test.runtime.jump(test.runtime.active.entry,false);test.runtime.openViewDetails();return test.feedback(2300,20);});assert.equal(state.contentOpen,true);assert.equal(state.menuOpen,true);assert.ok(state.scale<1,'immersive description rendering must not indefinitely suspend automatic detail');assert.equal(state.session,true);await record('Automatic detail remains active behind actual XR viewpoint content',state);
-   state=await page.evaluate(()=>{test.reset({});test.sessions[0].frameRate=90;return test.feedback(20000,20);});await record('XR stops reducing at the actual mandatory source coverage',state);assert.equal(state.scale,8192/50000);assert.equal(state.budget,8192);assert.ok(state.selected<original);assert.ok(state.shown>=8192,'mandatory coarse coverage is retained');
+   state=await page.evaluate(()=>{test.reset({});test.sessions[0].frameRate=90;return test.feedback(20000,20);});await record('XR budget feedback stops at the whole-scene coarse reference',state);assert.equal(state.scale,8192/50000);assert.equal(state.budget,8192);assert.ok(state.selected<original);assert.ok(state.shown>=8192,'this all-forward fixture retains every coarse range');
    state=await page.evaluate(()=>test.feedback(55000,90,5000));assert.ok(state.budget>8192,'brief teleport-sized fades cannot erase all recovery evidence');assert.ok(state.selected>8192,'healthy delivery with repeated fades must refine actual production LoD selection');assert.equal(state.session,true);assert.deepEqual(state.xrIdentity,{renderer:true,camera:true,rig:true,manager:true});await record('Healthy XR recovery refines real imagery despite repeated220ms fades',state);
    state=await page.evaluate(()=>{test.reset({});return test.feedback(20000,20);});assert.equal(state.budget,8192);
    state=await page.evaluate(()=>test.feedbackMisses(65000,2000));assert.ok(state.budget>8192,'occasional missed refreshes cannot hold the source at its entry floor');assert.ok(state.selected>8192,'actual LoD selection must refine without requiring perfect refresh delivery');assert.equal(state.session,true);assert.deepEqual(state.xrIdentity,{renderer:true,camera:true,rig:true,manager:true});await record('One missed90Hz refresh every two seconds still permits actual detail recovery',state);
    state=await page.evaluate(()=>{test.reset({radix:{lodRangeMin:0,lodRangeMax:0}});return test.feedback(20000,20);});assert.equal(state.budget,32768);assert.equal(state.selected,32768);await record('Authored single-level XR range uses its effective coverage floor',state);
    state=await page.evaluate(()=>{test.reset({});test.sessions[0].visibilityState='visible-blurred';return test.feedback(10000,20);});assert.equal(state.scale,1,'system-menu suspension cannot lower scene budget');await record('XR system-menu suspension excludes samples',state);
+   // At 100 FPS, 800 ms of real tracked callbacks would complete the next
+   // recovery window. Run the same timeline with the viewer pose missing.
+   // The last tracked frames and both sides of the interruption go through
+   // Three's actual XR animation callback and the production runtime loop.
+   for(const loseTracking of [false,true]){
+    const sample=await page.evaluate(async loseTracking=>{
+     test.sessions[0].visibilityState='visible';
+     test.reset({radix:{selectedSplatBudget:4_000_000,residentSplatBudget:8_000_000}});
+     const runtime=test.runtime;
+     const read=()=>({
+      scale:runtime.adaptiveDetailScale,
+      drawn:runtime.backend.stats.frames,
+      history:runtime.framePerformance.snapshot(test.time),
+     });
+     await test.tick(10,100);
+     for(let elapsed=0;elapsed<8370;elapsed+=10){
+      test.time+=10;
+      runtime.updateAdaptivePerformance(test.time,10,true,false,0);
+     }
+     runtime.last=test.time;
+     await test.tick(20,100);
+     const before=read();
+     test.tracking=!loseTracking;
+     await test.tick(800,100);
+     const during=read();
+     test.tracking=true;
+     await test.tick(10,100);
+     const first=read();
+     await test.tick(10,100);
+     return {before,during,first,second:read(),...test.snapshot()};
+    },loseTracking);
+    assert.equal(sample.before.scale,.1875);
+    assert.equal(sample.before.history.recording,true);
+    assert.equal(sample.session,true);
+    if(loseTracking){
+     assert.equal(sample.during.drawn,sample.before.drawn);
+     assert.equal(sample.during.history.recording,false);
+     assert.equal(sample.first.drawn,sample.before.drawn+1);
+     assert.equal(sample.first.history.sampleCount,sample.before.history.sampleCount);
+     assert.equal(sample.second.history.sampleCount,sample.before.history.sampleCount+1);
+     assert.equal(sample.first.scale,.1875,'untracked callbacks cannot fund a detail increase on return');
+     assert.equal(sample.second.scale,.1875);
+    }else{
+     assert.ok(sample.during.drawn>sample.before.drawn);
+     assert.equal(sample.first.scale,.2375,'the same interval with tracking earns a recovery step');
+    }
+    await record(loseTracking?'Tracking loss interrupts both the frame graph and automatic detail':'Continuous tracked delivery earns recovery at the same cadence',sample);
+   }
    await page.evaluate(()=>{test.sessions[0].visibilityState='visible';test.reset({});void test.runtime.selectScene('opposed');});
    async function pumpUntil(check,label){
     const deadline=Date.now()+15000;

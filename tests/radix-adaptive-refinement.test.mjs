@@ -120,7 +120,7 @@ test('with initially slow desktop cadence that improves as budget decreases, wal
     lastScale = scale;
     const resolved = radixRenderSettings({adaptiveDetail: true, radix: {selectedSplatBudget: authored}}, scale);
     settings.splatBudget = resolved.selectedSplatBudget;
-    settings.adaptiveMaxSplats = resolved.adaptiveMaxSplats;
+    settings.coverage = resolved.coverage;
     stream.invalidate();
   }
   try {
@@ -156,15 +156,15 @@ test('manual budgets remain exact, and automatic refinement respects distance, l
   const baseline = select(0, manual);
   assert.equal(baseline.total, floor);
   assert.ok(baseline.levels.every(level => level === coarse));
-  const limited = {...manual, adaptiveMaxSplats: floor + 4_000};
+  const limited = {...manual, coverage: {mode:'whole-scene-with-allowance', authoredBudget:floor+4_000}};
   const nearby = select(0, limited);
-  assert.ok(nearby.total > floor && nearby.total <= limited.adaptiveMaxSplats);
+  assert.ok(nearby.total > floor && nearby.total <= limited.coverage.authoredBudget);
   assert.ok(nearby.levels[nearStart] < coarse);
-  assert.equal(select(0, {...limited, adaptiveMaxSplats: floor - 1}).total, floor);
+  assert.equal(select(0, {...limited, coverage: {mode:'whole-scene-with-allowance', authoredBudget:floor-1}}).total, floor);
   assert.equal(select(-1_000, limited).total, floor, 'limit mode does not force refinement outside authored distances');
   assert.equal(select(0, {...limited, rangeMin: coarse, rangeMax: coarse}).total, floor);
   const original = {...manual, splatBudget: authored};
-  assert.deepEqual(select(0, {...original, adaptiveMaxSplats: authored}), select(0, original));
+  assert.deepEqual(select(0, {...original, coverage: {mode:'whole-scene-with-allowance', authoredBudget:authored}}), select(0, original));
 });
 
 test('view priority follows turns in place and lens changes without responding to small yaw jitter', () => {
@@ -198,11 +198,11 @@ test('view priority follows turns in place and lens changes without responding t
 
 // Each leaf has its own two chunks. The front can be drawn at its finest
 // level for less than the original full-tree coarse workload.
-function xrTree(boxes) {
+function xrTree(boxes, counts = [18, 10]) {
   const filenames = [];
   const children = Object.entries(boxes).map(([id, [min, max]]) => ({
     bound: {min, max},
-    lods: [18, 10].map((count, level) => ({
+    lods: counts.map((count, level) => ({
       file: filenames.push(id + '-' + level + '/meta.json') - 1, offset: 0, count,
     })),
   }));
@@ -212,6 +212,27 @@ function xrLeaf(tree, id) {
   return Array.from({length: tree.leaves}, (_, leaf) => leaf)
     .find(leaf => tree.files[tree.file[leaf * tree.levels]].endsWith('/' + id + '-0/meta.json'));
 }
+
+test('the same walk and tight budget refine the approached region in desktop and headset coverage modes', () => {
+  const tree = xrTree({north:[[-1,-1,-6],[1,1,-5]], south:[[-1,-1,5],[1,1,6]]}, [26_000,25_000]);
+  const profile = {adaptiveDetail:true,radix:{selectedSplatBudget:100_000}};
+  const poses = [
+    {z:-3, forward:-1, near:'north', far:'south'},
+    {z:3, forward:1, near:'south', far:'north'},
+  ];
+  for (const immersive of [false,true]) {
+    const effective = radixRenderSettings(profile,.5,immersive);
+    const settings = {...defaultLodSettings(false),viewPriority:effective.viewPriority,coverage:effective.coverage,splatBudget:effective.selectedSplatBudget};
+    const levels = new Int8Array(tree.leaves), distances = new Float32Array(tree.leaves);
+    assert.equal(settings.splatBudget,tree.levelTotals[1]);
+    for (const pose of poses) {
+      const count = selectLevels(tree,{x:0,y:0,z:pose.z},{x:0,y:0,z:pose.forward},settings,levels,distances,1,.35);
+      assert.equal(levels[xrLeaf(tree,pose.near)],0);
+      assert.equal(levels[xrLeaf(tree,pose.far)],immersive ? -1 : 1);
+      assert.equal(count,immersive ? 26_000 : 51_000);
+    }
+  }
+});
 
 test('immersive selection under pressure protects stereo, peripheral and straddling boxes, and respects the authored distance limit', () => {
   const tree = xrTree({
@@ -224,7 +245,7 @@ test('immersive selection under pressure protects stereo, peripheral and straddl
   });
   const levels = new Int8Array(tree.leaves);
   const distances = new Float32Array(tree.leaves);
-  const settings = {...defaultLodSettings(true), splatBudget: tree.levelTotals[1], viewPriority: true, immersiveViewBudget: true};
+  const settings = {...defaultLodSettings(true), splatBudget: tree.levelTotals[1], viewPriority: true, coverage: {mode:'guarded-view'}};
   const run = (overrides = {}, z = 0) => selectLevels(tree, {x:0, y:0, z}, {x:0, y:0, z:-1}, {...settings,...overrides}, levels, distances, 1, .35);
   for (const mode of ['target', 'limit']) {
     const count = run({budgetMode: mode});
@@ -234,8 +255,10 @@ test('immersive selection under pressure protects stereo, peripheral and straddl
     assert.ok(levels.includes(0), 'the released work refines a retained leaf');
     if (mode === 'limit') assert.equal(levels[xrLeaf(tree, 'distant')], 1);
   }
-  run({immersiveViewBudget:false});
+  run({coverage:{mode:'whole-scene'}});
   assert.ok(levels.every(level => level === 1), 'ordinary whole-scene selection stays intact');
+  run({viewPriority:false});
+  assert.equal(levels[xrLeaf(tree,'rear')],-1,'the selector applies the resolved coverage rule independently of upgrade ranking');
   run({splatBudget:1000});
   assert.ok(levels.every(level => level >= 0), 'no ranges are removed when all eligible detail fits');
   run({budgetMode:'target'}, -90);
@@ -246,7 +269,7 @@ test('immersive snap turns and teleports restore warm coarse ranges before new d
   const tree = xrTree({front: [[-1,-1,-3],[1,1,-2]], rear: [[-1,-1,2],[1,1,3]]});
   const front = xrLeaf(tree,'front'), rear = xrLeaf(tree,'rear');
   const camera = new THREE.PerspectiveCamera(60,1,.05,100);
-  const settings = {...defaultLodSettings(true), splatBudget:20, residentBudget:20, viewPriority:true, immersiveViewBudget:true};
+  const settings = {...defaultLodSettings(true), splatBudget:20, residentBudget:20, viewPriority:true, coverage:{mode:'guarded-view'}};
   const stream = new SogLodStream({renderer:{},tree,camera,matrixWorld:new THREE.Matrix4(),settings,degree:0});
   const queued = [];
   stream.load = file => {

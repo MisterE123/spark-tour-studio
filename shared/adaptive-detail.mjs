@@ -5,8 +5,20 @@
 export class AdaptiveDetailController {
  constructor(){this.scale=1;this.context='';this.resetHistory();}
  reset(initialScale=1){if(!Number.isFinite(initialScale)||initialScale<=0||initialScale>1)throw Error('Initial automatic detail scale must be greater than zero and at most one.');this.context='';this.resetHistory();this.scale=initialScale;return this.scale;}
- resetHistory(){this.lastTime=undefined;this.lastChange=-Infinity;this.rejectedDesktopTrial=undefined;this.clearObservation();}
- clearObservation(){this.cancelDesktopTrial();this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;this.recentFrames=[];this.pauseMs=0;this.wasPaused=false;this.pauseExpired=false;this.resetDesktopWindow();}
+ resetHistory(){this.lastChange=-Infinity;this.rejectedDesktopTrial=undefined;this.interrupt();}
+ /** Break frame continuity while preserving accepted detail and prior trial results. */
+ interrupt(){this.lastTime=undefined;this.clearObservation();}
+ clearObservation(){
+  this.restartSettling();
+  this.recentFrames=[];
+  this.pauseMs=0;this.wasPaused=false;this.pauseExpired=false;
+ }
+ restartSettling(){
+  this.cancelDesktopTrial();
+  this.settledSince=undefined;this.average=undefined;
+  this.slowMs=0;this.fastMs=0;
+  this.resetDesktopWindow();
+ }
  cancelDesktopTrial(){
   if(!this.desktopTrial)return;
   this.scale=this.desktopTrial.scale;
@@ -22,13 +34,15 @@ export class AdaptiveDetailController {
   // observation. Repeated visible frames up to five seconds can be genuine
   // low-end rendering; rejecting every interval over one second prevented
   // those devices from ever reducing their detail.
-  if(![time,frameMs,targetFps,elapsed,minimumScale].every(Number.isFinite)||targetFps<1||frameMs<=0||frameMs>5000||elapsed<0||elapsed>5000||minimumScale<0){this.clearObservation();return this.scale;}
-  // Source coverage cannot become cheaper than its mandatory coarsest leaves.
-  // Keeping a lower internal scale would only delay later healthy recovery.
-  // A source above the authored ceiling stays at scale 1, not above it.
+  if(![time,frameMs,targetFps,elapsed,minimumScale].every(Number.isFinite)||targetFps<1||frameMs<=0||frameMs>5000||elapsed<0||elapsed>5000||minimumScale<0){this.interrupt();return this.scale;}
+  // Whole-scene coarse coverage is a stable recovery baseline in VR, even
+  // when the selector reallocates some of its rear coverage to visible detail.
   const floor=immersive?Math.min(1,minimumScale):0;
   if(this.scale<floor){this.scale=floor;this.clearObservation();}
-  if(!eligible){this.clearObservation();return this.scale;}
+  if(!eligible){this.interrupt();return this.scale;}
+  // A frame duration can begin while tracking, visibility or loading excluded
+  // the scene. The first eligible timestamp only establishes the new clock.
+  if(elapsed===0)return this.scale;
   if(paused||this.wasPaused){
    this.pauseMs+=elapsed;
    // Retain evidence only for a brief fade. A persistent cover is ordinary
@@ -44,7 +58,7 @@ export class AdaptiveDetailController {
   // comparable slow intervals establish real low cadence, including sub-1-FPS
   // operation and variable intervals on either side of the 250 ms threshold.
   const minimum=Math.min(...this.recentFrames),maximum=Math.max(...this.recentFrames),slowCadence=this.recentFrames.length===3&&minimum>=150&&maximum/minimum<=2.5;
-  if((frameMs>250||elapsed>1000)&&!slowCadence){this.cancelDesktopTrial();this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;this.resetDesktopWindow();return this.scale;}
+  if((frameMs>250||elapsed>1000)&&!slowCadence){this.restartSettling();return this.scale;}
   if(this.settledSince===undefined){this.settledSince=time;this.average=frameMs;return this.scale;}
   this.average+=(frameMs-this.average)*(1-Math.exp(-Math.min(elapsed,250)/500));
   // A headset must shed sustained overload promptly: waiting six seconds per
@@ -56,7 +70,11 @@ export class AdaptiveDetailController {
   // Even a confirmed very slow frame contributes at most one second. A single
   // interval must not satisfy the whole decision window by itself.
   const observed=Math.min(elapsed,1000);
-  if(!immersive)return this.sampleDesktop(time,frameMs,observed,budget,shownSplats);
+  return immersive
+   ?this.sampleImmersive(time,observed,budget,floor)
+   :this.sampleDesktop(time,frameMs,observed,budget,shownSplats);
+ }
+ sampleImmersive(time,observed,budget,floor){
   const healthy=this.average<budget*1.02;
   if(this.average>budget*1.1){this.slowMs+=observed;this.fastMs=0;}
   else if(healthy){this.fastMs+=observed;this.slowMs=0;}

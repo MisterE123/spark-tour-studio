@@ -101,9 +101,40 @@ test('a healthy new scene recovers its full budget within a minute with bounded 
  const changes=h.trace.length;for(let i=0;i<40;i++)h.drive(1000,{fps:1000/(i%2?19:21),context:'new-scene:desktop'});assert.equal(h.controller.scale,1);assert.equal(h.trace.length,changes,'cadence around the slow threshold cannot cause quality oscillation');
 });
 
-test('desktop/XR or scene changes restart the window and respect the supplied refresh goal',()=>{
- const h=harness();h.drive(7000,{fps:30,targetFps:30});assert.equal(h.controller.scale,1);h.drive(5000,{fps:30,targetFps:90,context:'scene:xr:90'});assert.equal(h.controller.scale,1);h.drive(2000,{fps:30,targetFps:90,context:'scene:xr:90'});assert.equal(h.controller.scale,.75);h.drive(5000,{fps:30,targetFps:90,context:'next:xr:90'});assert.equal(h.controller.scale,1,'a new scene cannot inherit an unverified reduction');
- assert.equal(h.controller.reset(),1);h.drive(5000,{fps:10});assert.equal(h.controller.scale,1,'applying a preset restores its full target and restarts observation');
+test('switching from desktop to immersive and back uses each mode’s observation and refresh policy',()=>{
+ const h=harness();
+ const desktop={fps:30,targetFps:30,context:'scene:desktop:30'};
+ const immersive={fps:30,targetFps:90,context:'scene:xr:90',immersive:true};
+ h.drive(7000,desktop);assert.equal(h.controller.scale,1);
+ h.controller.reset(.1875);
+ h.drive(1100,immersive);assert.equal(h.controller.scale,.1875,'entry needs new headset evidence');
+ h.drive(650,immersive);assert.equal(h.controller.scale,.09375,'30 FPS falls short of the 90 Hz headset target');
+ h.controller.reset();
+ h.drive(7000,desktop);assert.equal(h.controller.scale,1,'30 FPS satisfies the desktop target again');
+ h.drive(7000,{...desktop,fps:10});assert.equal(h.controller.scale,.75);
+ h.drive(5000,{...desktop,fps:10,context:'next:desktop:30'});assert.equal(h.controller.scale,1,'changing scenes rolls back an unfinished desktop trial');
+});
+
+test('800 ms of missing headset poses cannot complete a healthy observation window',()=>{
+ const c=new AdaptiveDetailController(),seed=.1875;
+ const tracked=time=>c.sample({time,frameMs:10,targetFps:90,eligible:true,immersive:true,context:'scene:xr:90'});
+ c.reset(seed);
+ for(let time=10;time<=8400;time+=10)tracked(time);
+ assert.ok(c.fastMs>=7300&&c.fastMs<8000,'the gap would have completed the healthy window');
+ for(let time=8410;time<=9200;time+=10)c.interrupt();
+ assert.equal(tracked(9210),seed);assert.equal(c.fastMs,0);
+ for(let time=9220;time<=17100;time+=10)tracked(time);
+ assert.equal(c.scale,seed,'reacquired tracking must earn a new observation');
+ for(let time=17110;time<=18500;time+=10)tracked(time);
+ assert.equal(c.scale,.2375,'sustained healthy rendering can still recover detail');
+});
+
+test('interrupting a desktop trial restores the previous selection before sampling resumes',()=>{
+ const h=harness();
+ h.drive(7000,{fps:20});assert.equal(h.controller.scale,.75);
+ h.controller.interrupt();assert.equal(h.controller.scale,1);
+ h.drive(5000,{fps:20});assert.equal(h.controller.scale,1);
+ h.drive(2000,{fps:20});assert.equal(h.controller.scale,.75);
 });
 
 test('immersive overload sheds a desktop-sized ceiling promptly and can pass the old quarter-budget floor',()=>{
@@ -145,12 +176,12 @@ test('an isolated immersive screenshot-sized stall does not cut detail',()=>{
  const c=new AdaptiveDetailController();let time=0;for(let i=0;i<400;i++){const ms=i===100?500:1000/72;time+=ms;c.sample({time,frameMs:ms,targetFps:72,eligible:true,immersive:true});}assert.equal(c.scale,1);
 });
 
-test('immersive overload stops at mandatory source coverage instead of wasting recovery below it',()=>{
+test('immersive overload keeps whole-scene coarse coverage as the recovery baseline',()=>{
  const minimumScale=748652/4000000,h=harness(),options={fps:20,targetFps:90,immersive:true,minimumScale,context:'source:xr'};
- h.drive(30000,options);assert.equal(h.controller.scale,minimumScale);assert.equal(h.controller.scale*4000000,748652);assert.ok(h.trace.some(change=>change.scale<1),'levels above mandatory coverage remain reducible');assert.ok(h.trace.every(change=>change.scale>=minimumScale));
+ h.drive(30000,options);assert.equal(h.controller.scale,minimumScale);assert.equal(h.controller.scale*4000000,748652);assert.ok(h.trace.some(change=>change.scale<1),'budgets above the coarse baseline remain reducible');assert.ok(h.trace.every(change=>change.scale>=minimumScale));
  h.drive(12000,{...options,fps:90});assert.ok(h.controller.scale>minimumScale,'healthy recovery starts from real coverage, not an ineffective 1% request');
  const belowFloor=harness();belowFloor.controller.reset(.15);belowFloor.drive(10000,{...options,minimumScale:748652/500000});assert.equal(belowFloor.controller.scale,1,'source coverage above the authored ceiling cannot authorize detail above that ceiling');
- const desktop=harness();desktop.drive(7000,{fps:10,minimumScale:2});assert.equal(desktop.controller.scale,.75,'mandatory XR coverage does not change desktop policy');
+ const desktop=harness();desktop.drive(7000,{fps:10,minimumScale:2});assert.equal(desktop.controller.scale,.75,'the headset recovery baseline does not change desktop policy');
 });
 
 test('90 Hz viewing recovers above its 750k seed despite recurring brief comfort fades',()=>{

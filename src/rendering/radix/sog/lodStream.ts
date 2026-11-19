@@ -208,7 +208,7 @@ export class SogLodStream {
     const moved = distance > s.updateDistance || angle > turnAngle;
     // A snap turn or teleport can cross the rear guard between adjacent
     // frames. Restore newly visible resident coverage on the next update.
-    const crossedGuard = s.immersiveViewBudget && (angle >= XR_REAR_GUARD_ANGLE || headMargin > 0 && distance >= headMargin
+    const crossedGuard = s.coverage.mode === 'guarded-view' && (angle >= XR_REAR_GUARD_ANGLE || headMargin > 0 && distance >= headMargin
       || headMargin === Infinity && this.lastHeadMargin !== Infinity);
     const perspective = this.camera as THREE.PerspectiveCamera;
     const fov = perspective.isPerspectiveCamera ? fovScale(perspective.fov, perspective.aspect) : 1;

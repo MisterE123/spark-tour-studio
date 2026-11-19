@@ -41,17 +41,25 @@ function fixture(){
 }
 function selectorFloor(lodTree,rangeMin,rangeMax){const desired=new Int8Array(lodTree.leaves),distances=new Float32Array(lodTree.leaves);return selectLevels(lodTree,{x:0,y:0,z:0},{x:0,y:0,z:-1},{...defaultLodSettings(true),rangeMin,rangeMax,splatBudget:1},desired,distances);}
 
+test('the standalone backend uses the shared renderer defaults and the low-level pager keeps its CPU budget',()=>{
+ assert.deepEqual(DEFAULTS,radixRenderSettings({}));
+ assert.deepEqual(DEFAULTS.coverage,{mode:'whole-scene'});
+ assert.equal(DEFAULTS.viewPriority,false);
+ assert.equal(DEFAULTS.selectedSplatBudget,4_000_000);
+ assert.equal(defaultLodSettings(true).splatBudget,2_000_000);
+});
+
 test('both asymmetric eye frusta must lie ahead of the shared head to omit rear coverage',()=>{
  const {backend,close}=fixture();
  const left=new THREE.PerspectiveCamera(90,1,.1,100),right=left.clone();
  left.position.x=-.032;right.position.x=.032;
  const view=new THREE.ArrayCamera([left,right]);
  backend.renderer.xr={isPresenting:true,getCamera:()=>view};
- backend.settings.immersiveViewBudget=true;
+ backend.settings.coverage={mode:'guarded-view'};
  Object.assign(backend,{physicalView:new THREE.ArrayCamera(),midpoint:new THREE.Vector3(),eyePosition:new THREE.Vector3(),headForward:new THREE.Vector3()});
  const metadata=tree([[18,10],[18,10]]);
  metadata.bounds.set([-.5,-.5,-2,.5,.5,-1, -4.1,-.1,1.6,-4,.1,1.7]);
- const settings={...defaultLodSettings(false),splatBudget:20,viewPriority:true,immersiveViewBudget:true};
+ const settings={...defaultLodSettings(false),splatBudget:20,viewPriority:true,coverage:{mode:'guarded-view'}};
  function levels(){
   left.updateMatrixWorld();right.updateMatrixWorld();backend.update(view);
   const chosen=new Int8Array(2);
@@ -71,22 +79,23 @@ test('both asymmetric eye frusta must lie ahead of the shared head to omit rear 
  }finally{close();}
 });
 
-test('LoD floor matches mandatory selector coverage and excludes fixed environment',()=>{
+test('Whole-scene coarse count matches full-coverage selection and excludes fixed environment',()=>{
  const f=fixture(),metadata=tree([[100,40,10],[200,80,20]],{environment:'fixed-environment/meta.json'}),asset=f.create(metadata);
  try{
-  assert.equal(asset.stats.selectionFloor,30);assert.equal(asset.stats.selectionFloor,selectorFloor(metadata,0,7));
-  asset.applySettings({...DEFAULTS,lodRangeMax:1});assert.equal(asset.stats.selectionFloor,120);assert.equal(asset.stats.selectionFloor,selectorFloor(metadata,0,1));
-  asset.applySettings({...DEFAULTS,lodRangeMin:0,lodRangeMax:0});assert.equal(asset.stats.selectionFloor,300);assert.equal(asset.stats.selectionFloor,selectorFloor(metadata,0,0));
-  asset.applySettings({...DEFAULTS,lodRangeMin:20,lodRangeMax:31});assert.equal(asset.stats.selectionFloor,30);assert.equal(asset.stats.selectionFloor,selectorFloor(metadata,20,31));
+  assert.equal(asset.stats.coarseCoverageSplats,30);assert.equal(asset.stats.coarseCoverageSplats,selectorFloor(metadata,0,7));
+  assert.equal(asset.stats.selectionFloor,30,'the existing diagnostics alias exposes the same whole-scene reference');
+  asset.applySettings({...DEFAULTS,lodRangeMax:1});assert.equal(asset.stats.coarseCoverageSplats,120);assert.equal(asset.stats.coarseCoverageSplats,selectorFloor(metadata,0,1));
+  asset.applySettings({...DEFAULTS,lodRangeMin:0,lodRangeMax:0});assert.equal(asset.stats.coarseCoverageSplats,300);assert.equal(asset.stats.coarseCoverageSplats,selectorFloor(metadata,0,0));
+  asset.applySettings({...DEFAULTS,lodRangeMin:20,lodRangeMax:31});assert.equal(asset.stats.coarseCoverageSplats,30);assert.equal(asset.stats.coarseCoverageSplats,selectorFloor(metadata,20,31));
  }finally{f.close();}
 });
 
 test('sparse levels use the selector fallback rather than the last level total',()=>{
  const f=fixture(),metadata=tree([[100,null,10],[null,50,null]]),asset=f.create(metadata);
  try{
-  assert.equal(metadata.levelTotals[2],10);assert.equal(asset.stats.selectionFloor,60);
+  assert.equal(metadata.levelTotals[2],10);assert.equal(asset.stats.coarseCoverageSplats,60);
   for(const[min,max,expected]of[[0,1,60],[0,0,150],[2,0,150],[2,2,60]]){
-   asset.applySettings({...DEFAULTS,lodRangeMin:min,lodRangeMax:max});assert.equal(asset.stats.selectionFloor,expected);assert.equal(asset.stats.selectionFloor,selectorFloor(metadata,min,max));
+   asset.applySettings({...DEFAULTS,lodRangeMin:min,lodRangeMax:max});assert.equal(asset.stats.coarseCoverageSplats,expected);assert.equal(asset.stats.coarseCoverageSplats,selectorFloor(metadata,min,max));
   }
  }finally{f.close();}
 });
@@ -94,14 +103,14 @@ test('sparse levels use the selector fallback rather than the last level total',
 test('backend uses the smallest attached visible LoD floor and skips fixed or detached assets',()=>{
  const f=fixture(),small=f.create(tree([[100,40,10],[200,80,20]])),large=f.create(tree([[100,null,10],[null,50,null]])),fixed=f.create();
  try{
-  assert.equal(fixed.stats.selectionFloor,undefined);f.update();assert.equal(f.backend.stats.selectionFloor,30,'minimum per-asset floor, never sum or maximum');
-  small.removeFromParent();f.update();assert.equal(f.backend.stats.selectionFloor,60);
-  f.scene.add(small);small.visible=false;f.update();assert.equal(f.backend.stats.selectionFloor,60);
-  const hidden=new THREE.Group();hidden.visible=false;f.scene.add(hidden);hidden.add(large);f.update();assert.equal(f.backend.stats.selectionFloor,undefined,'hidden ancestors exclude a LoD asset');
-  hidden.visible=true;f.update();assert.equal(f.backend.stats.selectionFloor,60);
-  small.visible=true;f.update();assert.equal(f.backend.stats.selectionFloor,30);
-  small.dispose();assert.equal(small.stats.selectionFloor,undefined);assert.equal(f.backend.stats.selectionFloor,60,'disposing refreshes immediately');
-  f.node.removeFromParent();f.update();assert.equal(f.backend.stats.selectionFloor,undefined,'assets in another render root do not constrain this backend');
+  assert.equal(fixed.stats.coarseCoverageSplats,undefined);f.update();assert.equal(f.backend.stats.coarseCoverageSplats,30,'minimum per-asset floor, never sum or maximum');
+  small.removeFromParent();f.update();assert.equal(f.backend.stats.coarseCoverageSplats,60);
+  f.scene.add(small);small.visible=false;f.update();assert.equal(f.backend.stats.coarseCoverageSplats,60);
+  const hidden=new THREE.Group();hidden.visible=false;f.scene.add(hidden);hidden.add(large);f.update();assert.equal(f.backend.stats.coarseCoverageSplats,undefined,'hidden ancestors exclude a LoD asset');
+  hidden.visible=true;f.update();assert.equal(f.backend.stats.coarseCoverageSplats,60);
+  small.visible=true;f.update();assert.equal(f.backend.stats.coarseCoverageSplats,30);
+  small.dispose();assert.equal(small.stats.coarseCoverageSplats,undefined);assert.equal(f.backend.stats.coarseCoverageSplats,60,'disposing refreshes immediately');
+  f.node.removeFromParent();f.update();assert.equal(f.backend.stats.coarseCoverageSplats,undefined,'assets in another render root do not constrain this backend');
  }finally{f.close();}
 });
 
@@ -109,10 +118,10 @@ test('settings immediately refresh floors without a renderer update or changing 
  const f=fixture(),a=f.create(tree([[100,40,10],[200,80,20]])),b=f.create(tree([[100,null,10],[null,50,null]]));
  const descriptor=Object.getOwnPropertyDescriptor(globalThis,'devicePixelRatio');Object.defineProperty(globalThis,'devicePixelRatio',{configurable:true,value:1});
  try{
-  f.update();assert.equal(f.backend.stats.selectionFloor,30);
-  f.backend.applySettings({lodRangeMax:0});assert.equal(a.stats.selectionFloor,300);assert.equal(b.stats.selectionFloor,150);assert.equal(f.backend.stats.selectionFloor,150);
-  const budget=f.backend.settings.selectedSplatBudget;f.backend.applySettings({selectedSplatBudget:1});assert.equal(f.backend.stats.selectionFloor,150);assert.equal(f.backend.settings.selectedSplatBudget,1,'diagnostics never force a renderer budget');
-  f.backend.applySettings({selectedSplatBudget:budget,lodRangeMax:7});assert.equal(f.backend.stats.selectionFloor,30);
+  f.update();assert.equal(f.backend.stats.coarseCoverageSplats,30);
+  f.backend.applySettings({lodRangeMax:0});assert.equal(a.stats.coarseCoverageSplats,300);assert.equal(b.stats.coarseCoverageSplats,150);assert.equal(f.backend.stats.coarseCoverageSplats,150);
+  const budget=f.backend.settings.selectedSplatBudget;f.backend.applySettings({selectedSplatBudget:1});assert.equal(f.backend.stats.coarseCoverageSplats,150);assert.equal(f.backend.settings.selectedSplatBudget,1,'diagnostics never force a renderer budget');
+  f.backend.applySettings({selectedSplatBudget:budget,lodRangeMax:7});assert.equal(f.backend.stats.coarseCoverageSplats,30);
  }finally{if(descriptor)Object.defineProperty(globalThis,'devicePixelRatio',descriptor);else delete globalThis.devicePixelRatio;f.close();}
 });
 
@@ -124,7 +133,7 @@ test('desktop automatic reductions pass the authored ceiling to every asset and 
   f.backend.applySettings(values);
   for(const asset of [foreground,background]){
    assert.equal(asset.lod.splatBudget,budget);
-   assert.equal(asset.lod.adaptiveMaxSplats,ceiling);
+   assert.equal(asset.lod.coverage.authoredBudget,ceiling);
    assert.equal(asset.lod.residentBudget,240000);
   }
  };
@@ -138,7 +147,7 @@ test('desktop automatic reductions pass the authored ceiling to every asset and 
 
 test('nearby refinement adds only a bounded amount of work on an overloaded browser',()=>{
  const metadata=tree([[2_000_000,1_060_000,1_000_000]]);
- const settings={...defaultLodSettings(false),adaptiveMaxSplats:4_000_000};
+ const settings={...defaultLodSettings(false),coverage:{mode:'whole-scene-with-allowance',authoredBudget:4_000_000}};
  const select=budget=>selectLevels(metadata,{x:0,y:0,z:0},{x:0,y:0,z:-1},
   {...settings,splatBudget:budget},new Int8Array(1),new Float32Array(1));
  assert.equal(select(1_000_000),1_060_000,'the 60k step fits the 100k allowance; the 1M step does not');

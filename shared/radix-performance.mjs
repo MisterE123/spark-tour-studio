@@ -66,6 +66,10 @@ const common=z.object({
  minPixelRadius:number(0,3,0),maxPixelRadius:number(64,1024,512)
 });
 
+/** Effective draw coverage. Each choice specifies how to fund nearby detail.
+ * @typedef {{mode:'whole-scene'} | {mode:'whole-scene-with-allowance',authoredBudget:number} | {mode:'guarded-view'}} RadixCoveragePolicy
+ */
+
 /**
  * Resolve only fields that Radix actually supports. The temporary automatic
  * scale changes selection, not saved presets, resident limits or source data.
@@ -76,11 +80,11 @@ const common=z.object({
 export function radixRenderSettings(settings,adaptiveScale=1,immersive=false){
  if(!Number.isFinite(adaptiveScale)||adaptiveScale<=0||adaptiveScale>1)throw Error('Automatic detail scale must be greater than zero and at most one.');
  const {lodSelection,...specific}=radixPerformanceSettings(settings),{maxSh,...shared}=common.parse(settings||{});
- // Backend updates merge partial settings. Explicitly clear the temporary
- // ceiling when a preset restores full detail, opts out or enters XR.
  const automatic=settings?.adaptiveDetail===true;
- const adaptiveMaxSplats=automatic&&!immersive&&adaptiveScale<1?specific.selectedSplatBudget:undefined;
  const viewPriority=lodSelection==='view'||(lodSelection===undefined&&automatic);
- const immersiveViewBudget=immersive&&automatic&&viewPriority&&specific.lodBehindPenalty>1;
- return {...specific,...shared,maxShDegree:maxSh,adaptiveMaxSplats,viewPriority,immersiveViewBudget,selectedSplatBudget:Math.max(1,Math.floor(specific.selectedSplatBudget*adaptiveScale))};
+ /** @type {RadixCoveragePolicy} */
+ let coverage={mode:'whole-scene'};
+ if(automatic&&!immersive&&adaptiveScale<1)coverage={mode:'whole-scene-with-allowance',authoredBudget:specific.selectedSplatBudget};
+ if(automatic&&immersive&&lodSelection!=='distance'&&specific.lodBehindPenalty>1)coverage={mode:'guarded-view'};
+ return {...specific,...shared,maxShDegree:maxSh,coverage,viewPriority,selectedSplatBudget:Math.max(1,Math.floor(specific.selectedSplatBudget*adaptiveScale))};
 }

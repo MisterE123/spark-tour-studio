@@ -100,21 +100,23 @@ test('only automatic headset view selection can reallocate offscreen coverage wi
     for(const scale of [.1875,1]){
      const result=radixRenderSettings(settings,scale,immersive);
      assert.equal(result.viewPriority,viewPriority);
-     assert.equal(result.immersiveViewBudget,immersive&&automatic&&viewPriority);
+     let expectedCoverage={mode:'whole-scene'};
+     if(immersive&&automatic&&viewPriority)expectedCoverage={mode:'guarded-view'};
+     if(!immersive&&automatic&&scale<1)expectedCoverage={mode:'whole-scene-with-allowance',authoredBudget:authored};
+     assert.deepEqual(result.coverage,expectedCoverage);
      assert.equal(result.selectedSplatBudget,authored*scale);
-     assert.equal(result.adaptiveMaxSplats,!immersive&&automatic&&scale<1?authored:undefined);
     }
    }
   }
  }
  const equalDirections=radixRenderSettings({adaptiveDetail:true,radix:{lodSelection:'view',lodBehindPenalty:1}},.1875,true);
- assert.equal(equalDirections.immersiveViewBudget,false,'equal-direction weighting retains coarse coverage all around the visitor');
+ assert.deepEqual(equalDirections.coverage,{mode:'whole-scene'},'equal-direction weighting retains coarse coverage all around the visitor');
 });
 
 test('automatic immersive entry starts below a desktop-sized ceiling without changing authored presets',()=>{
  for(const budget of [50000,750000,4000000,5000000,32000000]){
   const settings=PerformanceSettingsSchema.parse({adaptiveDetail:true,radix:{selectedSplatBudget:budget,residentSplatBudget:Math.max(budget,16000000)}}),before=structuredClone(settings),scale=radixAdaptiveXrEntryScale(settings),effective=radixRenderSettings(settings,scale,true);
-  assert.equal(effective.adaptiveMaxSplats,undefined);
+  assert.deepEqual(effective.coverage,{mode:'guarded-view'});
   assert.equal(effective.selectedSplatBudget,Math.min(budget,750000));assert.equal(effective.residentSplatBudget,settings.radix.residentSplatBudget);assert.deepEqual(settings,before);
   assert.equal(radixAdaptiveXrEntryScale({...settings,adaptiveDetail:false}),1,'opting out retains the authored entry request');
  }

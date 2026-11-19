@@ -1,13 +1,11 @@
 import * as THREE from 'three';
 import type {WebGPURenderer} from 'three/webgpu';
+import type {RadixCoveragePolicy} from '../../shared/radix-performance.mjs';
 
 export interface RadixRenderSettings {
  method:'ewa'|'3dgut'|'htgs'|'raygs';sortBits:16|24|32;sortMode:'auto'|'gpu'|'cpu';autoSortDistance:number;autoSortAngle:number;
  selectedSplatBudget:number;residentSplatBudget:number;
- /** Authored per-asset ceiling while automatic desktop detail is reduced. */
- adaptiveMaxSplats?:number;
- /** Spend a constrained headset budget on the view while keeping rear base files resident. */
- immersiveViewBudget?:boolean;
+ coverage:RadixCoveragePolicy;
  lodBaseDistance:number;lodMultiplier:number;lodBehindPenalty:number;lodUnderfill:number;
  lodRangeMin:number;lodRangeMax:number;lodBudgetMode:'limit'|'target';lodUpdateDistance:number;lodUpdateAngle:number;viewPriority:boolean;
  maxShDegree:number;minAlpha:number;maxStdDev:number;minPixelRadius:number;maxPixelRadius:number;minContribution:number;blurAmount:number;preBlurAmount:number;sortGuard:number;
@@ -16,8 +14,10 @@ export interface RadixRenderSettings {
 export interface SplatAssetMetadata {format:'sog'|'sogs'|'sog-lod';lod:boolean;splatCount:number;levels:number;bounds:THREE.Box3}
 export interface SplatAssetStats {
  phase:'loading'|'streaming'|'ready'|'error'|'disposed';selected:number;shown:number;residentSplats:number;residentFiles:number;loading:number;failed:number;error:string;
- /** Cost of whole-scene coarse coverage, used as the stable XR feedback floor. */
- selectionFloor?:number;
+ /** Cost of drawing one coarse range for every leaf at the authored LoD range. */
+ coarseCoverageSplats?:number;
+ /** @deprecated Use coarseCoverageSplats. */
+ readonly selectionFloor?:number;
 }
 export interface SplatAssetOptions {signal?:AbortSignal;maxSh?:number;onProgress?:(fraction:number,stage:string)=>void;onError?:(error:Error)=>void}
 /** A renderer-independent authored transform and bounded surface-picking target. */
@@ -35,8 +35,10 @@ export abstract class SplatAssetGroup extends THREE.Group {
 }
 export interface SplatBackendStats {
  backend:'webgpu'|'webgpu-gl';selected:number;shown:number;visible:number;residentSplats:number;loading:number;failed:number;frames:number;
- /** Lowest per-asset LoD floor among attached visible assets. Undefined if none can adapt. */
- selectionFloor?:number;
+ /** Smallest whole-scene coarse count among attached visible LoD assets. */
+ coarseCoverageSplats?:number;
+ /** @deprecated Use coarseCoverageSplats. */
+ readonly selectionFloor?:number;
 }
 export interface SplatBackend {
  readonly renderer:WebGPURenderer;

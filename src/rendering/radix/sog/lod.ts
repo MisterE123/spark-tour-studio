@@ -16,6 +16,7 @@
 // fill the budget), in "limit" mode the same but at most 1 (the distances
 // are the most detail allowed).
 import {sogResourceUrl} from './sog.js';
+import type {RadixCoveragePolicy} from '../../../../shared/radix-performance.mjs';
 
 interface RawNode {
   bound: { min: number[]; max: number[] };
@@ -65,12 +66,9 @@ export interface LodSettings {
   // Splats selected (0: none; target: the finest everywhere, limit: the
   // distances alone)
   splatBudget: number;
-  // Authored ceiling for a temporarily reduced, nonimmersive automatic budget.
-  adaptiveMaxSplats?: number;
+  coverage: RadixCoveragePolicy;
   // Prioritize upgrades toward the view when eligible detail exceeds the budget.
   viewPriority?: boolean;
-  // Under immersive budget pressure, spend rear coverage on in-view detail.
-  immersiveViewBudget?: boolean;
   budgetMode: BudgetMode;
   // Levels coarser than the selected one a leaf may show while the
   // selected one loads (the finest resident in that window; 0: the
@@ -93,7 +91,7 @@ export interface LodSettings {
 export function defaultLodSettings(cpuSort: boolean): LodSettings {
   return {
     baseDistance: 5, multiplier: 3, rangeMin: 0, rangeMax: 7, behindPenalty: 2,
-    splatBudget: cpuSort ? 2_000_000 : 4_000_000, budgetMode: "limit", underfillLimit: 5, residentBudget: 16_000_000,
+    splatBudget: cpuSort ? 2_000_000 : 4_000_000, budgetMode: "limit", coverage: {mode: 'whole-scene'}, underfillLimit: 5, residentBudget: 16_000_000,
     updateDistance: 0.5, updateAngle: 90, freeze: false, colorLevels: false,
   };
 }
@@ -219,6 +217,8 @@ export interface LevelChains {
 const chainCache = new WeakMap<SogLodTree, LevelChains>();
 
 export function levelChains(tree: SogLodTree, rangeMin: number, rangeMax: number): LevelChains {
+  rangeMax = Math.max(0, Math.min(rangeMax, tree.levels - 1));
+  rangeMin = Math.max(0, Math.min(rangeMin, rangeMax));
   const cached = chainCache.get(tree);
   if (cached && cached.rangeMin === rangeMin && cached.span === rangeMax - rangeMin + 1) {
     return cached;
@@ -336,10 +336,9 @@ function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, 
 // axis, so small camera moves do not flip levels on and off.
 export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like, s: LodSettings, out: Int8Array, d: Float32Array, fov = 1, headMargin = 0): number {
   const { leaves, bounds } = tree;
-  const rangeMax = Math.max(0, Math.min(s.rangeMax, tree.levels - 1));
-  const rangeMin = Math.max(0, Math.min(s.rangeMin, rangeMax));
-  const chains = levelChains(tree, rangeMin, rangeMax);
-  const { span } = chains;
+  const chains = levelChains(tree, s.rangeMin, s.rangeMax);
+  const { span, rangeMin } = chains;
+  const canTrimRear = s.coverage.mode === 'guarded-view' && Number.isFinite(headMargin);
   const penalty = Math.max(0, s.behindPenalty - 1);
   const logBase = Math.log(Math.max(1e-6, s.baseDistance));
   const logMultiplier = Math.log(Math.max(1.2, s.multiplier));
@@ -351,6 +350,8 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
   }
   if (s.viewPriority && viewLogDistances.length < leaves) {
     viewLogDistances = new Float64Array(leaves);
+  }
+  if ((s.viewPriority || canTrimRear) && finestAllowedBand.length < leaves) {
     finestAllowedBand = new Uint8Array(leaves);
   }
   for (let leaf = 0; leaf < leaves; leaf += 1) {
@@ -384,23 +385,22 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
   // The cut: switch points in bins below cutBin are taken, and in cutBin
   // those in sub-bins below cutSub
   let budget = s.splatBudget > 0 ? s.splatBudget : Infinity;
-  if (s.adaptiveMaxSplats !== undefined && budget < s.adaptiveMaxSplats) {
+  if (s.coverage.mode === 'whole-scene-with-allowance' && budget < s.coverage.authoredBudget) {
     // Every leaf needs coarse coverage. At that floor, walking would otherwise
     // select exactly the same levels forever. Leave a small allowance for the
     // nearest upgrades, bounded by both the current workload and the preset.
     const nearAllowance = Math.floor(0.10 * Math.min(chains.coarsest, budget));
-    budget = Math.max(budget, Math.min(s.adaptiveMaxSplats, chains.coarsest + nearAllowance));
+    budget = Math.max(budget, Math.min(s.coverage.authoredBudget, chains.coarsest + nearAllowance));
   }
   const limit = s.budgetMode === "limit";
   let { coarsest, finest } = chains;
-  const canTrimRear = s.immersiveViewBudget && s.viewPriority;
   let requested = finest;
   if (limit && (coarsest < budget || canTrimRear)) {
     requested = 0;
     for (let leaf = 0; leaf < leaves; leaf += 1) {
       let b = span - 1;
       while (b > 0 && binOf(switchAt(leaf, b)) < UNIT_BIN) b -= 1;
-      if (s.viewPriority) finestAllowedBand[leaf] = b;
+      if (s.viewPriority || canTrimRear) finestAllowedBand[leaf] = b;
       requested += chains.count[leaf * span + b];
     }
   }

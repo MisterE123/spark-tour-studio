@@ -362,7 +362,7 @@ export class TourRuntime {
  private resetAdaptivePerformance(immersive:boolean){
   this.adaptiveBaseBudget=radixPerformanceSettings(this.performanceSettings).selectedSplatBudget;
   this.adaptiveScale=immersive?radixAdaptiveXrEntryScale(this.performanceSettings):1;
-  this.adaptiveDetail.reset(this.adaptiveScale);this.backend.applySettings(radixRenderSettings(this.performanceSettings,this.adaptiveScale));
+  this.adaptiveDetail.reset(this.adaptiveScale);this.backend.applySettings(radixRenderSettings(this.performanceSettings,this.adaptiveScale,immersive));
  }
  private updateAdaptivePerformance(time:number,frameMs:number,xr:boolean,suspended:boolean,opacity:number){
   if(!this.performanceSettings.adaptiveDetail)return;
@@ -371,7 +371,7 @@ export class TourRuntime {
   const eligible=observable&&(xr||opacity===0),paused=xr&&observable&&opacity>0;
   const minimumScale=xr?Math.min(1,(this.backend.stats.selectionFloor??0)/this.adaptiveBaseBudget):0;
   const scale=this.adaptiveDetail.sample({time,frameMs,targetFps,eligible,paused,minimumScale,immersive:xr,context:this.generation+':'+(xr?'xr:'+targetFps:'desktop')});
-  if(scale!==this.adaptiveScale){this.adaptiveScale=scale;this.backend.applySettings(radixRenderSettings(this.performanceSettings,scale));}
+  if(scale!==this.adaptiveScale){this.adaptiveScale=scale;this.backend.applySettings(radixRenderSettings(this.performanceSettings,scale,xr));}
  }
  setQuality(q:number){const settings=radixPerformanceSettings(this.performanceBase),factor=THREE.MathUtils.clamp(q,.25,2);this.applyPerformance({...this.performanceBase,radix:{...settings,selectedSplatBudget:Math.max(50000,Math.min(settings.residentSplatBudget,Math.round(settings.selectedSplatBudget*factor/this.quality)))}});this.quality=factor;}
  setTouch(x:number,y:number){if(Math.abs(x)+Math.abs(y)>.01)this.navigator?.takeControl();this.touch.set(THREE.MathUtils.clamp(x,-1,1),THREE.MathUtils.clamp(y,-1,1));}

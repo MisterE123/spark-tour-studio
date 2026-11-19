@@ -5,6 +5,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
 import * as THREE from 'three';
+import {radixRenderSettings} from '../shared/radix-performance.mjs';
 
 const outputRoot=path.resolve('test-output');await fs.mkdir(outputRoot,{recursive:true});
 const output=await fs.mkdtemp(path.join(outputRoot,'radix-selection-floor-unit-'));
@@ -83,4 +84,33 @@ test('settings immediately refresh floors without a renderer update or changing 
   const budget=f.backend.settings.selectedSplatBudget;f.backend.applySettings({selectedSplatBudget:1});assert.equal(f.backend.stats.selectionFloor,150);assert.equal(f.backend.settings.selectedSplatBudget,1,'diagnostics never force a renderer budget');
   f.backend.applySettings({selectedSplatBudget:budget,lodRangeMax:7});assert.equal(f.backend.stats.selectionFloor,30);
  }finally{if(descriptor)Object.defineProperty(globalThis,'devicePixelRatio',descriptor);else delete globalThis.devicePixelRatio;f.close();}
+});
+
+test('desktop automatic reductions pass the authored ceiling to every asset and clear it on mode changes',()=>{
+ const f=fixture(),foreground=f.create(tree([[100,50]])),background=f.create(tree([[80,40]]));
+ const descriptor=Object.getOwnPropertyDescriptor(globalThis,'devicePixelRatio');Object.defineProperty(globalThis,'devicePixelRatio',{configurable:true,value:1});
+ const settings={adaptiveDetail:true,radix:{selectedSplatBudget:120000,residentSplatBudget:240000}};
+ const check=(values,budget,ceiling)=>{
+  f.backend.applySettings(values);
+  for(const asset of [foreground,background]){
+   assert.equal(asset.lod.splatBudget,budget);
+   assert.equal(asset.lod.adaptiveMaxSplats,ceiling);
+   assert.equal(asset.lod.residentBudget,240000);
+  }
+ };
+ try{
+  for(const next of [radixRenderSettings(settings),radixRenderSettings({...settings,adaptiveDetail:false}),radixRenderSettings(settings,.25,true)]){
+   check(radixRenderSettings(settings,.5),60000,120000);
+   check(next,next.selectedSplatBudget,undefined);
+  }
+ }finally{if(descriptor)Object.defineProperty(globalThis,'devicePixelRatio',descriptor);else delete globalThis.devicePixelRatio;f.close();}
+});
+
+test('nearby refinement adds only a bounded amount of work on an overloaded browser',()=>{
+ const metadata=tree([[2_000_000,1_060_000,1_000_000]]);
+ const settings={...defaultLodSettings(false),adaptiveMaxSplats:4_000_000};
+ const select=budget=>selectLevels(metadata,{x:0,y:0,z:0},{x:0,y:0,z:-1},
+  {...settings,splatBudget:budget},new Int8Array(1),new Float32Array(1));
+ assert.equal(select(1_000_000),1_060_000,'the 60k step fits the 100k allowance; the 1M step does not');
+ assert.equal(select(400_000),1_000_000,'when the request shrinks, its 40k allowance cannot fund the 60k step');
 });

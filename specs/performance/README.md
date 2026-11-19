@@ -79,7 +79,9 @@ The `Experiemental-Radix-SOGS` branch preserves the fields above and adds an opt
 | sortGuard | 0 | CPU sort view margin; 0 keeps all splats in its sort. |
 | xrResolutionScale | 1 | Eye-buffer resolution factor, applied at the next XR session start. |
 
-Automatic detail temporarily scales each asset's effective Radix selected budget between 25% and 100%, preserving saved settings and resident limits. The readout totals visible draw/sort splats, supplied fallback splats, selected detail and resident splats across the active foreground and background, and reports the actual WebGPU/WebGL2 backend. None of these counts is a byte-memory limit. Source compression, network waiting and steady frame cadence are different measurements; renderer replacement alone does not establish a speedup on a device.
+In an ordinary browser window, automatic detail requests between 25% and 100% of each asset's selected budget. If coarse coverage would use most or all of the reduced request, the viewer allows extra room for the closest eligible detail. The allowance above coarse coverage is at most 10% of the smaller of the reduced request and the coarse count. Refinement respects the preset ceiling and authored distance and level limits. Whole-scene coarse coverage can itself exceed a requested budget. Immersive VR uses headset-specific entry and feedback settings.
+
+The readout totals visible draw/sort splats, supplied fallback splats, selected detail and resident splats across the active foreground and background, and reports the actual WebGPU/WebGL2 backend. These counts describe splats. Memory use, transfer time and frame rate require separate measurements.
 
 ### Per-scene detail policies
 

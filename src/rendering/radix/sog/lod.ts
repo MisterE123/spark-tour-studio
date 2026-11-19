@@ -65,6 +65,8 @@ export interface LodSettings {
   // Splats selected (0: none; target: the finest everywhere, limit: the
   // distances alone)
   splatBudget: number;
+  // Authored ceiling for a temporarily reduced, nonimmersive automatic budget.
+  adaptiveMaxSplats?: number;
   budgetMode: BudgetMode;
   // Levels coarser than the selected one a leaf may show while the
   // selected one loads (the finest resident in that window; 0: the
@@ -307,7 +309,14 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
 
   // The cut: switch points in bins below cutBin are taken, and in cutBin
   // those in sub-bins below cutSub
-  const budget = s.splatBudget > 0 ? s.splatBudget : Infinity;
+  let budget = s.splatBudget > 0 ? s.splatBudget : Infinity;
+  if (s.adaptiveMaxSplats !== undefined && budget < s.adaptiveMaxSplats) {
+    // Every leaf needs coarse coverage. At that floor, walking would otherwise
+    // select exactly the same levels forever. Leave a small allowance for the
+    // nearest upgrades, bounded by both the current workload and the preset.
+    const nearAllowance = Math.floor(0.10 * Math.min(chains.coarsest, budget));
+    budget = Math.max(budget, Math.min(s.adaptiveMaxSplats, chains.coarsest + nearAllowance));
+  }
   const limit = s.budgetMode === "limit";
   let cutBin = UNIT_BIN;
   let cutSub = 0;

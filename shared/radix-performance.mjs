@@ -69,9 +69,13 @@ const common=z.object({
  * scale changes selection, not saved presets, resident limits or source data.
  * @param {Record<string,unknown>|undefined} settings
  * @param {number} adaptiveScale
+ * @param {boolean} immersive
  */
-export function radixRenderSettings(settings,adaptiveScale=1){
+export function radixRenderSettings(settings,adaptiveScale=1,immersive=false){
  if(!Number.isFinite(adaptiveScale)||adaptiveScale<=0||adaptiveScale>1)throw Error('Automatic detail scale must be greater than zero and at most one.');
  const specific=radixPerformanceSettings(settings),{maxSh,...shared}=common.parse(settings||{});
- return {...specific,...shared,maxShDegree:maxSh,selectedSplatBudget:Math.max(1,Math.floor(specific.selectedSplatBudget*adaptiveScale))};
+ // Backend updates merge partial settings. Explicitly clear the temporary
+ // ceiling when a preset restores full detail, opts out or enters XR.
+ const adaptiveMaxSplats=settings?.adaptiveDetail===true&&!immersive&&adaptiveScale<1?specific.selectedSplatBudget:undefined;
+ return {...specific,...shared,maxShDegree:maxSh,adaptiveMaxSplats,selectedSplatBudget:Math.max(1,Math.floor(specific.selectedSplatBudget*adaptiveScale))};
 }

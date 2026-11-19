@@ -97,7 +97,7 @@ class RadixAsset extends SplatAssetGroup {
  }
  applySettings(settings:RadixRenderSettings){
   this.ownSettings={...settings};this.updateDistances();
-  Object.assign(this.lod,{splatBudget:settings.selectedSplatBudget,residentBudget:settings.residentSplatBudget,multiplier:settings.lodMultiplier,behindPenalty:settings.lodBehindPenalty,underfillLimit:settings.lodUnderfill,rangeMin:settings.lodRangeMin,rangeMax:settings.lodRangeMax,budgetMode:settings.lodBudgetMode,updateAngle:settings.lodUpdateAngle});
+  Object.assign(this.lod,{splatBudget:settings.selectedSplatBudget,adaptiveMaxSplats:settings.adaptiveMaxSplats,residentBudget:settings.residentSplatBudget,multiplier:settings.lodMultiplier,behindPenalty:settings.lodBehindPenalty,underfillLimit:settings.lodUnderfill,rangeMin:settings.lodRangeMin,rangeMax:settings.lodRangeMax,budgetMode:settings.lodBudgetMode,updateAngle:settings.lodUpdateAngle});
   if(this.stream){
    const tree=this.stream.tree,rangeMax=Math.max(0,Math.min(this.lod.rangeMax,tree.levels-1)),rangeMin=Math.max(0,Math.min(this.lod.rangeMin,rangeMax));
    // Match selectLevels, including sparse-level fallback. This cached chain

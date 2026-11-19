@@ -852,3 +852,13 @@ unverified active-headset performance problem. Stable executable and main remain
 unchanged. Source is pushed on the experimental branch; release results are not
 being monitored. All owned test browsers and bounded USB helpers are closed;
 the explicitly approved diagnostic server remains running for the next test.
+
+## South Graveyard on a low-frame-rate browser
+
+In the November 18 export, South Graveyard has 1,381 spatial leaves. Drawing every leaf at its coarsest available level costs 1,013,712 splats. Both Balanced and Lightweight enable automatic detail with a four-million-splat ceiling. At a simulated steady 11 FPS, the nonimmersive controller reached its one-million request after about 30 seconds. At that request, every camera position selected the same coarse layer. Choosing another preset reset the request to four million.
+
+Automatic selection in a browser window now keeps a bounded allowance for nearby detail when it reaches coarse coverage. In a replay of the exported metadata, selections at 0, 2, 5, 10 and 15 meters forward from the authored walking start all refined nearby leaves. Between three and 51 leaves refined per sample, and the total selected ranged from 1,060,482 to 1,113,560. The coarsest layer covered the rest of the scene throughout the walk. See `test-output/south-desktop-refinement-1795048418707/result.json` for both presets. These are selection counts from the original metadata and controlled frame times. The laptop's actual FPS still needs a device measurement.
+
+To check a new export, enter South Graveyard in a normal Chrome window, enable automatic detail on Balanced or Lightweight, and walk past several markers after the first minute. Nearby markers should continue gaining detail without switching presets. The amount depends on available chunk sizes, the preset ceiling and the scene's authored distances.
+
+`node scripts/radix-walking-detail-check.mjs` exports a small independent test tour and drives Walk with keyboard input on a collision floor. Chrome 157 and Edge 157 both fetched and displayed the finest chunk at each of two successive markers at a sustained 25% automatic setting. A fixed budget restored coarse coverage. The test uses software rendering and controlled 11 FPS feedback. Results are in `test-output/radix-walking-detail-1795048577149/results.json` and `test-output/radix-walking-detail-1795048546346/results.json`.

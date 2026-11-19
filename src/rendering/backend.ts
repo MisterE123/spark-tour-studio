@@ -4,6 +4,8 @@ import type {WebGPURenderer} from 'three/webgpu';
 export interface RadixRenderSettings {
  method:'ewa'|'3dgut'|'htgs'|'raygs';sortBits:16|24|32;sortMode:'auto'|'gpu'|'cpu';autoSortDistance:number;autoSortAngle:number;
  selectedSplatBudget:number;residentSplatBudget:number;
+ /** Authored per-asset ceiling while automatic desktop detail is reduced. */
+ adaptiveMaxSplats?:number;
  lodBaseDistance:number;lodMultiplier:number;lodBehindPenalty:number;lodUnderfill:number;
  lodRangeMin:number;lodRangeMax:number;lodBudgetMode:'limit'|'target';lodUpdateDistance:number;lodUpdateAngle:number;
  maxShDegree:number;minAlpha:number;maxStdDev:number;minPixelRadius:number;maxPixelRadius:number;minContribution:number;blurAmount:number;preBlurAmount:number;sortGuard:number;

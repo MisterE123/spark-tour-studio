@@ -62,12 +62,13 @@ test('automatic detail changes only effective selection and never saved settings
 
 test('automatic immersive entry starts below a desktop-sized ceiling without changing authored presets',()=>{
  for(const budget of [50000,750000,4000000,5000000,32000000]){
-  const settings=PerformanceSettingsSchema.parse({adaptiveDetail:true,radix:{selectedSplatBudget:budget,residentSplatBudget:Math.max(budget,16000000)}}),before=structuredClone(settings),scale=radixAdaptiveXrEntryScale(settings),effective=radixRenderSettings(settings,scale);
+  const settings=PerformanceSettingsSchema.parse({adaptiveDetail:true,radix:{selectedSplatBudget:budget,residentSplatBudget:Math.max(budget,16000000)}}),before=structuredClone(settings),scale=radixAdaptiveXrEntryScale(settings),effective=radixRenderSettings(settings,scale,true);
+  assert.equal(effective.adaptiveMaxSplats,undefined);
   assert.equal(effective.selectedSplatBudget,Math.min(budget,750000));assert.equal(effective.residentSplatBudget,settings.radix.residentSplatBudget);assert.deepEqual(settings,before);
   assert.equal(radixAdaptiveXrEntryScale({...settings,adaptiveDetail:false}),1,'opting out retains the authored entry request');
  }
  assert.equal(radixAdaptiveXrEntryScale(undefined),1);assert.equal(radixAdaptiveXrEntryScale({}),1);
- assert.equal(radixRenderSettings({adaptiveDetail:true},radixAdaptiveXrEntryScale({adaptiveDetail:true})).selectedSplatBudget,750000,'legacy presets use resolved Radix defaults without injecting metadata');
+ assert.equal(radixRenderSettings({adaptiveDetail:true},radixAdaptiveXrEntryScale({adaptiveDetail:true}),true).selectedSplatBudget,750000,'legacy presets use resolved Radix defaults without injecting metadata');
 });
 
 test('published Radix schema and example agree with runtime validation',async()=>{

@@ -69,6 +69,8 @@ export interface LodSettings {
   adaptiveMaxSplats?: number;
   // Prioritize upgrades toward the view when eligible detail exceeds the budget.
   viewPriority?: boolean;
+  // Under immersive budget pressure, spend rear coverage on in-view detail.
+  immersiveViewBudget?: boolean;
   budgetMode: BudgetMode;
   // Levels coarser than the selected one a leaf may show while the
   // selected one loads (the finest resident in that window; 0: the
@@ -259,6 +261,7 @@ const histogram = new Float64Array(BINS);
 let logDistances = new Float64Array(0);
 let viewLogDistances = new Float64Array(0);
 let finestAllowedBand = new Uint8Array(0);
+let rearLeaves = new Uint8Array(0);
 
 const binOf = (x: number) => Math.min(BINS - 1, Math.max(0, Math.floor(x)));
 
@@ -267,6 +270,21 @@ const binOf = (x: number) => Math.min(BINS - 1, Math.max(0, Math.floor(x)));
 const INNER_COS = Math.cos(20 * Math.PI / 180);
 const OUTER_COS = Math.cos(55 * Math.PI / 180);
 const FOCUS_SLOPE = Math.tan(6 * Math.PI / 180);
+// Keep the entire forward hemisphere plus space for head motion between selections.
+export const XR_REAR_GUARD_ANGLE = 12;
+const REAR_GUARD_SIN = Math.sin(XR_REAR_GUARD_ANGLE * Math.PI / 180);
+function behindHead(bounds: Float32Array, b: number, eye: Vec3Like, forward: Vec3Like, margin: number): boolean {
+  const x0 = bounds[b] - eye.x, x1 = bounds[b + 3] - eye.x;
+  const y0 = bounds[b + 1] - eye.y, y1 = bounds[b + 4] - eye.y;
+  const z0 = bounds[b + 2] - eye.z, z1 = bounds[b + 5] - eye.z;
+  // The most forward corner bounds the depth of every point, including boxes
+  // that straddle an eye or the viewing plane despite a rear-facing center.
+  const depth = Math.max(x0 * forward.x, x1 * forward.x)
+    + Math.max(y0 * forward.y, y1 * forward.y) + Math.max(z0 * forward.z, z1 * forward.z);
+  if (depth >= -margin) return false;
+  const farthest = Math.sqrt(Math.max(x0 * x0, x1 * x1) + Math.max(y0 * y0, y1 * y1) + Math.max(z0 * z0, z1 * z1));
+  return depth < -margin - REAR_GUARD_SIN * farthest;
+}
 function viewWeight(cosAngle: number): number {
   if (cosAngle >= INNER_COS) return 1;
   if (cosAngle > OUTER_COS) return 0.35 + 0.65 * (cosAngle - OUTER_COS) / (INNER_COS - OUTER_COS);
@@ -305,7 +323,8 @@ function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, 
 // The level of every leaf into `out` for a camera at `eye` looking along
 // unit `forward` (both in the tree's space) with field-of-view scale
 // `fov` (fovScale), and its distance (longer behind the camera, scaled by
-// the field of view) into `d`; returns the splats selected.
+// the field of view) into `d`; returns the splats selected. Under immersive
+// budget pressure, -1 omits a rear range. headMargin is in tree units.
 //
 // A leaf at distance d is at band 1 + floor(log_m(d / (s * base))),
 // clamped to the range: finer than band L + 1 exactly when
@@ -315,7 +334,7 @@ function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, 
 // budget. Stopping at the first sub-bin that does not fit (not skipping
 // it) keeps a leaf's level from depending on leaves farther along the
 // axis, so small camera moves do not flip levels on and off.
-export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like, s: LodSettings, out: Int8Array, d: Float32Array, fov = 1): number {
+export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like, s: LodSettings, out: Int8Array, d: Float32Array, fov = 1, headMargin = 0): number {
   const { leaves, bounds } = tree;
   const rangeMax = Math.max(0, Math.min(s.rangeMax, tree.levels - 1));
   const rangeMin = Math.max(0, Math.min(s.rangeMin, rangeMax));
@@ -373,64 +392,86 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
     budget = Math.max(budget, Math.min(s.adaptiveMaxSplats, chains.coarsest + nearAllowance));
   }
   const limit = s.budgetMode === "limit";
+  let { coarsest, finest } = chains;
+  const canTrimRear = s.immersiveViewBudget && s.viewPriority;
+  let requested = finest;
+  if (limit && (coarsest < budget || canTrimRear)) {
+    requested = 0;
+    for (let leaf = 0; leaf < leaves; leaf += 1) {
+      let b = span - 1;
+      while (b > 0 && binOf(switchAt(leaf, b)) < UNIT_BIN) b -= 1;
+      if (s.viewPriority) finestAllowedBand[leaf] = b;
+      requested += chains.count[leaf * span + b];
+    }
+  }
+  let trimRear = false;
+  if (canTrimRear && requested > Math.max(budget, coarsest)) {
+    if (rearLeaves.length < leaves) rearLeaves = new Uint8Array(leaves);
+    let rearCount = 0, rearCoarse = 0, rearFine = 0, rearRequested = 0;
+    for (let leaf = 0; leaf < leaves; leaf += 1) {
+      const behind = behindHead(bounds, leaf * 6, eye, forward, headMargin);
+      rearLeaves[leaf] = Number(behind);
+      if (!behind) continue;
+      rearCount += 1;
+      const first = leaf * span;
+      rearCoarse += chains.count[first + span - 1];
+      rearFine += chains.count[first];
+      rearRequested += chains.count[first + (limit ? finestAllowedBand[leaf] : 0)];
+    }
+    // Looking away from the whole asset must still leave a drawable collection.
+    // Coarse files stay resident in the pager even when their ranges are omitted.
+    trimRear = rearCount > 0 && rearCount < leaves;
+    if (trimRear) {
+      coarsest -= rearCoarse;
+      finest -= rearFine;
+      requested -= rearRequested;
+    }
+  }
   let cutBin = UNIT_BIN;
   let cutSub = 0;
   let cappedByDistance = false;
-  if (chains.coarsest >= budget) {
+  if (coarsest >= budget) {
     cutBin = -1;
-  } else if (!limit && chains.finest <= budget) {
+  } else if (!limit && finest <= budget) {
     cutBin = BINS;
-  } else {
-    // Limit mode within budget at the configured distances: the cut at s = 1
-    let unitTotal = 0;
-    if (limit) {
+  } else if (requested > budget) {
+    // Fit camera-weighted upgrades only within each leaf's original
+    // distance limit. If everything eligible fits, keep all of it.
+    if (s.viewPriority) priorities = viewLogDistances;
+    cappedByDistance = !!s.viewPriority && limit;
+    const stop = limit && !s.viewPriority ? UNIT_BIN : BINS;
+    let total = coarsest;
+    const accumulate = (bin: number) => {
+      histogram.fill(0);
       for (let leaf = 0; leaf < leaves; leaf += 1) {
-        let b = span - 1;
-        while (b > 0 && binOf(switchAt(leaf, b)) < UNIT_BIN) {
-          b -= 1;
-        }
-        if (s.viewPriority) finestAllowedBand[leaf] = b;
-        unitTotal += chains.count[leaf * span + b];
-      }
-    }
-    if (!limit || unitTotal > budget) {
-      // Fit camera-weighted upgrades only within each leaf's original
-      // distance limit. If everything eligible fits, keep all of it.
-      if (s.viewPriority) priorities = viewLogDistances;
-      cappedByDistance = !!s.viewPriority && limit;
-      const stop = limit && !s.viewPriority ? UNIT_BIN : BINS;
-      let total = chains.coarsest;
-      const accumulate = (bin: number) => {
-        histogram.fill(0);
-        for (let leaf = 0; leaf < leaves; leaf += 1) {
-          const finest = cappedByDistance ? finestAllowedBand[leaf] : 0;
-          for (let b = finest + 1; b < span; b += 1) {
-            const delta = chains.count[leaf * span + b - 1] - chains.count[leaf * span + b];
-            if (delta === 0) {
-              continue;
-            }
-            const x = switchAt(leaf, b);
-            const at = binOf(x);
-            if (bin < 0) {
-              histogram[at] += delta;
-            } else if (at === bin) {
-              histogram[binOf((x - bin) * BINS)] += delta;
-            }
+        if (trimRear && rearLeaves[leaf]) continue;
+        const finest = cappedByDistance ? finestAllowedBand[leaf] : 0;
+        for (let b = finest + 1; b < span; b += 1) {
+          const delta = chains.count[leaf * span + b - 1] - chains.count[leaf * span + b];
+          if (delta === 0) {
+            continue;
+          }
+          const x = switchAt(leaf, b);
+          const at = binOf(x);
+          if (bin < 0) {
+            histogram[at] += delta;
+          } else if (at === bin) {
+            histogram[binOf((x - bin) * BINS)] += delta;
           }
         }
-      };
-      accumulate(-1);
-      cutBin = 0;
-      while (cutBin < stop && total + histogram[cutBin] <= budget) {
-        total += histogram[cutBin];
-        cutBin += 1;
       }
-      if (cutBin < stop) {
-        accumulate(cutBin);
-        while (cutSub < BINS && total + histogram[cutSub] <= budget) {
-          total += histogram[cutSub];
-          cutSub += 1;
-        }
+    };
+    accumulate(-1);
+    cutBin = 0;
+    while (cutBin < stop && total + histogram[cutBin] <= budget) {
+      total += histogram[cutBin];
+      cutBin += 1;
+    }
+    if (cutBin < stop) {
+      accumulate(cutBin);
+      while (cutSub < BINS && total + histogram[cutSub] <= budget) {
+        total += histogram[cutSub];
+        cutSub += 1;
       }
     }
   }
@@ -439,6 +480,10 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
   // points rise as bands get finer, so the first one not taken ends it
   let total = 0;
   for (let leaf = 0; leaf < leaves; leaf += 1) {
+    if (trimRear && rearLeaves[leaf]) {
+      out[leaf] = -1;
+      continue;
+    }
     const finest = cappedByDistance ? finestAllowedBand[leaf] : 0;
     let b = span - 1;
     if (cutBin >= BINS) {

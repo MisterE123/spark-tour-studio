@@ -27,6 +27,33 @@ for(const[name,bytes]of Object.entries(fixture.files)){
  if(name.endsWith('/meta.json')){const meta=JSON.parse(new TextDecoder().decode(bytes));meta.scales.codebook.fill(-6);await fs.writeFile(file,JSON.stringify(meta));}
  else await fs.writeFile(file,bytes);
 }
+// Real but tiny SOG files on opposite sides of the tracked head. Repeated
+// ranges make the tight test budget exactly equal to whole-scene L2 coverage.
+{
+ const files=sogLodFixture().files,original=JSON.parse(new TextDecoder().decode(files['lod-meta.json']));
+ const filenames=[],children=[];
+ for(const [side,z] of [['front',-5],['back',5]]){
+  const leaf=structuredClone(original.tree),offset=filenames.length;
+  leaf.bound.min[2]+=z;leaf.bound.max[2]+=z;
+  for(const range of Object.values(leaf.lods))range.file+=offset;
+  filenames.push(...original.filenames.map(file=>side+'/'+file));
+  for(let i=0;i<64;i++)children.push(leaf);
+  for(const [name,bytes] of Object.entries(files)){
+   if(name==='lod-meta.json')continue;
+   const file=path.join(output,'opposed',side,name);await fs.mkdir(path.dirname(file),{recursive:true});
+   if(name.endsWith('/meta.json')){
+    const meta=JSON.parse(new TextDecoder().decode(bytes));meta.scales.codebook.fill(-6);
+    for(const bound of [meta.means.mins,meta.means.maxs]){
+     const worldZ=Math.sign(bound[2])*Math.expm1(Math.abs(bound[2]))+z;
+     bound[2]=Math.sign(worldZ)*Math.log1p(Math.abs(worldZ));
+    }
+    await fs.writeFile(file,JSON.stringify(meta));
+   }else await fs.writeFile(file,bytes);
+  }
+ }
+ const bound={min:children[0].bound.min,max:children.at(-1).bound.max};
+ await fs.writeFile(path.join(output,'opposed','lod-meta.json'),JSON.stringify({...original,filenames,tree:{bound,children},counts:original.counts.map(n=>128*n),count:128*original.count}));
+}
 await fs.writeFile(path.join(output,'index.html'),'<!doctype html><link rel="icon" href="data:,"><style>html,body,#stage{width:100%;height:100%;margin:0;overflow:hidden}</style><div id="stage"></div><script type="module" src="./harness.js"></script>');
 await fs.writeFile(path.join(output,'harness.ts'),String.raw`
 import * as THREE from 'three';
@@ -54,7 +81,8 @@ runtime.onStatus=(text,error)=>state.statuses.push({text,error});
 const authored=state.authored=PerformanceSettingsSchema.parse({adaptiveDetail:true,adaptiveTargetFps:30,pixelRatio:.5,radix:{selectedSplatBudget:50000,residentSplatBudget:200000,lodBaseDistance:1000,lodRangeMax:2}});
 state.authoredBefore=JSON.stringify(authored);runtime.applyPerformance(authored);
 const scene=newScene('test','Adaptive fixture','scan/lod-meta.json');scene.modes=['jumps','fly'];scene.background={type:'solid',color:'#183340'};scene.viewpoints[0].description='An actual viewpoint description remains part of the immersive tour while automatic detail adapts.';
-const project=state.project=ProjectSchema.parse({...blankProject(),startScene:'test',scenes:[scene]});state.projectBefore=JSON.stringify(project);
+const opposed=newScene('opposed','Two sides','opposed/lod-meta.json');opposed.viewpoints[0].position=[0,1.7,0];
+const project=state.project=ProjectSchema.parse({...blankProject(),startScene:'test',scenes:[scene,opposed]});state.projectBefore=JSON.stringify(project);
 await runtime.load(project,{assetBaseUrl:'./',sceneUrls:{}},location.href);
 runtime.subscribePerformance(s=>state.changes.push(structuredClone(s)));
 state.snapshot=()=>({ready:runtime.ready,scale:runtime.adaptiveDetailScale,backend:runtime.backend.stats.backend,settings:runtime.backend.settings,budget:runtime.mesh?.stream?.settings.splatBudget,selected:runtime.backend.stats.selected,shown:runtime.backend.stats.shown,loading:runtime.backend.stats.loading,phase:runtime.mesh?.stats.phase,base:runtime.basePerformanceSettings,effective:runtime.performanceSettings,quality:runtime.quality,session:runtime.renderer.xr.getSession()===state.sessions[0],manager:runtime.renderer.xr.constructor.name,eyes:runtime.renderer.xr.getCamera().cameras.length,xrIdentity:state.xrRefs?{renderer:runtime.renderer===state.xrRefs.renderer,camera:runtime.camera===state.xrRefs.camera,rig:runtime.rig===state.xrRefs.rig,manager:runtime.renderer.xr===state.xrRefs.manager}:undefined,menuOpen:runtime.menuOpen,contentOpen:!!runtime.currentPage,sort:{applied:runtime.backend.node.view?.order?.collection===runtime.backend.node.collection,collection:runtime.backend.node.collection.count,order:runtime.backend.node.view?.order?.collection.count,visible:runtime.backend.node.view?.order?.visible,autoSorting:runtime.backend.node.view?.autoSorting,pending:runtime.backend.node.view?.pending?.size,instances:runtime.backend.node.geometry.instanceCount,preparedAt:runtime.backend.node.preparedAt,renderCalls:runtime.renderer.info.render.calls,drawCalls:runtime.renderer.info.render.drawCalls},controller:{average:runtime.adaptiveDetail.average,settledSince:runtime.adaptiveDetail.settledSince,lastTime:runtime.adaptiveDetail.lastTime,context:runtime.adaptiveDetail.context}});
@@ -64,7 +92,7 @@ state.tick=async(duration,fps)=>{
  for(let i=0;i<frames;i++){
   state.time+=step;const session=runtime.renderer.xr.getSession();
   if(session){
-   const near=session.renderState.depthNear||.05,far=session.renderState.depthFar||20000,projection=new THREE.Matrix4().makePerspective(-near,near,near,-near,near,far),head=new THREE.Vector3(0,1.6,0),orientation=new THREE.Quaternion(),unit=new THREE.Vector3(1,1,1),views=['left','right'].map((eye,index)=>({eye,transform:{matrix:new THREE.Matrix4().compose(head.clone().add(new THREE.Vector3(index?.032:-.032,0,0)),orientation,unit).elements},projectionMatrix:projection.elements}));
+   const near=session.renderState.depthNear||.05,far=session.renderState.depthFar||20000,head=new THREE.Vector3(0,1.6,0),orientation=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),state.headYaw||0),unit=new THREE.Vector3(1,1,1),views=['left','right'].map((eye,index)=>({eye,transform:{matrix:new THREE.Matrix4().compose(head.clone().add(new THREE.Vector3(index?.032:-.032,0,0).applyQuaternion(orientation)),orientation,unit).elements},projectionMatrix:new THREE.Matrix4().makePerspective(-(index?1.15:1)*near,(index?1:1.15)*near,near,-near,near,far).elements}));
    const pose={views,transform:{matrix:new THREE.Matrix4().compose(head,orientation,unit).elements,position:{x:0,y:1.6,z:0,w:1},orientation:{x:0,y:0,z:0,w:1}}},frame={session,getViewerPose:()=>state.tracking===false?null:pose,getPose:()=>null},callback=session.callback;session.callback=null;if(!callback)throw Error('Actual XR manager callback missing');callback(state.time,frame);
   }else runtime.frame(state.time);
   // CPU sorting completes through a worker/readback. Yield the fixture's task
@@ -178,6 +206,29 @@ try{
    state=await page.evaluate(()=>test.feedbackMisses(65000,2000));assert.ok(state.budget>8192,'occasional missed refreshes cannot hold the source at its entry floor');assert.ok(state.selected>8192,'actual LoD selection must refine without requiring perfect refresh delivery');assert.equal(state.session,true);assert.deepEqual(state.xrIdentity,{renderer:true,camera:true,rig:true,manager:true});await record('One missed90Hz refresh every two seconds still permits actual detail recovery',state);
    state=await page.evaluate(()=>{test.reset({radix:{lodRangeMin:0,lodRangeMax:0}});return test.feedback(20000,20);});assert.equal(state.budget,32768);assert.equal(state.selected,32768);await record('Authored single-level XR range uses its effective coverage floor',state);
    state=await page.evaluate(()=>{test.reset({});test.sessions[0].visibilityState='visible-blurred';return test.feedback(10000,20);});assert.equal(state.scale,1,'system-menu suspension cannot lower scene budget');await record('XR system-menu suspension excludes samples',state);
+   await page.evaluate(()=>{test.sessions[0].visibilityState='visible';test.reset({});void test.runtime.selectScene('opposed');});
+   async function pumpUntil(check,label){
+    const deadline=Date.now()+15000;
+    do{
+     await page.evaluate(()=>test.tick(100,60));
+     if(await page.evaluate(check))return;
+    }while(Date.now()<deadline);
+    throw Error('Stereo selection timed out: '+label);
+   }
+   await pumpUntil(()=>test.runtime.ready&&test.runtime.active?.id==='opposed','new scene');
+   await page.evaluate(()=>test.feedback(20000,20));
+   for(const [side,yaw] of [['front',0],['back',Math.PI]]){
+    await page.evaluate(yaw=>test.headYaw=yaw,yaw);
+    await pumpUntil(()=>{
+     const r=test.runtime,stream=r.mesh.stream,side=test.headYaw?'back':'front';
+     const fine=stream.inspect().objects.some(o=>o.level<2&&stream.tree.files[o.file].includes('/'+side+'/'));
+     return fine&&r.backend.hasPresented(r.mesh)&&r.backend.stats.visible>0&&r.backend.stats.loading===0;
+    },side);
+    state=await page.evaluate(()=>test.snapshot());
+    assert.equal(state.budget,8192);assert.ok(state.selected<=state.budget);assert.ok(state.shown<=state.budget);
+    assert.equal(state.session,true);assert.equal(state.eyes,2);assert.equal(state.sort.applied,true);
+    await record('A tight immersive budget draws finer detail facing '+side+' in the same session',state);
+   }
    await page.evaluate(async()=>{test.sessions[0].visibilityState='visible';await test.sessions[0].end();test.runtime.renderer.setAnimationLoop(null);});
   }
   assert.deepEqual(errors,[]);results.errors=errors;results.pass=true;await page.evaluate(()=>test.runtime.dispose());await page.close();

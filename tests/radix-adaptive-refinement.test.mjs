@@ -195,3 +195,100 @@ test('view priority follows turns in place and lens changes without responding t
     }
   }
 });
+
+// Each leaf has its own two chunks. The front can be drawn at its finest
+// level for less than the original full-tree coarse workload.
+function xrTree(boxes) {
+  const filenames = [];
+  const children = Object.entries(boxes).map(([id, [min, max]]) => ({
+    bound: {min, max},
+    lods: [18, 10].map((count, level) => ({
+      file: filenames.push(id + '-' + level + '/meta.json') - 1, offset: 0, count,
+    })),
+  }));
+  return parseLod({lodLevels: 2, filenames, tree: {bound: {min: [-100,-100,-100], max: [100,100,100]}, children}}, 'https://fixture.invalid/lod-meta.json');
+}
+function xrLeaf(tree, id) {
+  return Array.from({length: tree.leaves}, (_, leaf) => leaf)
+    .find(leaf => tree.files[tree.file[leaf * tree.levels]].endsWith('/' + id + '-0/meta.json'));
+}
+
+test('immersive selection under pressure protects stereo, peripheral and straddling boxes, and respects the authored distance limit', () => {
+  const tree = xrTree({
+    front: [[-.5,-.5,-2], [.5,.5,-1]],
+    rear: [[-.5,-.5,2], [.5,.5,3]],
+    straddling: [[-1,-1,-.1], [1,1,8]],
+    peripheral: [[18,-1,1], [19,1,2]],
+    nearEyes: [[0,0,.1], [.05,.05,.2]],
+    distant: [[0,0,-80], [2,2,-70]],
+  });
+  const levels = new Int8Array(tree.leaves);
+  const distances = new Float32Array(tree.leaves);
+  const settings = {...defaultLodSettings(true), splatBudget: tree.levelTotals[1], viewPriority: true, immersiveViewBudget: true};
+  const run = (overrides = {}, z = 0) => selectLevels(tree, {x:0, y:0, z}, {x:0, y:0, z:-1}, {...settings,...overrides}, levels, distances, 1, .35);
+  for (const mode of ['target', 'limit']) {
+    const count = run({budgetMode: mode});
+    assert.ok(count <= settings.splatBudget);
+    assert.equal(levels[xrLeaf(tree, 'rear')], -1);
+    for (const id of ['front','nearEyes','straddling','peripheral','distant']) assert.ok(levels[xrLeaf(tree,id)] >= 0, id);
+    assert.ok(levels.includes(0), 'the released work refines a retained leaf');
+    if (mode === 'limit') assert.equal(levels[xrLeaf(tree, 'distant')], 1);
+  }
+  run({immersiveViewBudget:false});
+  assert.ok(levels.every(level => level === 1), 'ordinary whole-scene selection stays intact');
+  run({splatBudget:1000});
+  assert.ok(levels.every(level => level >= 0), 'no ranges are removed when all eligible detail fits');
+  run({budgetMode:'target'}, -90);
+  assert.ok(levels.every(level => level >= 0), 'facing away from the whole asset still publishes a collection');
+});
+
+test('immersive snap turns and teleports restore warm coarse ranges before new detail arrives', () => {
+  const tree = xrTree({front: [[-1,-1,-3],[1,1,-2]], rear: [[-1,-1,2],[1,1,3]]});
+  const front = xrLeaf(tree,'front'), rear = xrLeaf(tree,'rear');
+  const camera = new THREE.PerspectiveCamera(60,1,.05,100);
+  const settings = {...defaultLodSettings(true), splatBudget:20, residentBudget:20, viewPriority:true, immersiveViewBudget:true};
+  const stream = new SogLodStream({renderer:{},tree,camera,matrixWorld:new THREE.Matrix4(),settings,degree:0});
+  const queued = [];
+  stream.load = file => {
+    file.state = 'loading';
+    queued.push(file);
+    stream.loads++;
+  };
+  stream.land = () => {
+    const file = queued.shift();
+    if (!file) return;
+    file.state = 'resident';
+    file.splats = file.required;
+    file.resident = {drop() {}};
+    stream.changed = true;
+    stream.loads--;
+  };
+  stream.objectOf = (file,key,leaves) => {
+    file.key = key;
+    file.object = {count:stream.rangesOf(leaves,file.level).meta.count};
+    return file.object;
+  };
+  const tick = time => {
+    camera.updateMatrixWorld();
+    stream.update(time,.35);
+    assert.equal(stream.collection.count,stream.stats.shown);
+  };
+  try {
+    for (let time=0;time<=100;time+=10) tick(time);
+    assert.deepEqual([stream.shown[front],stream.shown[rear]],[0,-1]);
+    assert.ok(stream.baseReady, 'the rear coarse file remains resident despite its tight residency target');
+    camera.rotation.y = Math.PI;
+    tick(105);
+    assert.deepEqual([stream.shown[front],stream.shown[rear]],[-1,1], 'turning can display the other coarse file immediately');
+    assert.ok(queued.some(file => file.url.endsWith('/rear-0/meta.json')));
+    tick(110);
+    assert.equal(stream.shown[rear],0);
+    // Move behind the old front leaf looking +Z, so it must reappear too.
+    camera.position.z = -4;
+    tick(115);
+    assert.ok(stream.shown[front] >= 0);
+    assert.ok(stream.baseReady);
+  } finally {
+    stream.dispose();
+  }
+});

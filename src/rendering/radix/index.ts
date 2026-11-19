@@ -97,7 +97,7 @@ class RadixAsset extends SplatAssetGroup {
  }
  applySettings(settings:RadixRenderSettings){
   this.ownSettings={...settings};this.updateDistances();
-  Object.assign(this.lod,{splatBudget:settings.selectedSplatBudget,adaptiveMaxSplats:settings.adaptiveMaxSplats,viewPriority:settings.viewPriority,residentBudget:settings.residentSplatBudget,multiplier:settings.lodMultiplier,behindPenalty:settings.lodBehindPenalty,underfillLimit:settings.lodUnderfill,rangeMin:settings.lodRangeMin,rangeMax:settings.lodRangeMax,budgetMode:settings.lodBudgetMode,updateAngle:settings.lodUpdateAngle});
+  Object.assign(this.lod,{splatBudget:settings.selectedSplatBudget,adaptiveMaxSplats:settings.adaptiveMaxSplats,immersiveViewBudget:settings.immersiveViewBudget,viewPriority:settings.viewPriority,residentBudget:settings.residentSplatBudget,multiplier:settings.lodMultiplier,behindPenalty:settings.lodBehindPenalty,underfillLimit:settings.lodUnderfill,rangeMin:settings.lodRangeMin,rangeMax:settings.lodRangeMax,budgetMode:settings.lodBudgetMode,updateAngle:settings.lodUpdateAngle});
   if(this.stream){
    const tree=this.stream.tree,rangeMax=Math.max(0,Math.min(this.lod.rangeMax,tree.levels-1)),rangeMin=Math.max(0,Math.min(this.lod.rangeMin,rangeMax));
    // Match selectLevels, including sparse-level fallback. This cached chain
@@ -118,7 +118,9 @@ class RadixAsset extends SplatAssetGroup {
   if(this.dead)return;
   this.updateWorldMatrix(true,false);this.updateDistances();
   if(this.stream){
-   if(this.stream.update(now))this.current=this.stream.collection;
+   // Streaming uses asset-local units. Keep both tracked eyes inside the
+   // near guard even for tours with a custom scene or headset scale.
+   if(this.stream.update(now,this.owner.rearCoverageMargin/this.lastScale))this.current=this.stream.collection;
    const s=this.stream.stats;Object.assign(this.stats,{selected:s.selected,shown:s.shown,residentSplats:s.residentSplats,residentFiles:s.residentFiles,loading:s.loading,failed:s.failed});
    if(this.stream.baseReady)this.finish();
    const sources=this.stream.proxySources();for(const source of sources)this.proxy.offer(source.key,source.arrays,source.retain,sources.length);
@@ -144,6 +146,7 @@ export class RadixBackend implements SplatBackend {
  readonly stats:SplatBackendStats;
  readonly node:SplatRenderer;
  readonly head=new THREE.PerspectiveCamera();
+ rearCoverageMargin=.35;
  settings:RadixRenderSettings={...DEFAULTS};
  private readonly assets=new Set<RadixAsset>();
  private readonly sortPool:WorkerPool;
@@ -160,6 +163,7 @@ export class RadixBackend implements SplatBackend {
  private readonly physicalView=new THREE.ArrayCamera();
  private readonly eyePosition=new THREE.Vector3();
  private readonly midpoint=new THREE.Vector3();
+ private readonly headForward=new THREE.Vector3();
  constructor(readonly renderer:WebGPURenderer,settings:Partial<RadixRenderSettings>={}){
   const backend=getGpuCaps(renderer).backend;
   this.stats={backend,selected:0,shown:0,visible:0,residentSplats:0,loading:0,failed:0,frames:0};
@@ -193,11 +197,31 @@ export class RadixBackend implements SplatBackend {
   const view=this.physicalView;view.cameras=array.cameras;view.matrixWorld.copy(array.matrixWorld).setPosition(this.midpoint);view.matrix.copy(view.matrixWorld);view.matrixWorldInverse.copy(view.matrixWorld).invert();view.projectionMatrix.copy(array.projectionMatrix);view.projectionMatrixInverse.copy(array.projectionMatrixInverse);view.coordinateSystem=array.coordinateSystem;view.layers.mask=array.layers.mask;
   return view;
  }
+ private coverageMargin(view:THREE.ArrayCamera){
+  let margin=.35;
+  if(!this.settings.immersiveViewBudget)return margin;
+  if(!view.isArrayCamera||view.cameras.length<2)return Infinity;
+  this.headForward.setFromMatrixColumn(view.matrixWorld,2).normalize().negate();
+  for(const eye of view.cameras){
+   // A perspective eye's cone is bounded by its four corner rays. A canted
+   // or asymmetric eye can see behind the shared head plane. In that case
+   // an infinite guard keeps the entire asset eligible.
+   const projection=eye.projectionMatrix.elements;
+   if(projection[11]!==-1||projection[15]!==0)return Infinity;
+   for(let x=-1;x<=1;x+=2)for(let y=-1;y<=1;y+=2){
+    const ray=this.eyePosition.set(x,y,.5).applyMatrix4(eye.projectionMatrixInverse).transformDirection(eye.matrixWorld);
+    if(!(ray.dot(this.headForward)>1e-6))return Infinity;
+   }
+   margin=Math.max(margin,this.eyePosition.setFromMatrixPosition(eye.matrixWorld).distanceTo(this.midpoint));
+  }
+  return margin;
+ }
  update(camera:THREE.Camera,time=performance.now()){
   if(this.dead)return;
   camera=this.renderer.xr.isPresenting?this.renderer.xr.getCamera():camera;
   camera.updateMatrixWorld();camera=this.physicalCamera(camera);this.head.matrix.copy(camera.matrixWorld);this.head.matrixWorld.copy(camera.matrixWorld);this.head.matrixWorldInverse.copy(camera.matrixWorld).invert();
   const view=camera as THREE.ArrayCamera,eye=view.isArrayCamera?view.cameras[0]:camera;
+  this.rearCoverageMargin=this.coverageMargin(view);
   this.head.fov=THREE.MathUtils.radToDeg(2*Math.atan(1/Math.max(1e-9,Math.abs(eye?.projectionMatrix.elements[5]||1))));
   this.head.aspect=Math.abs((eye?.projectionMatrix.elements[5]||1)/(eye?.projectionMatrix.elements[0]||1));
   const applied=this.node.sortMode==='gpu'||this.node.collection.count===0||this.node.view?.order?.collection===this.node.collection;

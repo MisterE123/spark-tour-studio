@@ -78,7 +78,9 @@ export function radixRenderSettings(settings,adaptiveScale=1,immersive=false){
  const {lodSelection,...specific}=radixPerformanceSettings(settings),{maxSh,...shared}=common.parse(settings||{});
  // Backend updates merge partial settings. Explicitly clear the temporary
  // ceiling when a preset restores full detail, opts out or enters XR.
- const adaptiveMaxSplats=settings?.adaptiveDetail===true&&!immersive&&adaptiveScale<1?specific.selectedSplatBudget:undefined;
- const viewPriority=!immersive&&(lodSelection==='view'||(lodSelection===undefined&&settings?.adaptiveDetail===true));
- return {...specific,...shared,maxShDegree:maxSh,adaptiveMaxSplats,viewPriority,selectedSplatBudget:Math.max(1,Math.floor(specific.selectedSplatBudget*adaptiveScale))};
+ const automatic=settings?.adaptiveDetail===true;
+ const adaptiveMaxSplats=automatic&&!immersive&&adaptiveScale<1?specific.selectedSplatBudget:undefined;
+ const viewPriority=lodSelection==='view'||(lodSelection===undefined&&automatic);
+ const immersiveViewBudget=immersive&&automatic&&viewPriority&&specific.lodBehindPenalty>1;
+ return {...specific,...shared,maxShDegree:maxSh,adaptiveMaxSplats,viewPriority,immersiveViewBudget,selectedSplatBudget:Math.max(1,Math.floor(specific.selectedSplatBudget*adaptiveScale))};
 }

@@ -41,6 +41,36 @@ function fixture(){
 }
 function selectorFloor(lodTree,rangeMin,rangeMax){const desired=new Int8Array(lodTree.leaves),distances=new Float32Array(lodTree.leaves);return selectLevels(lodTree,{x:0,y:0,z:0},{x:0,y:0,z:-1},{...defaultLodSettings(true),rangeMin,rangeMax,splatBudget:1},desired,distances);}
 
+test('both asymmetric eye frusta must lie ahead of the shared head to omit rear coverage',()=>{
+ const {backend,close}=fixture();
+ const left=new THREE.PerspectiveCamera(90,1,.1,100),right=left.clone();
+ left.position.x=-.032;right.position.x=.032;
+ const view=new THREE.ArrayCamera([left,right]);
+ backend.renderer.xr={isPresenting:true,getCamera:()=>view};
+ backend.settings.immersiveViewBudget=true;
+ Object.assign(backend,{physicalView:new THREE.ArrayCamera(),midpoint:new THREE.Vector3(),eyePosition:new THREE.Vector3(),headForward:new THREE.Vector3()});
+ const metadata=tree([[18,10],[18,10]]);
+ metadata.bounds.set([-.5,-.5,-2,.5,.5,-1, -4.1,-.1,1.6,-4,.1,1.7]);
+ const settings={...defaultLodSettings(false),splatBudget:20,viewPriority:true,immersiveViewBudget:true};
+ function levels(){
+  left.updateMatrixWorld();right.updateMatrixWorld();backend.update(view);
+  const chosen=new Int8Array(2);
+  selectLevels(metadata,{x:0,y:0,z:0},{x:0,y:0,z:-1},settings,chosen,new Float32Array(2),1,backend.rearCoverageMargin);
+  return [...chosen];
+ }
+ try{
+  right.rotation.y=THREE.MathUtils.degToRad(35);
+  assert.deepEqual(levels(),[0,-1],'ordinary canted eyes within the shared hemisphere still benefit');
+  right.projectionMatrix.makePerspective(-.6,.1,.1,-.1,.1,100);
+  right.projectionMatrixInverse.copy(right.projectionMatrix).invert();
+  assert.deepEqual(levels(),[1,1],'an asymmetric corner past the head plane restores rear coverage');
+  const rearPoint=new THREE.Vector3(-4.05,0,1.65).project(right);
+  assert.ok([rearPoint.x,rearPoint.y,rearPoint.z].every(n=>Math.abs(n)<1),'the retained rear range is actually inside the right eye');
+  right.updateProjectionMatrix();
+  assert.deepEqual(levels(),[0,-1],'the ordinary policy resumes when both frusta fit');
+ }finally{close();}
+});
+
 test('LoD floor matches mandatory selector coverage and excludes fixed environment',()=>{
  const f=fixture(),metadata=tree([[100,40,10],[200,80,20]],{environment:'fixed-environment/meta.json'}),asset=f.create(metadata);
  try{

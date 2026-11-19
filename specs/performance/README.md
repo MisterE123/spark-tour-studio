@@ -69,7 +69,7 @@ The `Experiemental-Radix-SOGS` branch preserves the fields above and adds an opt
 | selectedSplatBudget | 4,000,000 | Selected splats per asset, independent of saved Spark detail targets. A foreground and a splat background each receive this budget. |
 | residentSplatBudget | 16,000,000 | Retained splat-data target per asset; must be at least the selected budget. Required coarse coverage, textures and pending work also consume memory. |
 | lodBudgetMode | limit | limit uses distance thresholds and a budget cap; target raises detail toward the cap. |
-| lodSelection | omitted (Automatic) | In a browser window, `view` prioritizes the camera view and `distance` prioritizes proximity. Automatic uses camera view with automatic detail enabled and distance with a fixed budget. VR uses distance. |
+| lodSelection | omitted (Automatic) | `view` prioritizes the camera view and `distance` prioritizes proximity. Automatic uses camera view with automatic detail enabled and distance with a fixed budget. In VR, camera view follows the headset. |
 | lodBaseDistance / lodMultiplier | 5 / 3 | Detail transition distance and the factor between successive levels (multiplier range 1.2–10). |
 | lodRangeMin / lodRangeMax | 0 / 7 | Finest/coarsest allowed levels, clamped to the source's available levels. The minimum cannot exceed the maximum. |
 | lodBehindPenalty | 2 | Increased effective distance behind the camera. |
@@ -82,7 +82,11 @@ The `Experiemental-Radix-SOGS` branch preserves the fields above and adds an opt
 
 In an ordinary browser window, automatic detail requests between 25% and 100% of each asset's selected budget. It tries a reduction after sustained slow frames, lets the new selection settle for four seconds, then observes two seconds of frame times. It keeps the reduction if the mean improves by at least 10% and at least 2 ms. Otherwise it restores the previous budget and can retry when the workload changes. Immersive VR uses headset-specific entry and feedback settings.
 
-Camera view priority works with either a fixed or an automatic budget. When all eligible levels fit, the viewer keeps them. Under pressure it spends refinements preferentially in front of the camera, including regions that overlap the center of the image. It retains whole-scene coarse coverage. Directional detail updates follow turns of six degrees or the authored update angle if smaller. A behind-view distance factor of 1 gives all directions equal weight. A reduced automatic budget can allow extra room above coarse coverage, up to 10% of the smaller of the reduced request and the coarse count. Upgrades respect the preset ceiling and authored distance and level limits. Coarse coverage alone can exceed a budget.
+Camera view priority works with either a fixed or an automatic budget. When all eligible levels fit, the viewer keeps them. Under pressure it spends refinements preferentially in front of the camera, including regions that overlap the center of the image. Directional detail updates follow turns of six degrees or the authored update angle if smaller. A behind-view distance factor of 1 gives all directions equal weight when ranking upgrades. Upgrades respect the preset ceiling and authored distance and level limits.
+
+In a browser window the selector keeps coarse coverage around the viewer. A reduced automatic budget can allow extra room above coarse coverage, up to 10% of the smaller of the reduced request and the coarse count.
+
+In VR, automatic detail starts at the smaller of the preset budget and 750,000 splats per asset. With camera view priority, the selector can spend a tight budget on detail in front of the headset by omitting regions safely outside both eyes. Their coarse files stay resident for head turns. Fixed budgets, the Distance priority and a behind-view distance factor of 1 keep whole-scene coarse coverage. Required coverage can exceed the requested budget.
 
 The readout totals visible draw/sort splats, supplied fallback splats, selected detail and resident splats across the active foreground and background, and reports the actual WebGPU/WebGL2 backend. These counts describe splats. Memory use, transfer time and frame rate require separate measurements.
 

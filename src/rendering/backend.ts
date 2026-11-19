@@ -6,6 +6,8 @@ export interface RadixRenderSettings {
  selectedSplatBudget:number;residentSplatBudget:number;
  /** Authored per-asset ceiling while automatic desktop detail is reduced. */
  adaptiveMaxSplats?:number;
+ /** Spend a constrained headset budget on the view while keeping rear base files resident. */
+ immersiveViewBudget?:boolean;
  lodBaseDistance:number;lodMultiplier:number;lodBehindPenalty:number;lodUnderfill:number;
  lodRangeMin:number;lodRangeMax:number;lodBudgetMode:'limit'|'target';lodUpdateDistance:number;lodUpdateAngle:number;viewPriority:boolean;
  maxShDegree:number;minAlpha:number;maxStdDev:number;minPixelRadius:number;maxPixelRadius:number;minContribution:number;blurAmount:number;preBlurAmount:number;sortGuard:number;
@@ -14,7 +16,7 @@ export interface RadixRenderSettings {
 export interface SplatAssetMetadata {format:'sog'|'sogs'|'sog-lod';lod:boolean;splatCount:number;levels:number;bounds:THREE.Box3}
 export interface SplatAssetStats {
  phase:'loading'|'streaming'|'ready'|'error'|'disposed';selected:number;shown:number;residentSplats:number;residentFiles:number;loading:number;failed:number;error:string;
- /** Mandatory selectable leaf coverage for this LoD asset; excludes fixed environment splats. */
+ /** Cost of whole-scene coarse coverage, used as the stable XR feedback floor. */
  selectionFloor?:number;
 }
 export interface SplatAssetOptions {signal?:AbortSignal;maxSh?:number;onProgress?:(fraction:number,stage:string)=>void;onError?:(error:Error)=>void}

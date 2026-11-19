@@ -73,7 +73,7 @@ export function RadixPerformanceControls({value,onChange,lockedRadixKeys=[]}:{va
      <option value="view">{lodSelectionLabels.view}</option>
      <option value="distance">{lodSelectionLabels.distance}</option>
     </select>
-    <small className="muted">{lockedRadixKeys.includes('lodSelection')?'Authored for this scene or viewpoint. ':''}Automatic favors the camera view with automatic detail and uses distance with a fixed budget. VR uses distance.</small>
+    <small className="muted">{lockedRadixKeys.includes('lodSelection')?'Authored for this scene or viewpoint. ':''}Automatic favors the camera view with automatic detail and uses distance with a fixed budget. In VR, camera view follows your head turns.</small>
    </label>
    <label className="field"><span>Detail budget behavior</span><select aria-label="Detail budget behavior" disabled={lockedRadixKeys.includes('lodBudgetMode')} value={specific.lodBudgetMode} onChange={event=>change({lodBudgetMode:event.target.value as RadixPerformanceSettings['lodBudgetMode']})}><option value="limit">Distance first · budget is a cap</option><option value="target">Fill budget · favor more detail</option></select><small className="muted">{lockedRadixKeys.includes('lodBudgetMode')?'Authored for this scene or viewpoint. ':''}Fill budget increases detail toward your selected limit. Source quality and available levels still apply.</small></label>
    {numeric(['lodBaseDistance','lodMultiplier','lodRangeMin','lodRangeMax'])}

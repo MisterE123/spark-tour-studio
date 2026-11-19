@@ -60,20 +60,20 @@ test('automatic detail changes only effective selection and never saved settings
  for(const scale of [0,-1,1.01,Infinity,NaN])assert.throws(()=>radixRenderSettings(settings,scale),/Automatic detail scale/);
 });
 
-test('detail priority uses the desktop mode and follows sparse scene and viewpoint overrides',()=>{
+test('detail priority follows scene and viewpoint overrides in both a browser window and VR',()=>{
  const tour=PerformanceSettingsSchema.parse({adaptiveDetail:true,radix:{selectedSplatBudget:2_000_000}});
  const before=structuredClone(tour);
  assert.equal(Object.hasOwn(tour.radix,'lodSelection'),false);
  assert.equal(radixRenderSettings(tour).viewPriority,true,'automatic follows desktop automatic detail even at the full budget');
  assert.equal(radixRenderSettings(tour,.5).viewPriority,true);
  assert.equal(radixRenderSettings({...tour,adaptiveDetail:false}).viewPriority,false,'automatic follows distance with a fixed budget');
- assert.equal(radixRenderSettings(tour,.5,true).viewPriority,false);
+ assert.equal(radixRenderSettings(tour,.5,true).viewPriority,true);
  const scene={performance:{radix:{lodSelection:'distance'}}};
  const view={performance:{radix:{lodSelection:'view'}}};
  const effective=viewpointPerformanceSettings(tour,scene,view);
  assert.equal(radixRenderSettings(effective).viewPriority,true);
  assert.equal(radixRenderSettings({...effective,adaptiveDetail:false}).viewPriority,true);
- assert.equal(radixRenderSettings(effective,1,true).viewPriority,false,'explicit camera view is a desktop policy');
+ assert.equal(radixRenderSettings(effective,1,true).viewPriority,true);
  assert.equal(radixRenderSettings(viewpointPerformanceSettings(tour,scene,{})).viewPriority,false);
  assert.equal(radixRenderSettings(viewpointPerformanceSettings(tour,{},{})).viewPriority,true);
  assert.equal(Object.hasOwn(radixRenderSettings(effective),'lodSelection'),false);
@@ -88,6 +88,27 @@ test('detail priority uses the desktop mode and follows sparse scene and viewpoi
  Object.assign(projectScene.viewpoints[0],view);
  const project={...blankProject(),scenes:[projectScene],startScene:'one'};
  assert.deepEqual(ProjectSchema.parse(JSON.parse(JSON.stringify(project))),project);
+});
+
+test('only automatic headset view selection can reallocate offscreen coverage within its budget',()=>{
+ const authored=4_000_000;
+ for(const selection of [undefined,'view','distance']){
+  for(const automatic of [false,true]){
+   const settings=PerformanceSettingsSchema.parse({adaptiveDetail:automatic,radix:{selectedSplatBudget:authored,lodSelection:selection}});
+   const viewPriority=selection==='view'||(selection===undefined&&automatic);
+   for(const immersive of [false,true]){
+    for(const scale of [.1875,1]){
+     const result=radixRenderSettings(settings,scale,immersive);
+     assert.equal(result.viewPriority,viewPriority);
+     assert.equal(result.immersiveViewBudget,immersive&&automatic&&viewPriority);
+     assert.equal(result.selectedSplatBudget,authored*scale);
+     assert.equal(result.adaptiveMaxSplats,!immersive&&automatic&&scale<1?authored:undefined);
+    }
+   }
+  }
+ }
+ const equalDirections=radixRenderSettings({adaptiveDetail:true,radix:{lodSelection:'view',lodBehindPenalty:1}},.1875,true);
+ assert.equal(equalDirections.immersiveViewBudget,false,'equal-direction weighting retains coarse coverage all around the visitor');
 });
 
 test('automatic immersive entry starts below a desktop-sized ceiling without changing authored presets',()=>{

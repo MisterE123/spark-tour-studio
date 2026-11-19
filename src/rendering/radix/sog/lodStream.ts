@@ -23,7 +23,7 @@ import * as THREE from "three";
 import type { WebGPURenderer } from "three/webgpu";
 import { ArrayData, GpuArrays, SplatCollection, type AnySplatObject } from "../vendor/radix.module.js";
 import { closePrepared, prepareSogGpu, uploadSogGpu, type PreparedSog } from "./gpuDecode.js";
-import { availableLevel, fovScale, selectLevels, type LodSettings, type SogLodTree } from "./lod.js";
+import { availableLevel, fovScale, selectLevels, XR_REAR_GUARD_ANGLE, type LodSettings, type SogLodTree } from "./lod.js";
 import { Resident } from "./resident.js";
 import { MAX_RANGES, RANGES_BUNDLE, sogObject, type SogArrays, type SogSelection } from "./sh.js";
 import { fetchBytes, urlSource } from "./sog.js";
@@ -109,6 +109,7 @@ export class SogLodStream {
   private readonly lastEye = new THREE.Vector3(Infinity, 0, 0);
   private readonly lastForward = new THREE.Vector3();
   private lastFovScale = NaN;
+  private lastHeadMargin = 0;
   private readonly toObject = new THREE.Matrix4();
   private readonly abort = new AbortController();
   private readonly onError?: (error: Error) => void;
@@ -190,7 +191,7 @@ export class SogLodStream {
   // Re-select if the camera moved, settings changed or a file landed, load
   // what is wanted and rebuild the objects that changed; whether the
   // collection is new
-  update(now = performance.now()): boolean {
+  update(now = performance.now(), headMargin = 0): boolean {
     if (this.disposed || this.paused) {
       return false;
     }
@@ -200,19 +201,27 @@ export class SogLodStream {
     this.eye.setFromMatrixPosition(this.camera.matrixWorld).applyMatrix4(this.toObject);
     this.camera.getWorldDirection(this.forward).transformDirection(this.toObject);
     // A view-centered budget must follow a turn before the old focus leaves
-    // the screen. Keep the existing rate limit and any finer authored angle.
+    // the screen. Respect any finer authored angle.
     const turnAngle = s.viewPriority && s.behindPenalty > 1 ? Math.min(s.updateAngle, 6) : s.updateAngle;
-    const moved = this.eye.distanceTo(this.lastEye) > s.updateDistance || this.forward.angleTo(this.lastForward) > THREE.MathUtils.degToRad(turnAngle);
+    const distance = this.eye.distanceTo(this.lastEye);
+    const angle = THREE.MathUtils.radToDeg(this.forward.angleTo(this.lastForward));
+    const moved = distance > s.updateDistance || angle > turnAngle;
+    // A snap turn or teleport can cross the rear guard between adjacent
+    // frames. Restore newly visible resident coverage on the next update.
+    const crossedGuard = s.immersiveViewBudget && (angle >= XR_REAR_GUARD_ANGLE || headMargin > 0 && distance >= headMargin
+      || headMargin === Infinity && this.lastHeadMargin !== Infinity);
     const perspective = this.camera as THREE.PerspectiveCamera;
     const fov = perspective.isPerspectiveCamera ? fovScale(perspective.fov, perspective.aspect) : 1;
     const projectionChanged = Math.abs(fov - this.lastFovScale) > 1e-4;
-    if (!s.freeze && (moved || this.dirty || projectionChanged) && now - this.selectedAt >= MIN_SELECT_MS) {
+    const changedView = moved || this.dirty || projectionChanged || headMargin !== this.lastHeadMargin;
+    if (!s.freeze && (crossedGuard || (changedView && now - this.selectedAt >= MIN_SELECT_MS))) {
       this.selectedAt = now;
       this.dirty = false;
       this.lastEye.copy(this.eye);
       this.lastForward.copy(this.forward);
       this.lastFovScale = fov;
-      this.stats.selected = selectLevels(this.tree, this.eye, this.forward, s, this.desired, this.distance, fov);
+      this.lastHeadMargin = headMargin;
+      this.stats.selected = selectLevels(this.tree, this.eye, this.forward, s, this.desired, this.distance, fov, headMargin);
       this.stats.selections += 1;
       this.changed = true;
     }

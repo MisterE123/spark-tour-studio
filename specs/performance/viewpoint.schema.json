@@ -42,6 +42,13 @@
             "target"
           ]
         },
+        "lodSelection": {
+          "type": "string",
+          "enum": [
+            "view",
+            "distance"
+          ]
+        },
         "lodUpdateDistance": {
           "type": "number",
           "minimum": 0,

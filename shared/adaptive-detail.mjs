@@ -4,13 +4,18 @@
  */
 export class AdaptiveDetailController {
  constructor(){this.scale=1;this.context='';this.resetHistory();}
- reset(initialScale=1){if(!Number.isFinite(initialScale)||initialScale<=0||initialScale>1)throw Error('Initial automatic detail scale must be greater than zero and at most one.');this.scale=initialScale;this.context='';this.resetHistory();return this.scale;}
- resetHistory(){this.lastTime=undefined;this.lastChange=-Infinity;this.clearObservation();}
- clearObservation(){this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;this.recentFrames=[];this.pauseMs=0;this.wasPaused=false;this.pauseExpired=false;}
+ reset(initialScale=1){if(!Number.isFinite(initialScale)||initialScale<=0||initialScale>1)throw Error('Initial automatic detail scale must be greater than zero and at most one.');this.context='';this.resetHistory();this.scale=initialScale;return this.scale;}
+ resetHistory(){this.lastTime=undefined;this.lastChange=-Infinity;this.rejectedDesktopTrial=undefined;this.clearObservation();}
+ clearObservation(){this.cancelDesktopTrial();this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;this.recentFrames=[];this.pauseMs=0;this.wasPaused=false;this.pauseExpired=false;this.resetDesktopWindow();}
+ cancelDesktopTrial(){
+  if(!this.desktopTrial)return;
+  this.scale=this.desktopTrial.scale;
+  this.desktopTrial=undefined;
+ }
  /** `eligible` excludes hidden/loading/tracking loss. `paused` only holds a
   * short visible comfort fade; its intervals are not performance evidence.
-  * @param {{time:number,frameMs:number,targetFps:number,eligible:boolean,context?:string,immersive?:boolean,minimumScale?:number,paused?:boolean}} sample */
- sample({time,frameMs,targetFps,eligible,context='',immersive=false,minimumScale=0,paused=false}){
+  * @param {{time:number,frameMs:number,targetFps:number,eligible:boolean,context?:string,immersive?:boolean,minimumScale?:number,paused?:boolean,shownSplats?:number}} sample */
+ sample({time,frameMs,targetFps,eligible,context='',immersive=false,minimumScale=0,paused=false,shownSplats}){
   if(context!==this.context){this.context=context;this.resetHistory();}
   const elapsed=this.lastTime===undefined?0:time-this.lastTime;this.lastTime=time;
   // A hidden/ineligible view, breakpoint-sized gap or invalid clock restarts
@@ -39,29 +44,70 @@ export class AdaptiveDetailController {
   // comparable slow intervals establish real low cadence, including sub-1-FPS
   // operation and variable intervals on either side of the 250 ms threshold.
   const minimum=Math.min(...this.recentFrames),maximum=Math.max(...this.recentFrames),slowCadence=this.recentFrames.length===3&&minimum>=150&&maximum/minimum<=2.5;
-  if((frameMs>250||elapsed>1000)&&!slowCadence){this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;return this.scale;}
+  if((frameMs>250||elapsed>1000)&&!slowCadence){this.cancelDesktopTrial();this.settledSince=undefined;this.average=undefined;this.slowMs=0;this.fastMs=0;this.resetDesktopWindow();return this.scale;}
   if(this.settledSince===undefined){this.settledSince=time;this.average=frameMs;return this.scale;}
   this.average+=(frameMs-this.average)*(1-Math.exp(-Math.min(elapsed,250)/500));
   // A headset must shed sustained overload promptly: waiting six seconds per
   // decision and stopping at a quarter of a desktop budget can leave millions
-  // of splats at a persistently uncomfortable cadence. Desktop behavior stays
-  // unchanged. Tracking loss and isolated long gaps still reset observation.
+  // of splats at a persistently uncomfortable cadence. Tracking loss and
+  // isolated long gaps still reset observation.
   if(time-this.settledSince<(immersive?1000:4000))return this.scale;
   const budget=1000/targetFps;
   // Even a confirmed very slow frame contributes at most one second. A single
   // interval must not satisfy the whole decision window by itself.
   const observed=Math.min(elapsed,1000);
-  const healthy=this.average<budget*(immersive?1.02:1.05);
-  if(this.average>budget*(immersive?1.1:1.2)){this.slowMs+=observed;this.fastMs=0;}
+  if(!immersive)return this.sampleDesktop(time,frameMs,observed,budget,shownSplats);
+  const healthy=this.average<budget*1.02;
+  if(this.average>budget*1.1){this.slowMs+=observed;this.fastMs=0;}
   else if(healthy){this.fastMs+=observed;this.slowMs=0;}
   // One missed headset refresh can briefly move the average into the hold
   // band. Decay earlier healthy evidence there instead of requiring eight
   // uninterrupted seconds; sustained hold cadence still drains that credit.
-  else{this.slowMs=0;this.fastMs=immersive?Math.max(0,this.fastMs-observed):0;}
+  else{this.slowMs=0;this.fastMs=Math.max(0,this.fastMs-observed);}
   let next=this.scale;
-  if(this.slowMs>=(immersive?500:2000)&&time-this.lastChange>=(immersive?1500:5000))next=Math.max(floor,Math.min(this.scale,immersive?.01:.25),this.scale*(immersive&&this.average>budget*1.75?.5:.75));
-  else if(healthy&&this.fastMs>=(immersive?8000:6000)&&time-this.lastChange>=(immersive?10000:6000))next=Math.min(1,this.scale+(immersive?.05:.1));
+  if(this.slowMs>=500&&time-this.lastChange>=1500)next=Math.max(floor,Math.min(this.scale,.01),this.scale*(this.average>budget*1.75?.5:.75));
+  else if(healthy&&this.fastMs>=8000&&time-this.lastChange>=10000)next=Math.min(1,this.scale+.05);
   if(next!==this.scale){const reduced=next<this.scale;this.scale=next;this.lastChange=time;this.slowMs=0;this.fastMs=0;if(reduced)this.settledSince=time;}
   return this.scale;
  }
+ sampleDesktop(time,frameMs,observed,budget,shownSplats){
+  const trial=this.desktopTrial,rejected=this.rejectedDesktopTrial;
+  const slow=this.average>budget*1.2,healthy=this.average<budget*1.05;
+  const changed=!rejected||Math.abs(this.average-rejected.frameMs)>=Math.max(rejected.frameMs*.2,2)||
+   (shownSplats!==undefined&&rejected.shownSplats!==undefined&&Math.abs(shownSplats-rejected.shownSplats)>=Math.max(rejected.shownSplats*.25,1));
+  this.fastMs=!trial&&healthy?this.fastMs+observed:0;
+  if(trial||(slow&&changed&&this.scale>.25)){
+   this.desktopFrameSum+=frameMs;
+   this.desktopFrames++;
+   this.desktopObservedMs+=observed;
+  }else this.resetDesktopWindow();
+  if(this.desktopObservedMs>=2000&&time-this.lastChange>=5000){
+   const mean=this.desktopFrameSum/this.desktopFrames;
+   if(trial){
+    // A trial cut should buy at least 10% and 2 ms in delivered frame
+    // time. Wait for the reduced selection to settle before measuring it.
+    if(trial.frameMs-mean<Math.max(trial.frameMs*.1,2)){
+     this.rejectedDesktopTrial=trial;
+     this.cancelDesktopTrial();
+     this.lastChange=time;
+     this.settledSince=time;
+    }else this.desktopTrial=undefined;
+   }else{
+    this.desktopTrial={scale:this.scale,frameMs:mean,shownSplats};
+    this.rejectedDesktopTrial=undefined;
+    this.scale=Math.max(.25,this.scale*.75);
+    this.lastChange=time;
+    this.settledSince=time;
+   }
+   this.resetDesktopWindow();
+  }
+  if(!trial&&healthy&&this.fastMs>=6000&&time-this.lastChange>=6000&&this.scale<1){
+   this.scale=Math.min(1,this.scale+.1);
+   this.rejectedDesktopTrial=undefined;
+   this.lastChange=time;
+   this.fastMs=0;
+  }
+  return this.scale;
+ }
+ resetDesktopWindow(){this.desktopFrameSum=0;this.desktopFrames=0;this.desktopObservedMs=0;}
 }

@@ -60,6 +60,36 @@ test('automatic detail changes only effective selection and never saved settings
  for(const scale of [0,-1,1.01,Infinity,NaN])assert.throws(()=>radixRenderSettings(settings,scale),/Automatic detail scale/);
 });
 
+test('detail priority uses the desktop mode and follows sparse scene and viewpoint overrides',()=>{
+ const tour=PerformanceSettingsSchema.parse({adaptiveDetail:true,radix:{selectedSplatBudget:2_000_000}});
+ const before=structuredClone(tour);
+ assert.equal(Object.hasOwn(tour.radix,'lodSelection'),false);
+ assert.equal(radixRenderSettings(tour).viewPriority,true,'automatic follows desktop automatic detail even at the full budget');
+ assert.equal(radixRenderSettings(tour,.5).viewPriority,true);
+ assert.equal(radixRenderSettings({...tour,adaptiveDetail:false}).viewPriority,false,'automatic follows distance with a fixed budget');
+ assert.equal(radixRenderSettings(tour,.5,true).viewPriority,false);
+ const scene={performance:{radix:{lodSelection:'distance'}}};
+ const view={performance:{radix:{lodSelection:'view'}}};
+ const effective=viewpointPerformanceSettings(tour,scene,view);
+ assert.equal(radixRenderSettings(effective).viewPriority,true);
+ assert.equal(radixRenderSettings({...effective,adaptiveDetail:false}).viewPriority,true);
+ assert.equal(radixRenderSettings(effective,1,true).viewPriority,false,'explicit camera view is a desktop policy');
+ assert.equal(radixRenderSettings(viewpointPerformanceSettings(tour,scene,{})).viewPriority,false);
+ assert.equal(radixRenderSettings(viewpointPerformanceSettings(tour,{},{})).viewPriority,true);
+ assert.equal(Object.hasOwn(radixRenderSettings(effective),'lodSelection'),false);
+ assert.deepEqual(tour,before);
+ for(const lodSelection of ['automatic','invalid',null]){
+  assert.equal(RadixPerformanceSettingsSchema.safeParse({lodSelection}).success,false);
+  assert.equal(SceneRadixPerformanceSettingsSchema.safeParse({lodSelection}).success,false);
+ }
+ const preset=presetFile({name:'Camera view',settings:effective});
+ assert.deepEqual(PerformancePresetSchema.parse(JSON.parse(JSON.stringify(preset))),preset);
+ const projectScene={...newScene('one','One','one.sog'),...scene};
+ Object.assign(projectScene.viewpoints[0],view);
+ const project={...blankProject(),scenes:[projectScene],startScene:'one'};
+ assert.deepEqual(ProjectSchema.parse(JSON.parse(JSON.stringify(project))),project);
+});
+
 test('automatic immersive entry starts below a desktop-sized ceiling without changing authored presets',()=>{
  for(const budget of [50000,750000,4000000,5000000,32000000]){
   const settings=PerformanceSettingsSchema.parse({adaptiveDetail:true,radix:{selectedSplatBudget:budget,residentSplatBudget:Math.max(budget,16000000)}}),before=structuredClone(settings),scale=radixAdaptiveXrEntryScale(settings),effective=radixRenderSettings(settings,scale,true);

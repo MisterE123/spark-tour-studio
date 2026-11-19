@@ -90,7 +90,11 @@ export function ViewerPerformance({project,runtime}:{project:Project|null;runtim
   // The controls display the effective scene values. Carry only visitor edits
   // back to the baseline so this scene's policies never leak into the next.
   const specific=radixPerformanceSettings(settings),base=radixPerformanceSettings(runtime.basePerformanceSettings);
-  if(lockedRadixKeys.length)settings={...settings,radix:{...specific,...Object.fromEntries(lockedRadixKeys.map(key=>[key,base[key]]))}};
+  if(lockedRadixKeys.length){
+   const radix={...specific,...Object.fromEntries(lockedRadixKeys.map(key=>[key,base[key]]))};
+   if(radix.lodSelection===undefined)delete radix.lodSelection;
+   settings={...settings,radix};
+  }
   runtime.applyPerformance(settings);setSelected('');
  };
  return <><PerformanceStats runtime={runtime}/><label className="field"><span>Performance preset</span><select aria-label="Performance preset" value={selected} onChange={e=>{const p=library.presets.find(p=>p.id===e.target.value)!;runtime.applyPerformance(p.settings);setSelected(p.id);}}><option value="" disabled>Custom adjustments</option>{library.presets.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></label>{!!lockedRadixKeys.length&&<p className="muted">Some detail distances and streaming policies are authored for this scene or viewpoint. Device budgets, resolution and other controls remain adjustable.</p>}<InspectorSection title="Advanced performance" icon="tune"><PerformanceControls value={value} lockedRadixKeys={lockedRadixKeys} onChange={apply}/></InspectorSection></>;

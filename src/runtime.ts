@@ -370,7 +370,8 @@ export class TourRuntime {
   const observable=this.ready&&!this.loading&&!!this.active&&this.backend.stats.shown>0&&!document.hidden&&!this.editing&&!this.blocked&&!this.flight&&!this.preparingMode&&!this.colliderLoading&&!suspended&&(xr||!this.menuOpen&&!this.currentPage);
   const eligible=observable&&(xr||opacity===0),paused=xr&&observable&&opacity>0;
   const minimumScale=xr?Math.min(1,(this.backend.stats.selectionFloor??0)/this.adaptiveBaseBudget):0;
-  const scale=this.adaptiveDetail.sample({time,frameMs,targetFps,eligible,paused,minimumScale,immersive:xr,context:this.generation+':'+(xr?'xr:'+targetFps:'desktop')});
+  const context=this.generation+':'+(xr?'xr:'+targetFps:'desktop:'+targetFps+':'+this.currentViewpoint);
+  const scale=this.adaptiveDetail.sample({time,frameMs,targetFps,eligible,paused,minimumScale,immersive:xr,context,shownSplats:xr?undefined:this.backend.stats.shown});
   if(scale!==this.adaptiveScale){this.adaptiveScale=scale;this.backend.applySettings(radixRenderSettings(this.performanceSettings,scale,xr));}
  }
  setQuality(q:number){const settings=radixPerformanceSettings(this.performanceBase),factor=THREE.MathUtils.clamp(q,.25,2);this.applyPerformance({...this.performanceBase,radix:{...settings,selectedSplatBudget:Math.max(50000,Math.min(settings.residentSplatBudget,Math.round(settings.selectedSplatBudget*factor/this.quality)))}});this.quality=factor;}

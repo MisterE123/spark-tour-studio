@@ -108,6 +108,7 @@ export class SogLodStream {
   private readonly forward = new THREE.Vector3();
   private readonly lastEye = new THREE.Vector3(Infinity, 0, 0);
   private readonly lastForward = new THREE.Vector3();
+  private lastFovScale = NaN;
   private readonly toObject = new THREE.Matrix4();
   private readonly abort = new AbortController();
   private readonly onError?: (error: Error) => void;
@@ -198,14 +199,19 @@ export class SogLodStream {
     this.toObject.copy(this.matrixWorld).invert();
     this.eye.setFromMatrixPosition(this.camera.matrixWorld).applyMatrix4(this.toObject);
     this.camera.getWorldDirection(this.forward).transformDirection(this.toObject);
-    const moved = this.eye.distanceTo(this.lastEye) > s.updateDistance || this.forward.angleTo(this.lastForward) > THREE.MathUtils.degToRad(s.updateAngle);
-    if (!s.freeze && (moved || this.dirty) && now - this.selectedAt >= MIN_SELECT_MS) {
+    // A view-centered budget must follow a turn before the old focus leaves
+    // the screen. Keep the existing rate limit and any finer authored angle.
+    const turnAngle = s.viewPriority && s.behindPenalty > 1 ? Math.min(s.updateAngle, 6) : s.updateAngle;
+    const moved = this.eye.distanceTo(this.lastEye) > s.updateDistance || this.forward.angleTo(this.lastForward) > THREE.MathUtils.degToRad(turnAngle);
+    const perspective = this.camera as THREE.PerspectiveCamera;
+    const fov = perspective.isPerspectiveCamera ? fovScale(perspective.fov, perspective.aspect) : 1;
+    const projectionChanged = Math.abs(fov - this.lastFovScale) > 1e-4;
+    if (!s.freeze && (moved || this.dirty || projectionChanged) && now - this.selectedAt >= MIN_SELECT_MS) {
       this.selectedAt = now;
       this.dirty = false;
       this.lastEye.copy(this.eye);
       this.lastForward.copy(this.forward);
-      const perspective = this.camera as THREE.PerspectiveCamera;
-      const fov = perspective.isPerspectiveCamera ? fovScale(perspective.fov, perspective.aspect) : 1;
+      this.lastFovScale = fov;
       this.stats.selected = selectLevels(this.tree, this.eye, this.forward, s, this.desired, this.distance, fov);
       this.stats.selections += 1;
       this.changed = true;

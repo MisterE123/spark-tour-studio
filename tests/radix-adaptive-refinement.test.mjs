@@ -37,7 +37,6 @@ const {parseLod, SogLodStream, defaultLodSettings, selectLevels} = api;
 const authored = 4_000_000;
 const floor = 1_013_712;
 const coarse = 4;
-const frameMs = 1000 / 11;
 
 // Match the reported scene's total coarse coverage and uneven leaf counts,
 // without distributing tour data. Two separated clusters lie on the walk.
@@ -75,7 +74,7 @@ function select(x, settings) {
   return {total, levels};
 }
 
-test('at sustained 11 desktop FPS, walking still requests, lands and displays nearby refinement after reaching minimum detail', () => {
+test('with initially slow desktop cadence that improves as budget decreases, walking still requests, lands and displays nearby refinement after reaching minimum detail', () => {
   assert.equal(tree.levelTotals[coarse], floor);
   const settings = {...defaultLodSettings(false), splatBudget: authored};
   const camera = new THREE.PerspectiveCamera(65, 16/9, .05, 20000);
@@ -110,12 +109,13 @@ test('at sustained 11 desktop FPS, walking still requests, lands and displays ne
   const controller = new AdaptiveDetailController();
   let time = 0, lastScale = 1;
   function tick(x) {
+    const frameMs = 1000 / 11 * controller.scale ** .65;
     time += frameMs;
     camera.position.x = x;
     camera.updateMatrixWorld();
     stream.update(time);
 
-    const scale = controller.sample({time, frameMs, targetFps: 60, eligible: stream.baseReady, context: 'desktop'});
+    const scale = controller.sample({time, frameMs, targetFps: 60, eligible: stream.baseReady, context: 'desktop', shownSplats: stream.stats.shown});
     if (scale === lastScale) return;
     lastScale = scale;
     const resolved = radixRenderSettings({adaptiveDetail: true, radix: {selectedSplatBudget: authored}}, scale);
@@ -125,7 +125,7 @@ test('at sustained 11 desktop FPS, walking still requests, lands and displays ne
   }
   try {
     // First loads full coarse coverage and refines at the original position.
-    for (let frame = 0; frame < 500; frame++) tick(0);
+    for (let frame = 0; frame < 1100; frame++) tick(0);
     assert.equal(controller.scale, .25);
     assert.ok(settings.splatBudget < floor);
     const {shown} = stream.inspect();
@@ -165,4 +165,33 @@ test('manual budgets remain exact, and automatic refinement respects distance, l
   assert.equal(select(0, {...limited, rangeMin: coarse, rangeMax: coarse}).total, floor);
   const original = {...manual, splatBudget: authored};
   assert.deepEqual(select(0, {...original, adaptiveMaxSplats: authored}), select(0, original));
+});
+
+test('view priority follows turns in place and lens changes without responding to small yaw jitter', () => {
+  for (const viewPriority of [true, false]) {
+    const settings = {...defaultLodSettings(false), splatBudget: authored, updateAngle: 90, viewPriority};
+    const camera = new THREE.PerspectiveCamera(65, 16/9, .05, 20000);
+    const stream = new SogLodStream({renderer: {}, tree, camera, matrixWorld: new THREE.Matrix4(), settings, degree: 0});
+    stream.load = () => {};
+    const tick = (time, yaw) => {
+      camera.rotation.y = THREE.MathUtils.degToRad(yaw);
+      camera.updateMatrixWorld();
+      stream.update(time);
+      return stream.stats.selections;
+    };
+    try {
+      assert.equal(tick(0, 0), 1);
+      assert.equal(tick(50, 18), 1, 'a substantial turn still respects the selection rate limit');
+      assert.equal(tick(120, 18), viewPriority ? 2 : 1, 'view priority reacts before the authored 90-degree threshold');
+      assert.equal(tick(240, 19), viewPriority ? 2 : 1, 'one degree of jitter does not trigger a new selection');
+      if (!viewPriority) assert.equal(tick(360, 100), 2, 'distance-only still reacts past the authored threshold');
+
+      // The backend hands the stream the effective FOV from the projection matrix.
+      camera.fov = 45;
+      camera.updateProjectionMatrix();
+      assert.equal(tick(480, viewPriority ? 19 : 100), 3, 'zoom reselects with position and orientation held steady');
+    } finally {
+      stream.dispose();
+    }
+  }
 });

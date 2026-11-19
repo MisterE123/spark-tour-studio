@@ -55,6 +55,33 @@ try{
  await page.getByRole('button',{name:'Select starting viewpoint',exact:true}).click();await expect(visitor.getByLabel('Detail distance · meters',{exact:true})).toHaveValue('25');await expect(visitor.getByLabel('Detail distance · meters',{exact:true})).toBeDisabled();assert.equal((await snapshot()).base.radix.lodBaseDistance,3);
  await author.getByLabel('Override Level distance multiplier for this scene',{exact:true}).check();await author.getByLabel('Scene Level distance multiplier',{exact:true}).fill('2');await expect(viewAuthor.getByLabel('Viewpoint Level distance multiplier',{exact:true})).toHaveValue('2');await page.getByRole('button',{name:'Round trip project',exact:true}).click();assert.deepEqual((await snapshot()).project.scenes[0].viewpoints[0].performance,{radix:{lodBaseDistance:25}});result.cases.push('Viewpoint controls inherit effective scene defaults, store only chosen overrides, and affect rendering only when selected.');
  await page.getByRole('button',{name:'Switch to room',exact:true}).click();await expect(visitor.getByLabel('Detail distance · meters',{exact:true})).toHaveValue('3');await page.getByRole('button',{name:'Switch to aerial',exact:true}).click();await page.getByRole('button',{name:'Select starting viewpoint',exact:true}).click();await expect(visitor.getByLabel('Detail distance · meters',{exact:true})).toHaveValue('25');await viewAuthor.getByRole('button',{name:'Use scene defaults for this viewpoint',exact:true}).click();await expect(viewDistance).toHaveValue('20');await expect(visitor.getByLabel('Detail distance · meters',{exact:true})).toHaveValue('3');assert.equal(Object.hasOwn((await snapshot()).project.scenes[0].viewpoints[0],'performance'),false);result.cases.push('Viewpoint overrides do not leak into other scenes and resetting a view restores scene/visitor inheritance.');
+ const visitorPriority=visitor.getByLabel('Detail priority',{exact:true});
+ const scenePriority=author.getByLabel('Scene detail priority',{exact:true});
+ const viewPriority=viewAuthor.getByLabel('Viewpoint detail priority',{exact:true});
+ await expect(visitorPriority).toBeEnabled();
+ await expect(visitorPriority).toHaveValue('');
+ await visitorPriority.selectOption('view');
+ assert.equal((await snapshot()).base.radix.lodSelection,'view');
+ await visitorPriority.selectOption('');
+ assert.equal(Object.hasOwn((await snapshot()).base.radix,'lodSelection'),false);
+ await scenePriority.selectOption('distance');
+ await expect(visitorPriority).toBeDisabled();
+ await expect(visitorPriority).toHaveValue('distance');
+ await viewPriority.selectOption('view');
+ await expect(visitorPriority).toHaveValue('view');
+ await visitor.getByLabel('Selected splat budget · per asset',{exact:true}).fill('750000');
+ assert.equal(Object.hasOwn((await snapshot()).base.radix,'lodSelection'),false);
+ await page.getByRole('button',{name:'Round trip project',exact:true}).click();
+ assert.equal((await snapshot()).project.scenes[0].viewpoints[0].performance.radix.lodSelection,'view');
+ await viewPriority.selectOption('');
+ await expect(visitorPriority).toHaveValue('distance');
+ assert.equal(Object.hasOwn((await snapshot()).project.scenes[0].viewpoints[0],'performance'),false);
+ await scenePriority.selectOption('');
+ await expect(visitorPriority).toBeEnabled();
+ await expect(visitorPriority).toHaveValue('');
+ const savedScene=(await snapshot()).project.scenes[0];
+ assert.deepEqual(savedScene.performance.radix,{lodMultiplier:2});
+ result.cases.push('Detail priority supports explicit visitor modes and sparse scene/viewpoint inheritance, including locked controls and project round trips.');
  assert.deepEqual(result.errors,[]);assert.deepEqual(result.externalRequests,[]);result.pass=true;await fs.writeFile(path.join(output,'result.json'),JSON.stringify(result,null,2));console.log('PASS: '+result.cases.length+' scene-performance UI cases; '+output);
 }catch(error){result.error=String(error);await fs.writeFile(path.join(output,'result.json'),JSON.stringify(result,null,2));throw error;}
 finally{await browser?.close();await new Promise(resolve=>server.close(resolve));}

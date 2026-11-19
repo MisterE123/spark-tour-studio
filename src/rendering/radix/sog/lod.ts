@@ -67,6 +67,8 @@ export interface LodSettings {
   splatBudget: number;
   // Authored ceiling for a temporarily reduced, nonimmersive automatic budget.
   adaptiveMaxSplats?: number;
+  // Prioritize upgrades toward the view when eligible detail exceeds the budget.
+  viewPriority?: boolean;
   budgetMode: BudgetMode;
   // Levels coarser than the selected one a leaf may show while the
   // selected one loads (the finest resident in that window; 0: the
@@ -255,8 +257,50 @@ const BIN_SCALE = BINS / 96;
 const UNIT_BIN = BINS / 2;
 const histogram = new Float64Array(BINS);
 let logDistances = new Float64Array(0);
+let viewLogDistances = new Float64Array(0);
+let finestAllowedBand = new Uint8Array(0);
 
 const binOf = (x: number) => Math.min(BINS - 1, Math.max(0, Math.floor(x)));
+
+// A soft center cone in the camera's viewing direction. As in Spark's
+// traversal, interpolate in cosine space. SOG offers a center per region.
+const INNER_COS = Math.cos(20 * Math.PI / 180);
+const OUTER_COS = Math.cos(55 * Math.PI / 180);
+const FOCUS_SLOPE = Math.tan(6 * Math.PI / 180);
+function viewWeight(cosAngle: number): number {
+  if (cosAngle >= INNER_COS) return 1;
+  if (cosAngle > OUTER_COS) return 0.35 + 0.65 * (cosAngle - OUTER_COS) / (INNER_COS - OUTER_COS);
+  return 0.10 + 0.25 * Math.max(0, cosAngle) / OUTER_COS;
+}
+
+function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, forward: Vec3Like, nearest: number, penalty: number): number {
+  const cx = (bounds[b] + bounds[b + 3]) / 2 - eye.x;
+  const cy = (bounds[b + 1] + bounds[b + 4]) / 2 - eye.y;
+  const cz = (bounds[b + 2] + bounds[b + 5]) / 2 - eye.z;
+  const centerDistance = Math.sqrt(cx * cx + cy * cy + cz * cz);
+  // Several boxes can contain the eye. Their centers distinguish a nearby
+  // surface from the far side of an overlapping region.
+  const distance = Math.max(nearest, 0.35 * centerDistance);
+  if (penalty === 0 || centerDistance === 0) return distance;
+  const depth = cx * forward.x + cy * forward.y + cz * forward.z;
+  const angular = 1 + penalty * (1 / viewWeight(depth / centerDistance) - 1);
+  if (depth <= 0 || nearest === 0) return distance * angular;
+
+  // A headstone can fill the middle of the screen while the center of its
+  // leaf lies off-axis. At the leaf's depth, measure how far the viewing ray
+  // misses its box. Give a smooth, bounded preference to that angular area.
+  const hx = (bounds[b + 3] - bounds[b]) / 2;
+  const hy = (bounds[b + 4] - bounds[b + 1]) / 2;
+  const hz = (bounds[b + 5] - bounds[b + 2]) / 2;
+  const mx = Math.max(0, Math.abs(cx - depth * forward.x) - hx);
+  const my = Math.max(0, Math.abs(cy - depth * forward.y) - hy);
+  const mz = Math.max(0, Math.abs(cz - depth * forward.z) - hz);
+  const width = depth * FOCUS_SLOPE;
+  const focus = Math.exp(-0.5 * (mx * mx + my * my + mz * mz) / (width * width));
+  const radius = Math.sqrt(hx * hx + hy * hy + hz * hz);
+  const locality = nearest / (nearest + 0.25 * radius);
+  return distance * angular / (1 + Math.min(1, penalty) * focus * locality);
+}
 
 // The level of every leaf into `out` for a camera at `eye` looking along
 // unit `forward` (both in the tree's space) with field-of-view scale
@@ -286,12 +330,17 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
   if (logDistances.length < leaves) {
     logDistances = new Float64Array(leaves);
   }
+  if (s.viewPriority && viewLogDistances.length < leaves) {
+    viewLogDistances = new Float64Array(leaves);
+    finestAllowedBand = new Uint8Array(leaves);
+  }
   for (let leaf = 0; leaf < leaves; leaf += 1) {
     const b = leaf * 6;
     const dx = Math.max(bounds[b], Math.min(eye.x, bounds[b + 3])) - eye.x;
     const dy = Math.max(bounds[b + 1], Math.min(eye.y, bounds[b + 4])) - eye.y;
     const dz = Math.max(bounds[b + 2], Math.min(eye.z, bounds[b + 5])) - eye.z;
-    let distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const nearest = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    let distance = nearest;
     // Toward the box's nearest point: 0 side-on, 1 straight behind
     if (penalty > 0 && distance > 0.01) {
       const facing = (dx * forward.x + dy * forward.y + dz * forward.z) / distance;
@@ -304,8 +353,14 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
     // In bins: the leaf's switch point leaving band b for b - 1 is at
     // position - (rangeMin + b - 1) * step
     logDistances[leaf] = (Math.log(Math.max(distance, 1e-6)) - logBase - LOG_MIN) * BIN_SCALE;
+    if (s.viewPriority) {
+      const rankDistance = cameraPriorityDistance(bounds, b, eye, forward, nearest, penalty) * fov;
+      d[leaf] = rankDistance; // The pager uses the same priority for comparable pending files.
+      viewLogDistances[leaf] = (Math.log(Math.max(rankDistance, 1e-6)) - logBase - LOG_MIN) * BIN_SCALE;
+    }
   }
-  const switchAt = (leaf: number, b: number) => logDistances[leaf] - (rangeMin + b - 1) * step;
+  let priorities = logDistances;
+  const switchAt = (leaf: number, b: number) => priorities[leaf] - (rangeMin + b - 1) * step;
 
   // The cut: switch points in bins below cutBin are taken, and in cutBin
   // those in sub-bins below cutSub
@@ -320,6 +375,7 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
   const limit = s.budgetMode === "limit";
   let cutBin = UNIT_BIN;
   let cutSub = 0;
+  let cappedByDistance = false;
   if (chains.coarsest >= budget) {
     cutBin = -1;
   } else if (!limit && chains.finest <= budget) {
@@ -333,16 +389,22 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
         while (b > 0 && binOf(switchAt(leaf, b)) < UNIT_BIN) {
           b -= 1;
         }
+        if (s.viewPriority) finestAllowedBand[leaf] = b;
         unitTotal += chains.count[leaf * span + b];
       }
     }
     if (!limit || unitTotal > budget) {
-      const stop = limit ? UNIT_BIN : BINS;
+      // Fit camera-weighted upgrades only within each leaf's original
+      // distance limit. If everything eligible fits, keep all of it.
+      if (s.viewPriority) priorities = viewLogDistances;
+      cappedByDistance = !!s.viewPriority && limit;
+      const stop = limit && !s.viewPriority ? UNIT_BIN : BINS;
       let total = chains.coarsest;
       const accumulate = (bin: number) => {
         histogram.fill(0);
         for (let leaf = 0; leaf < leaves; leaf += 1) {
-          for (let b = 1; b < span; b += 1) {
+          const finest = cappedByDistance ? finestAllowedBand[leaf] : 0;
+          for (let b = finest + 1; b < span; b += 1) {
             const delta = chains.count[leaf * span + b - 1] - chains.count[leaf * span + b];
             if (delta === 0) {
               continue;
@@ -377,11 +439,12 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
   // points rise as bands get finer, so the first one not taken ends it
   let total = 0;
   for (let leaf = 0; leaf < leaves; leaf += 1) {
+    const finest = cappedByDistance ? finestAllowedBand[leaf] : 0;
     let b = span - 1;
     if (cutBin >= BINS) {
-      b = 0;
+      b = finest;
     } else if (cutBin >= 0) {
-      while (b > 0) {
+      while (b > finest) {
         const x = switchAt(leaf, b);
         const bin = binOf(x);
         if (bin > cutBin || (bin === cutBin && binOf((x - cutBin) * BINS) >= cutSub)) {

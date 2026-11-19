@@ -12,7 +12,7 @@ import {sogObject,type SogArrays,type SogSelection} from './sog/sh';
 import {Resident} from './sog/resident';
 import {SurfaceProxy} from './surface-proxy';
 
-const DEFAULTS:RadixRenderSettings={method:'ewa',sortBits:24,sortMode:'auto',autoSortDistance:.05,autoSortAngle:5,selectedSplatBudget:4_000_000,residentSplatBudget:16_000_000,lodBaseDistance:5,lodMultiplier:3,lodBehindPenalty:2,lodUnderfill:5,lodRangeMin:0,lodRangeMax:7,lodBudgetMode:'limit',lodUpdateDistance:.5,lodUpdateAngle:90,maxShDegree:3,minAlpha:.5/255,maxStdDev:Math.sqrt(8),minPixelRadius:0,maxPixelRadius:512,minContribution:0,blurAmount:.3,preBlurAmount:0,sortGuard:0,pixelRatio:1.5,xrResolutionScale:1};
+const DEFAULTS:RadixRenderSettings={method:'ewa',sortBits:24,sortMode:'auto',autoSortDistance:.05,autoSortAngle:5,selectedSplatBudget:4_000_000,residentSplatBudget:16_000_000,lodBaseDistance:5,lodMultiplier:3,lodBehindPenalty:2,lodUnderfill:5,lodRangeMin:0,lodRangeMax:7,lodBudgetMode:'limit',viewPriority:false,lodUpdateDistance:.5,lodUpdateAngle:90,maxShDegree:3,minAlpha:.5/255,maxStdDev:Math.sqrt(8),minPixelRadius:0,maxPixelRadius:512,minContribution:0,blurAmount:.3,preBlurAmount:0,sortGuard:0,pixelRatio:1.5,xrResolutionScale:1};
 const asError=(error:unknown)=>error instanceof Error?error:new Error(String(error));
 const canceled=()=>new DOMException('Scene loading was canceled.','AbortError');
 const finite=(value:number,min:number,max:number,fallback:number)=>Number.isFinite(value)?THREE.MathUtils.clamp(value,min,max):fallback;
@@ -97,7 +97,7 @@ class RadixAsset extends SplatAssetGroup {
  }
  applySettings(settings:RadixRenderSettings){
   this.ownSettings={...settings};this.updateDistances();
-  Object.assign(this.lod,{splatBudget:settings.selectedSplatBudget,adaptiveMaxSplats:settings.adaptiveMaxSplats,residentBudget:settings.residentSplatBudget,multiplier:settings.lodMultiplier,behindPenalty:settings.lodBehindPenalty,underfillLimit:settings.lodUnderfill,rangeMin:settings.lodRangeMin,rangeMax:settings.lodRangeMax,budgetMode:settings.lodBudgetMode,updateAngle:settings.lodUpdateAngle});
+  Object.assign(this.lod,{splatBudget:settings.selectedSplatBudget,adaptiveMaxSplats:settings.adaptiveMaxSplats,viewPriority:settings.viewPriority,residentBudget:settings.residentSplatBudget,multiplier:settings.lodMultiplier,behindPenalty:settings.lodBehindPenalty,underfillLimit:settings.lodUnderfill,rangeMin:settings.lodRangeMin,rangeMax:settings.lodRangeMax,budgetMode:settings.lodBudgetMode,updateAngle:settings.lodUpdateAngle});
   if(this.stream){
    const tree=this.stream.tree,rangeMax=Math.max(0,Math.min(this.lod.rangeMax,tree.levels-1)),rangeMin=Math.max(0,Math.min(this.lod.rangeMin,rangeMax));
    // Match selectLevels, including sparse-level fallback. This cached chain

@@ -108,6 +108,13 @@
         "target"
       ]
     },
+    "lodSelection": {
+      "type": "string",
+      "enum": [
+        "view",
+        "distance"
+      ]
+    },
     "lodUpdateDistance": {
       "default": 0.5,
       "type": "number",

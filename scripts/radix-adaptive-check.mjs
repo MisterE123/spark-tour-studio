@@ -82,7 +82,8 @@ state.settle=async()=>{
  return state.snapshot();
 };
 state.feedback=async(duration,fps,fadeEvery=0)=>{
- const start=state.time,step=1000/fps;for(let i=0;i<Math.ceil(duration/step);i++){state.time+=step;const opacity=fadeEvery&&(state.time-start)%fadeEvery<220?.95:0;runtime.updateAdaptivePerformance(state.time,step,runtime.renderer.xr.isPresenting,runtime.xrInputSuspended,opacity);}
+ const start=state.time;while(state.time-start<duration){const step=1000/(typeof fps==='function'?fps(runtime.adaptiveDetailScale):fps);state.time+=step;const opacity=fadeEvery&&(state.time-start)%fadeEvery<220?.95:0;runtime.updateAdaptivePerformance(state.time,step,runtime.renderer.xr.isPresenting,runtime.xrInputSuspended,opacity);}
+ if(!runtime.renderer.xr.isPresenting)runtime.last=state.time;
  return state.settle();
 };
 state.feedbackMisses=async(duration,period)=>{
@@ -146,20 +147,20 @@ try{
   await record('Real SOG scene starts at authored budget',state);
   state=await page.evaluate(()=>test.feedback(7000,20));assert.equal(state.scale,.75);assert.equal(state.budget,37500);assert.equal(state.base.radix.selectedSplatBudget,50000);await record('20 FPS below30 target reduces actual stream budget',state);
   assert.equal(await page.evaluate(()=>test.runtime.mesh.stream.settings.adaptiveMaxSplats),50000,'reduced desktop selection receives the authored ceiling');
-  state=await page.evaluate(()=>test.feedback(6000,20));assert.ok(state.scale<.75);assert.ok(state.selected<original,'actual LoD selection decreases, not just UI metadata');await record('Sustained slow cadence reduces selected splats',state);
   // Exercise the reported-pending-work gate independently of network timing;
   // all fixture files are local. Initial-cover loading is checked separately.
-  state=await page.evaluate(()=>{test.runtime.mesh.stream.stats.loading=3;return test.feedback(6000,20);});assert.ok(state.scale<.5625,'reported refinement does not suppress adjustment');await record('Pending refinement count is not a feedback eligibility gate',state);
-  state=await page.evaluate(async()=>{test.reset({});await test.tick(30000,.5);return test.settle();});assert.ok(state.scale<1,'repeated two-second render intervals must reduce actual detail');assert.ok(state.budget<50000);assert.ok(state.selected<original);await record('Sustained visible half-FPS cadence reduces the real selection',state);
+  state=await page.evaluate(()=>{test.runtime.mesh.stream.stats.loading=3;return test.feedback(9000,24);});assert.equal(state.scale,.5625,'reported refinement does not suppress a beneficial adjustment');assert.ok(state.selected<original,'actual LoD selection decreases, not just UI metadata');await record('Pending refinement count is not a feedback eligibility gate',state);
+  state=await page.evaluate(()=>test.feedback(20000,24));assert.equal(state.scale,.75);assert.equal(state.budget,37500);await record('An ineffective second cut restores the last beneficial budget',state);
+  state=await page.evaluate(async()=>{test.reset({});await test.tick(14000,.5);return test.settle();});assert.ok(state.scale<1,'repeated two-second render intervals must trial a detail reduction');assert.ok(state.budget<50000);await record('Sustained visible half-FPS cadence trials a reduced budget',state);
   // Restore each individual gate and restart feedback before the next probe.
   for(const gate of ['loading','editing','blocked','menuOpen']){
    state=await page.evaluate(gate=>{test.reset({});if(gate==='loading')test.runtime.loading={sceneId:'test'};else test.runtime[gate]=true;return test.feedback(8000,20);},gate);assert.equal(state.scale,1,gate+' excludes the sample window');await record('Excludes '+gate,state);
   }
   state=await page.evaluate(()=>{test.reset({adaptiveDetail:false});return test.feedback(15000,20);});assert.equal(state.scale,1);assert.equal(state.budget,50000);await record('Opt-out retains authored budget',state);
-  state=await page.evaluate(()=>{test.reset({});return test.feedback(60000,20);});assert.equal(state.scale,.25);assert.equal(state.budget,12500);assert.ok(state.selected>=8192,'mandatory available coarse coverage remains visible');await record('Bounded reduction retains source coverage',state);
+  state=await page.evaluate(()=>{test.reset({});return test.feedback(60000,scale=>10/scale**.65);});assert.equal(state.scale,.25);assert.equal(state.budget,12500);assert.ok(state.selected>=8192,'mandatory available coarse coverage remains visible');await record('Bounded beneficial reductions retain source coverage',state);
   state=await page.evaluate(()=>test.feedback(55000,60));assert.equal(state.scale,1);assert.equal(state.budget,50000);await record('Healthy cadence cautiously restores authored budget',state);
   assert.equal(await page.evaluate(()=>test.runtime.mesh.stream.settings.adaptiveMaxSplats),undefined,'full desktop detail clears the temporary ceiling');
-  state=await page.evaluate(()=>{test.reset({radix:{lodRangeMin:0,lodRangeMax:0}});return test.feedback(60000,20);});assert.equal(state.scale,.25);assert.equal(state.budget,12500);assert.equal(state.selected,32768,'authored sole available level is a coverage floor, not missing imagery');await record('Authored LoD floor can exceed adaptive budget without dropping coverage',state);
+  state=await page.evaluate(()=>{test.reset({radix:{lodRangeMin:0,lodRangeMax:0}});return test.feedback(60000,20);});assert.equal(state.scale,1);assert.equal(state.budget,50000);assert.equal(state.selected,32768,'authored sole available level retains coverage');await record('A reduction with no frame-time benefit restores authored detail',state);
   assert.deepEqual(await page.evaluate(()=>[JSON.stringify(test.authored)===test.authoredBefore,JSON.stringify(test.project)===test.projectBefore]),[true,true],'feedback never edits saved preset or scene data');
   if(backend==='webgpu-gl'){
    state=await page.evaluate(async()=>{test.reset({radix:{selectedSplatBudget:5000000,residentSplatBudget:8000000}});await test.startXR();return test.snapshot();});assert.equal(state.scale,.15);assert.equal(state.budget,750000);assert.equal(state.base.radix.selectedSplatBudget,5000000);assert.equal(state.session,true);await record('Entering actual XR from High detail immediately seeds750k before its first frame',state);

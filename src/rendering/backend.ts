@@ -7,7 +7,7 @@ export interface RadixRenderSettings {
  /** Authored per-asset ceiling while automatic desktop detail is reduced. */
  adaptiveMaxSplats?:number;
  lodBaseDistance:number;lodMultiplier:number;lodBehindPenalty:number;lodUnderfill:number;
- lodRangeMin:number;lodRangeMax:number;lodBudgetMode:'limit'|'target';lodUpdateDistance:number;lodUpdateAngle:number;
+ lodRangeMin:number;lodRangeMax:number;lodBudgetMode:'limit'|'target';lodUpdateDistance:number;lodUpdateAngle:number;viewPriority:boolean;
  maxShDegree:number;minAlpha:number;maxStdDev:number;minPixelRadius:number;maxPixelRadius:number;minContribution:number;blurAmount:number;preBlurAmount:number;sortGuard:number;
  pixelRatio:number;xrResolutionScale:number;
 }

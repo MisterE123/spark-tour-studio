@@ -94,11 +94,11 @@ try{
    presented:r.backend.hasPresented(r.mesh)&&r.backend.drawnCollection===r.backend.node.collection,
    visible:r.backend.stats.visible,errors:stream.stats.failed,authoredSame:JSON.stringify(r.basePerformanceSettings)===probe.authored,
   });
-  const frameMs=1000/11;
-  probe.frame=async()=>{probe.time+=frameMs;r.frame(probe.time);await new Promise(resolve=>setTimeout(resolve,5));};
+  const cadence=()=>1000/11*r.adaptiveDetailScale**.65;
+  probe.frame=async()=>{probe.time+=cadence();r.frame(probe.time);await new Promise(resolve=>setTimeout(resolve,5));};
   // Feed elapsed frame intervals to the normal controller, keeping the real
   // renderer, pager and Walk physics for the ensuing camera motion and draws.
-  for(let i=0;i<600;i++){probe.time+=frameMs;r.updateAdaptivePerformance(probe.time,frameMs,false,false,0);}
+  for(let i=0;i<1200;i++){const frameMs=cadence();probe.time+=frameMs;r.updateAdaptivePerformance(probe.time,frameMs,false,false,0);}
   r.last=probe.time;
  });
  async function until(label,condition,arg){

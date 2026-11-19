@@ -16,6 +16,7 @@ const radixFields={
  lodBehindPenalty:number(1,20,2),lodUnderfill:integer(0,31,5),
  lodRangeMin:integer(0,31,0),lodRangeMax:integer(0,31,7),
  lodBudgetMode:z.enum(['limit','target']).default('limit'),
+ lodSelection:z.enum(['view','distance']).optional(),
  lodUpdateDistance:number(0,10,.5),lodUpdateAngle:number(0,180,90),
  minContribution:number(0,20,0),blurAmount:number(0,2,.3),
  preBlurAmount:number(0,2,0),sortGuard:number(0,4,0),
@@ -38,6 +39,7 @@ export const SceneRadixPerformanceSettingsSchema=z.object({
  lodBehindPenalty:radixFields.lodBehindPenalty.removeDefault().optional(),
  lodUnderfill:radixFields.lodUnderfill.removeDefault().optional(),
  lodBudgetMode:radixFields.lodBudgetMode.removeDefault().optional(),
+ lodSelection:radixFields.lodSelection,
  lodUpdateDistance:radixFields.lodUpdateDistance.removeDefault().optional(),
  lodUpdateAngle:radixFields.lodUpdateAngle.removeDefault().optional(),
  autoSortDistance:radixFields.autoSortDistance.removeDefault().optional(),
@@ -73,9 +75,10 @@ const common=z.object({
  */
 export function radixRenderSettings(settings,adaptiveScale=1,immersive=false){
  if(!Number.isFinite(adaptiveScale)||adaptiveScale<=0||adaptiveScale>1)throw Error('Automatic detail scale must be greater than zero and at most one.');
- const specific=radixPerformanceSettings(settings),{maxSh,...shared}=common.parse(settings||{});
+ const {lodSelection,...specific}=radixPerformanceSettings(settings),{maxSh,...shared}=common.parse(settings||{});
  // Backend updates merge partial settings. Explicitly clear the temporary
  // ceiling when a preset restores full detail, opts out or enters XR.
  const adaptiveMaxSplats=settings?.adaptiveDetail===true&&!immersive&&adaptiveScale<1?specific.selectedSplatBudget:undefined;
- return {...specific,...shared,maxShDegree:maxSh,adaptiveMaxSplats,selectedSplatBudget:Math.max(1,Math.floor(specific.selectedSplatBudget*adaptiveScale))};
+ const viewPriority=!immersive&&(lodSelection==='view'||(lodSelection===undefined&&settings?.adaptiveDetail===true));
+ return {...specific,...shared,maxShDegree:maxSh,adaptiveMaxSplats,viewPriority,selectedSplatBudget:Math.max(1,Math.floor(specific.selectedSplatBudget*adaptiveScale))};
 }

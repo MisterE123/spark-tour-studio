@@ -6,6 +6,7 @@ import {PerformanceSettingsSchema,ScenePerformanceSettingsSchema,scenePerformanc
 import {radixPerformanceSettings} from '../shared/radix-performance.mjs';
 
 type Control<Key>=[Key,string,number,number,number,string];
+const lodSelectionLabels={view:'Camera view',distance:'Distance'} as const;
 const commonControls:Control<keyof PerformanceSettings>[]=[
  ['pixelRatio','Resolution cap',.5,2,.1,'Maximum desktop pixels per CSS pixel. Lower values reduce rendering work.'],
  ['maxSh','Color detail (SH degree)',0,3,1,'Highest view-dependent color band to draw. The source file must contain it.'],
@@ -51,13 +52,29 @@ export function RadixPerformanceControls({value,onChange,lockedRadixKeys=[]}:{va
  return <div className="performance-controls" data-renderer="radix">
   <InspectorSection title="Automatic adjustment" icon="tune" defaultOpen>
    <label className="check"><input type="checkbox" checked={value.adaptiveDetail??false} onChange={event=>{if(event.target.checked)publish({...value,adaptiveDetail:true,adaptiveTargetFps:value.adaptiveTargetFps??60});else{const {adaptiveDetail,adaptiveTargetFps,...manual}=value;publish(manual);}}}/>Automatically adjust detail for smoother movement</label>
-   <p className="muted">Temporarily lowers the selected splat budget when visible frames stay slow, then restores it cautiously. Your saved preset stays unchanged.</p>
+   <p className="muted">In a browser window, the viewer tries a lower splat budget when frames stay slow. If the reduction makes little difference, it restores the previous detail.</p>
    <label className="field"><span>Target frame rate</span><input aria-label="Target frame rate" type="number" min="30" max="60" step="5" disabled={!value.adaptiveDetail} value={value.adaptiveTargetFps??60} onChange={event=>{if(!event.target.value)return;publish({...value,adaptiveTargetFps:Number(event.target.value)});}}/><small className="muted">Desktop goal. VR follows the active headset refresh rate.</small></label>
   </InspectorSection>
   <InspectorSection title="Resolution & color" icon="tune" defaultOpen>{common(['pixelRatio','maxSh'])}</InspectorSection>
   <InspectorSection title="Streamed detail" icon="tune" defaultOpen>
    <p className="muted">These controls apply to level-of-detail assets. A scene and splat background each receive this budget; the readout shows their totals. A single SOG file retains its full splat set.</p>
    {numeric(['selectedSplatBudget','residentSplatBudget'])}
+   <label className="field">
+    <span>Detail priority</span>
+    <select aria-label="Detail priority" disabled={lockedRadixKeys.includes('lodSelection')} value={specific.lodSelection??''} onChange={event=>{
+     const choice=event.target.value as RadixPerformanceSettings['lodSelection']|'';
+     if(choice){change({lodSelection:choice});return;}
+     if(!value.radix)return;
+     const radix={...value.radix};
+     delete radix.lodSelection;
+     publish({...value,radix});
+    }}>
+     <option value="">Automatic</option>
+     <option value="view">{lodSelectionLabels.view}</option>
+     <option value="distance">{lodSelectionLabels.distance}</option>
+    </select>
+    <small className="muted">{lockedRadixKeys.includes('lodSelection')?'Authored for this scene or viewpoint. ':''}Automatic favors the camera view with automatic detail and uses distance with a fixed budget. VR uses distance.</small>
+   </label>
    <label className="field"><span>Detail budget behavior</span><select aria-label="Detail budget behavior" disabled={lockedRadixKeys.includes('lodBudgetMode')} value={specific.lodBudgetMode} onChange={event=>change({lodBudgetMode:event.target.value as RadixPerformanceSettings['lodBudgetMode']})}><option value="limit">Distance first · budget is a cap</option><option value="target">Fill budget · favor more detail</option></select><small className="muted">{lockedRadixKeys.includes('lodBudgetMode')?'Authored for this scene or viewpoint. ':''}Fill budget increases detail toward your selected limit. Source quality and available levels still apply.</small></label>
    {numeric(['lodBaseDistance','lodMultiplier','lodRangeMin','lodRangeMax'])}
   </InspectorSection>
@@ -110,10 +127,23 @@ function RadixDetailPolicyControls({defaults,value,onChange,scope}:{defaults:Per
   return <div key={key} className="scene-performance-field"><label className="check"><input type="checkbox" aria-label={`Override ${label} for this ${scope}`} checked={enabled} onChange={event=>toggle(sceneKey,event.target.checked)}/>{label}</label><label className="field"><span className="muted">{enabled?`${labelScope} override`:inherited}</span><input aria-label={`${labelScope} ${label}`} type="number" disabled={!enabled} title={help} min={min} max={max} step={step} value={specific[key] as number} onChange={event=>{if(!event.target.value)return;const value=Number(event.target.value);if(Number.isFinite(value)&&value>=min&&value<=max)change(sceneKey,value);}}/><small className="muted">{help}</small></label></div>;
  });
  const budgetOverride=overrides.lodBudgetMode!==undefined;
+ const inheritedSelection=radixPerformanceSettings(defaults).lodSelection;
  return <InspectorSection title={`${labelScope} detail & distances`} icon="tune">
   <p className="muted">{scope==='scene'?'Uses the tour’s performance defaults unless you override a control here. Set longer detail distances for aerial scenes and shorter distances for rooms.':'Uses the scene’s effective defaults unless you override a control here. These adjustments apply while this viewpoint is selected.'} Device memory budgets and resolution remain in Performance settings.</p>
   <button disabled={!Object.keys(overrides).length} onClick={()=>onChange(undefined)}>{scope==='scene'?'Use tour defaults for this scene':'Use scene defaults for this viewpoint'}</button>
   {numeric(['lodBaseDistance','lodMultiplier','lodRangeMin','lodRangeMax'])}
+  <label className="field">
+   <span>Detail priority</span>
+   <select aria-label={`${labelScope} detail priority`} value={overrides.lodSelection??''} onChange={event=>{
+    const choice=event.target.value as SceneRadixSettings['lodSelection']|'';
+    if(choice)change('lodSelection',choice);
+    else toggle('lodSelection',false);
+   }}>
+    <option value="">{inherited} · {inheritedSelection?lodSelectionLabels[inheritedSelection]:'Automatic'}</option>
+    <option value="view">{lodSelectionLabels.view}</option>
+    <option value="distance">{lodSelectionLabels.distance}</option>
+   </select>
+  </label>
   <label className="check"><input type="checkbox" aria-label={`Override detail budget behavior for this ${scope}`} checked={budgetOverride} onChange={event=>toggle('lodBudgetMode',event.target.checked)}/>Detail budget behavior</label>
   <label className="field"><span className="muted">{budgetOverride?`${labelScope} override`:inherited}</span><select aria-label={`${labelScope} detail budget behavior`} disabled={!budgetOverride} value={specific.lodBudgetMode} onChange={event=>change('lodBudgetMode',event.target.value)}><option value="limit">Distance first · budget is a cap</option><option value="target">Fill budget · favor more detail</option></select></label>
   <details><summary>Streaming & sorting distances</summary>{numeric(['lodBehindPenalty','lodUnderfill','lodUpdateDistance','lodUpdateAngle','autoSortDistance','autoSortAngle'])}</details>

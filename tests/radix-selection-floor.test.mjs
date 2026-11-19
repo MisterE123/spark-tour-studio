@@ -114,3 +114,40 @@ test('nearby refinement adds only a bounded amount of work on an overloaded brow
  assert.equal(select(1_000_000),1_060_000,'the 60k step fits the 100k allowance; the 1M step does not');
  assert.equal(select(400_000),1_000_000,'when the request shrinks, its 40k allowance cannot fund the 60k step');
 });
+
+test('a fixed budget follows the camera view, preserving coarse coverage and authored eligibility',()=>{
+ const metadata=tree([[270,150,100],[270,150,100],[270,null,100]]);
+ metadata.bounds.set([-1,-1,-6,1,1,-4, -1,-1,4,1,1,6, 20,-1,-1,22,1,1]);
+ const select=(z,patch={})=>{
+  const settings={...defaultLodSettings(false),viewPriority:true,baseDistance:10,splatBudget:500,...patch};
+  const levels=new Int8Array(3),distances=new Float32Array(3);
+  const count=selectLevels(metadata,{x:0,y:0,z:0},{x:0,y:0,z},settings,levels,distances);
+  return {levels:[...levels],count,distances:[...distances]};
+ };
+ for(const mode of ['limit','target']){
+  const front=select(-1,{budgetMode:mode}),back=select(1,{budgetMode:mode});
+  assert.equal(front.levels[0],0);assert.equal(back.levels[1],0);
+  assert.ok(front.levels[1]>0 && back.levels[0]>0);
+  assert.ok(front.distances[0]<front.distances[1] && back.distances[1]<back.distances[0]);
+  assert.ok(front.count<=500 && back.count<=500);
+  assert.ok(front.levels.every(level=>level>=0) && back.levels.every(level=>level>=0));
+ }
+ const uncapped=select(-1,{splatBudget:5000}),distance=select(-1,{splatBudget:5000,viewPriority:false});
+ assert.deepEqual(uncapped.levels,distance.levels,'when all authored upgrades fit there is no reason to drop detail');
+ assert.deepEqual(select(-1,{baseDistance:0.1}).levels,[2,2,2],'facing a distant region cannot bypass the authored distance limit');
+ assert.deepEqual(select(-1,{rangeMin:2,rangeMax:2}).levels,[2,2,2]);
+ assert.deepEqual(select(-1,{behindPenalty:1}).levels,select(1,{behindPenalty:1}).levels,'directional weighting can be disabled');
+});
+
+test('a region that spans the center of the screen gets priority even with an off-axis centroid',()=>{
+ const metadata=tree([[200,100],[200,100]]);
+ // Same centroid at (2,0,-4). Only the first box spans the viewing ray.
+ metadata.bounds.set([0,-0.1,-4,4,0.1,-4, 1.9,-0.1,-4,2.1,0.1,-4]);
+ const distances=new Float32Array(2),levels=new Int8Array(2);
+ const settings={...defaultLodSettings(false),viewPriority:true,splatBudget:300};
+ const select=z=>selectLevels(metadata,{x:0,y:0,z:0},{x:0,y:0,z},settings,levels,distances);
+ assert.equal(select(-1),300);assert.deepEqual([...levels],[0,1]);
+ const centerRatio=()=> (distances[0]/4)/(distances[1]/Math.hypot(1.9,4));
+ assert.ok(centerRatio()<0.75,'covering the focus area adds priority beyond ordinary distance and centroid');
+ select(1);assert.ok(Math.abs(centerRatio()-1)<1e-6,'a box behind the camera receives no focus bonus');
+});

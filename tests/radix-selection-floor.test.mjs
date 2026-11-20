@@ -191,6 +191,27 @@ test('a region that spans the center of the screen gets priority even with an of
  select(1);assert.ok(Math.abs(centerRatio()-1)<1e-6,'a box behind the camera receives no focus bonus');
 });
 
+test('adjoining pieces of a surface share focus when their bounds cross the view at different depths', () => {
+ const metadata = tree(Array.from({length: 4}, () => [160, 100]));
+ const forward = new THREE.Vector3(.42, .89, -.18).normalize();
+ const distant = forward.clone().multiplyScalar(2.6);
+ // A compact piece, a thin slab and the near tip of a long region project
+ // onto the same marker. Only three of the four upgrades fit.
+ metadata.bounds.set([
+  .29, .66, -.70, .97, 1.02, 1.10,
+  -2.84, .75, -.37, .38, 1.01, 1.17,
+  -4.1, -1.35, -50.9, 1.13, 1.89, -.28,
+  ...distant.toArray().map(n => n - .1), ...distant.toArray().map(n => n + .1),
+ ]);
+ const levels = new Int8Array(4), distances = new Float32Array(4);
+ const settings = {...defaultLodSettings(false), viewPriority: true, splatBudget: 580};
+ for (const degrees of [-2, 0, 2]) {
+  const heading = forward.clone().applyAxisAngle(new THREE.Vector3(0,1,0), THREE.MathUtils.degToRad(degrees));
+  assert.equal(selectLevels(metadata, new THREE.Vector3(), heading, settings, levels, distances), 580);
+  assert.deepEqual([...levels], [0,0,0,1], `heading offset ${degrees}°`);
+ }
+});
+
 test('an eye-containing foreground region can take the next upgrade from a farther region', () => {
  const metadata = tree([[240, 100], [240, 100]]);
  const eye = new THREE.Vector3(1.5, 2.5, -1.5);
@@ -250,4 +271,71 @@ test('crossing the edge of a foreground box with the center ray keeps nearby det
   assert.equal(selectLevels(metadata, new THREE.Vector3(), forward, settings, levels, new Float32Array(2)), 260);
   assert.deepEqual([...levels], [0, 1]);
  }
+});
+
+test('a thin region extending behind the head cannot take the foreground upgrade by touching the eye', () => {
+ const metadata = tree([[160, 100], [160, 100]]);
+ const settings = {...defaultLodSettings(false), viewPriority: true, splatBudget: 260};
+ const levels = new Int8Array(2);
+ for (const halfWidth of [0, .005, .01]) {
+  metadata.bounds.set([-halfWidth,-1,-.01, halfWidth,1,4, -.3,-.3,-1.75, .3,.3,-1.45]);
+  assert.equal(selectLevels(metadata, new THREE.Vector3(), new THREE.Vector3(0,0,-1),
+   settings, levels, new Float32Array(2)), 260);
+  assert.deepEqual([...levels], [1,0]);
+ }
+});
+
+test('a budgeted view can finish an already refined surface after an unaffordable upgrade', () => {
+ for (const sparse of [false, true]) {
+  const rows = [[106, 103, 100], [330, 300, 100], [160, 148, 100]];
+  const metadata = tree(sparse ? rows.map(([fine, middle, coarse]) => [fine, null, middle, coarse]) : rows);
+  // Leaves are parsed in reverse child order. The near surface gets its first
+  // upgrade before the expensive background step blocks the histogram. A
+  // later region also has an affordable upgrade but still sits at coarse.
+  metadata.bounds.set([
+   -.1, -.1, -2.1, .1, .1, -2,
+   -.1, -.1, -3.1, .1, .1, -3,
+   -.1, -.1, -7.3, .1, .1, -7.2,
+  ]);
+  const middle = sparse ? 2 : 1;
+  const coarse = middle + 1;
+  const select = (patch = {}, fov = 1) => {
+   const settings = {...defaultLodSettings(false), viewPriority: true, splatBudget: 366, ...patch};
+   const levels = new Int8Array(metadata.leaves);
+   const count = selectLevels(metadata, {x: 0, y: 0, z: 0}, {x: 0, y: 0, z: -1},
+    settings, levels, new Float32Array(metadata.leaves), fov);
+   return {count, levels: [...levels]};
+  };
+  const partial = {count: 348, levels: [middle, coarse, coarse]};
+  const finished = {count: 360, levels: [0, coarse, coarse]};
+  assert.deepEqual(select(), finished);
+  assert.deepEqual(select({budgetMode: 'target'}), finished);
+  assert.deepEqual(select({budgetMode: 'target'}, 10), partial);
+  assert.deepEqual(select({splatBudget: 359}), partial);
+  assert.deepEqual(select({viewPriority: false}), partial);
+  assert.deepEqual(select({behindPenalty: 1}), partial);
+  assert.deepEqual(select({baseDistance: 1.6}), partial);
+  assert.deepEqual(select({rangeMin: middle}), partial);
+ }
+});
+
+test('competing surface finishes weigh camera distance against the splats they add', () => {
+ const metadata = tree([[380, 350, 100], [151, 145, 100], [165, 145, 100]]);
+ metadata.bounds.set([
+  -.1, -.1, -2.1, .1, .1, -2,
+  -.1, -.1, -3.3, .1, .1, -3.2,
+  -.1, -.1, -4.3, .1, .1, -4.2,
+ ]);
+ const levels = new Int8Array(metadata.leaves);
+ const settings = {...defaultLodSettings(false), viewPriority: true, splatBudget: 410};
+ const select = () => selectLevels(metadata, {x: 0, y: 0, z: 0}, {x: 0, y: 0, z: -1},
+  settings, levels, new Float32Array(metadata.leaves));
+ // Both surfaces reach the middle level. Their 20- and 6-splat finishes
+ // each fit in the remaining 20 slots. The cheaper surface wins until
+ // moving it farther outweighs the cost difference.
+ assert.equal(select(), 396);
+ assert.deepEqual([...levels], [1, 0, 2]);
+ metadata.bounds.set([-.1, -.1, -3.9, .1, .1, -3.8], 6);
+ assert.equal(select(), 410);
+ assert.deepEqual([...levels], [0, 1, 2]);
 });

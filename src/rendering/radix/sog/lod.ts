@@ -302,20 +302,45 @@ function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, 
   if (penalty === 0 || centerDistance === 0) return distance;
   const depth = cx * forward.x + cy * forward.y + cz * forward.z;
   const angular = 1 + penalty * (1 / viewWeight(depth / centerDistance) - 1);
-  // Sample the view ray at a positive depth even when the eye is inside the
-  // box and its center is behind us. A box that extends into the view can
-  // cover the foreground; one that merely touches the eye has no such claim.
-  const probe = Math.max(distance, depth);
   const hx = (bounds[b + 3] - bounds[b]) / 2;
   const hy = (bounds[b + 4] - bounds[b + 1]) / 2;
   const hz = (bounds[b + 5] - bounds[b + 2]) / 2;
-  const mx = Math.max(0, Math.abs(cx - probe * forward.x) - hx);
-  const my = Math.max(0, Math.abs(cy - probe * forward.y) - hy);
-  const mz = Math.max(0, Math.abs(cz - probe * forward.z) - hz);
-  const width = probe * FOCUS_SLOPE;
-  const focus = Math.exp(-0.5 * (mx * mx + my * my + mz * mz) / (width * width));
+  const peripheral = distance * angular;
   const onAxis = 1 / (1 + Math.min(1, penalty));
-  return distance * ((1 - focus) * angular + focus * onAxis);
+  function rankAt(probe: number, focusDistance: number): number {
+    if (probe <= 0) return peripheral;
+    const mx = Math.max(0, Math.abs(cx - probe * forward.x) - hx);
+    const my = Math.max(0, Math.abs(cy - probe * forward.y) - hy);
+    const mz = Math.max(0, Math.abs(cz - probe * forward.z) - hz);
+    const width = probe * FOCUS_SLOPE;
+    const focus = Math.exp(-0.5 * (mx * mx + my * my + mz * mz) / (width * width));
+    return (1 - focus) * peripheral + focus * focusDistance * onAxis;
+  }
+  // The center-depth sample keeps broad regions stable during small turns.
+  // A long or thin region can cross the viewing ray well before or after that
+  // depth. Also sample its three facing planes: the last plane crossed is the
+  // actual entry for a hit, and a near miss retains the same soft edge.
+  let best = rankAt(Math.max(distance, depth), distance);
+  // A region can reach the foreground even when it has a long side. Its
+  // thickness and the depth of any rearward center keep a thin box that
+  // barely protrudes past the eye from receiving a near-zero focus distance.
+  const near = Math.max(nearest, 0.35 * Math.max(-depth, Math.min(centerDistance, hx, hy, hz)));
+  const far = depth + Math.abs(forward.x) * hx + Math.abs(forward.y) * hy + Math.abs(forward.z) * hz;
+  function consider(probe: number): void {
+    if (probe * onAxis < best) best = Math.min(best, rankAt(probe, probe));
+  }
+  consider(near);
+  if (far <= near) return best;
+  consider(far);
+  function face(center: number, half: number, direction: number): void {
+    if (direction === 0) return;
+    const crossing = (center - Math.sign(direction) * half) / direction;
+    if (crossing > near && crossing < far) consider(crossing);
+  }
+  face(cx, hx, forward.x);
+  face(cy, hy, forward.y);
+  face(cz, hz, forward.z);
+  return best;
 }
 
 // The level of every leaf into `out` for a camera at `eye` looking along
@@ -329,9 +354,8 @@ function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, 
 // ln s > ln(d / base) - L ln m (with L counted from rangeMin). All those
 // switch points lie on one ln s axis, so a histogram of the splats each
 // one adds, summed from the coarsest end, finds the largest s within the
-// budget. Stopping at the first sub-bin that does not fit (not skipping
-// it) keeps a leaf's level from depending on leaves farther along the
-// axis, so small camera moves do not flip levels on and off.
+// budget. The first unaffordable sub-bin ends the primary fit. Camera
+// priority can finish nearby partially refined regions using spare slots.
 export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like, s: LodSettings, out: Int8Array, d: Float32Array, fov = 1, headMargin = 0): number {
   const { leaves, bounds } = tree;
   const chains = levelChains(tree, s.rangeMin, s.rangeMax);
@@ -498,6 +522,32 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
     }
     out[leaf] = chains.level[leaf * span + b];
     total += chains.count[leaf * span + b];
+  }
+  if (s.viewPriority && penalty > 0 && requested > budget && total < budget && coarsest < budget) {
+    // One large upgrade can stop the fit with enough room for the rest of a
+    // nearby object's inscription. Only finish ranges already chosen for
+    // refinement and inside the finest distance band.
+    const spare = budget - total;
+    const finestThreshold = UNIT_BIN + rangeMin * step;
+    const finishes: {leaf: number; level: number; cost: number; score: number}[] = [];
+    for (let leaf = 0; leaf < leaves; leaf++) {
+      if (viewLogDistances[leaf] > finestThreshold) continue;
+      const first = leaf * span, level = chains.level[first], selected = out[leaf];
+      if (selected <= level || selected === chains.level[first + span - 1]) continue;
+      if (cappedByDistance && chains.level[first + finestAllowedBand[leaf]] !== level) continue;
+      const cost = chains.count[first] - tree.count[leaf * tree.levels + selected];
+      if (cost > 0 && cost <= spare) {
+        // Projected area falls with squared distance. Among affordable
+        // finishes, favor the greater on-screen benefit per added splat.
+        finishes.push({leaf, level, cost, score: d[leaf] * d[leaf] * cost});
+      }
+    }
+    finishes.sort((a, b) => a.score - b.score);
+    for (const {leaf, level, cost} of finishes) {
+      if (total + cost > budget) continue;
+      out[leaf] = level;
+      total += cost;
+    }
   }
   return total;
 }

@@ -190,3 +190,64 @@ test('a region that spans the center of the screen gets priority even with an of
  assert.ok(centerRatio()<0.75,'covering the focus area adds priority beyond ordinary distance and centroid');
  select(1);assert.ok(Math.abs(centerRatio()-1)<1e-6,'a box behind the camera receives no focus bonus');
 });
+
+test('an eye-containing foreground region can take the next upgrade from a farther region', () => {
+ const metadata = tree([[240, 100], [240, 100]]);
+ const eye = new THREE.Vector3(1.5, 2.5, -1.5);
+ const budget = 340;
+ const settings = {...defaultLodSettings(false), viewPriority: true, splatBudget: budget};
+ const levels = new Int8Array(metadata.leaves);
+ const distances = new Float32Array(metadata.leaves);
+
+ for (const axis of [0, 2]) {
+  for (const sign of [-1, 1]) {
+   const forward = new THREE.Vector3().setComponent(axis, sign);
+   const setBounds = (leaf, halfWidth, rearDepth, frontDepth) => {
+    const min = eye.toArray().map(value => value - halfWidth);
+    const max = eye.toArray().map(value => value + halfWidth);
+    min[axis] = eye.getComponent(axis) + Math.min(sign * rearDepth, sign * frontDepth);
+    max[axis] = eye.getComponent(axis) + Math.max(sign * rearDepth, sign * frontDepth);
+    metadata.bounds.set([...min, ...max], leaf * 6);
+   };
+   const select = (patch = {}) => selectLevels(metadata, eye, forward, {...settings, ...patch}, levels, distances);
+   const direction = `axis ${axis}, direction ${sign}`;
+
+   setBounds(1, 0.3, 1.45, 1.75);
+   // The camera can see the foreground along its viewing ray even though the
+   // center of that region is well behind the eye.
+   setBounds(0, 1.4, -4, 0.9);
+   assert.equal(select(), budget, direction);
+   assert.deepEqual([...levels], [0, 1], direction);
+
+   assert.equal(select({rangeMin: 1}), 200, direction);
+   assert.deepEqual([...levels], [1, 1], direction);
+   assert.equal(select({splatBudget: 500, baseDistance: 1}), budget, direction);
+   assert.deepEqual([...levels], [0, 1], direction);
+
+   // Merely touching the eye plane or extending just through it should not
+   // let a largely rearward region displace the region in front of the eye.
+   const away = forward.clone().negate();
+   for (const frontDepth of [-0.1, 0, 0.01]) {
+    setBounds(0, 1.4, -4, frontDepth);
+    assert.equal(select(), budget, `${direction}, front depth ${frontDepth}`);
+    assert.deepEqual([...levels], [1, 0], `${direction}, front depth ${frontDepth}`);
+    assert.equal(selectLevels(metadata, eye, away, settings, levels, distances), budget, `${direction}, looking back`);
+    assert.deepEqual([...levels], [0, 1], `${direction}, looking back`);
+   }
+  }
+ }
+});
+
+test('crossing the edge of a foreground box with the center ray keeps nearby detail', () => {
+ const metadata = tree([[160, 100], [160, 100]]);
+ metadata.bounds.set([-.25, -3, -2.2, .25, .1, -2, -.25, -.2, -2.7, .25, .2, -2.5]);
+ const settings = {...defaultLodSettings(false), viewPriority: true, splatBudget: 260};
+ const levels = new Int8Array(2);
+ // The ray just touches the top edge at atan(0.1 / 2), about 2.86 degrees.
+ for (const pitch of [2.8, 2.9]) {
+  const radians = THREE.MathUtils.degToRad(pitch);
+  const forward = new THREE.Vector3(0, Math.sin(radians), -Math.cos(radians));
+  assert.equal(selectLevels(metadata, new THREE.Vector3(), forward, settings, levels, new Float32Array(2)), 260);
+  assert.deepEqual([...levels], [0, 1]);
+ }
+});

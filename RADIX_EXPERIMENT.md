@@ -897,3 +897,11 @@ The frame graph and adaptive tuner share interruption handling for lost tracking
 
 - `tests/radix-adaptive-refinement.test.mjs` runs the same two-position, tight-budget scene through both coverage policies. Replay against the preceding implementation also produced identical per-region choices and paging distances in 1,728 North and South Graveyard cases.
 - `scripts/radix-adaptive-check.mjs` exercises real Three stereo callbacks with controlled timing. At 100 FPS, continuous tracking allowed the scale to rise from 18.75% to 23.75%. With 800 ms of missing poses it held at 18.75%, and the graph excluded the gap. The same regression against commit `835cbd9` reproduced the premature increase. The script also checks that a hidden desktop tab immediately restores its last verified budget during an unfinished trial.
+
+### Foreground detail near the edge of a region
+
+In a live North Graveyard Quest session, the region covering most of a nearby marker also enclosed the headset. Its center was 104° from head-forward. Studio selected L4 (774 splats) there while showing L2 on regions behind it. Two finer levels of the foreground region were already resident.
+
+Under budget pressure the shared selector now samples the forward ray at a positive distance, even for regions containing the camera. Priority varies smoothly with the distance from that sample to the box. In a comparison with an exact ray-box hit, both methods refined the foreground in the recorded pose. The exact hit switched detail to the farther box on a 0.1° turn across an edge in a two-region test. The soft test kept the foreground refined.
+
+Replaying the recorded pose selected L1 (14,328 splats) in the marker's region and 732,441 across the scene, down from 747,585. All 25 replayed selections fit the original 748,652 budget. The automated cases in `tests/radix-selection-floor.test.mjs` cover the eye inside a region, barely protruding rear bounds and a ray grazing an edge. To check the visual result on hardware, face the upright marker with a sharper flat marker just behind it, then change head pitch slightly. Its face should retain detail when viewed directly.

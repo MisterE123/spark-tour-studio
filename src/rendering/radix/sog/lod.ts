@@ -302,22 +302,20 @@ function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, 
   if (penalty === 0 || centerDistance === 0) return distance;
   const depth = cx * forward.x + cy * forward.y + cz * forward.z;
   const angular = 1 + penalty * (1 / viewWeight(depth / centerDistance) - 1);
-  if (depth <= 0 || nearest === 0) return distance * angular;
-
-  // A headstone can fill the middle of the screen while the center of its
-  // leaf lies off-axis. At the leaf's depth, measure how far the viewing ray
-  // misses its box. Give a smooth, bounded preference to that angular area.
+  // Sample the view ray at a positive depth even when the eye is inside the
+  // box and its center is behind us. A box that extends into the view can
+  // cover the foreground; one that merely touches the eye has no such claim.
+  const probe = Math.max(distance, depth);
   const hx = (bounds[b + 3] - bounds[b]) / 2;
   const hy = (bounds[b + 4] - bounds[b + 1]) / 2;
   const hz = (bounds[b + 5] - bounds[b + 2]) / 2;
-  const mx = Math.max(0, Math.abs(cx - depth * forward.x) - hx);
-  const my = Math.max(0, Math.abs(cy - depth * forward.y) - hy);
-  const mz = Math.max(0, Math.abs(cz - depth * forward.z) - hz);
-  const width = depth * FOCUS_SLOPE;
+  const mx = Math.max(0, Math.abs(cx - probe * forward.x) - hx);
+  const my = Math.max(0, Math.abs(cy - probe * forward.y) - hy);
+  const mz = Math.max(0, Math.abs(cz - probe * forward.z) - hz);
+  const width = probe * FOCUS_SLOPE;
   const focus = Math.exp(-0.5 * (mx * mx + my * my + mz * mz) / (width * width));
-  const radius = Math.sqrt(hx * hx + hy * hy + hz * hz);
-  const locality = nearest / (nearest + 0.25 * radius);
-  return distance * angular / (1 + Math.min(1, penalty) * focus * locality);
+  const onAxis = 1 / (1 + Math.min(1, penalty));
+  return distance * ((1 - focus) * angular + focus * onAxis);
 }
 
 // The level of every leaf into `out` for a camera at `eye` looking along

@@ -257,6 +257,9 @@ const BINS = 1024;
 const LOG_MIN = -48;
 const BIN_SCALE = BINS / 96;
 const UNIT_BIN = BINS / 2;
+// Half an octave of distance separates two otherwise competing upgrades.
+const RETAIN_DISTANCE_FACTOR = Math.SQRT2;
+const RETAIN_BINS = Math.log(RETAIN_DISTANCE_FACTOR) * BIN_SCALE;
 const histogram = new Float64Array(BINS);
 let logDistances = new Float64Array(0);
 let viewLogDistances = new Float64Array(0);
@@ -348,6 +351,8 @@ function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, 
 // `fov` (fovScale), and its distance (longer behind the camera, scaled by
 // the field of view) into `d`; returns the splats selected. Under immersive
 // budget pressure, -1 omits a rear range. headMargin is in tree units.
+// During continuous motion, previous is a separate snapshot of the last
+// selection for this asset. Omit it for a fresh view or settings change.
 //
 // A leaf at distance d is at band 1 + floor(log_m(d / (s * base))),
 // clamped to the range: finer than band L + 1 exactly when
@@ -356,7 +361,7 @@ function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, 
 // one adds, summed from the coarsest end, finds the largest s within the
 // budget. The first unaffordable sub-bin ends the primary fit. Camera
 // priority can finish nearby partially refined regions using spare slots.
-export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like, s: LodSettings, out: Int8Array, d: Float32Array, fov = 1, headMargin = 0): number {
+export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like, s: LodSettings, out: Int8Array, d: Float32Array, fov = 1, headMargin = 0, previous?: Int8Array): number {
   const { leaves, bounds } = tree;
   const chains = levelChains(tree, s.rangeMin, s.rangeMax);
   const { span, rangeMin } = chains;
@@ -402,7 +407,15 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
     }
   }
   let priorities = logDistances;
-  const switchAt = (leaf: number, b: number) => priorities[leaf] - (rangeMin + b - 1) * step;
+  // When two visible regions compete for the last upgrades, small movements
+  // can repeatedly swap their fine and coarse representations. Give a held
+  // upgrade a modest distance advantage during the budget fit. The authored
+  // distance bands and rear guard are still evaluated at their true distance.
+  let heldLevels: Int8Array | undefined;
+  const switchAt = (leaf: number, b: number) => {
+    const held = heldLevels && heldLevels[leaf] >= 0 && heldLevels[leaf] <= chains.level[leaf * span + b - 1];
+    return priorities[leaf] - (rangeMin + b - 1) * step - (held ? RETAIN_BINS : 0);
+  };
 
   // The cut: switch points in bins below cutBin are taken, and in cutBin
   // those in sub-bins below cutSub
@@ -460,6 +473,7 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
     // Fit camera-weighted upgrades only within each leaf's original
     // distance limit. If everything eligible fits, keep all of it.
     if (s.viewPriority) priorities = viewLogDistances;
+    heldLevels = s.viewPriority && penalty > 0 ? previous : undefined;
     cappedByDistance = !!s.viewPriority && limit;
     const stop = limit && !s.viewPriority ? UNIT_BIN : BINS;
     let total = coarsest;
@@ -539,7 +553,8 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
       if (cost > 0 && cost <= spare) {
         // Projected area falls with squared distance. Among affordable
         // finishes, favor the greater on-screen benefit per added splat.
-        finishes.push({leaf, level, cost, score: d[leaf] * d[leaf] * cost});
+        const distance = heldLevels?.[leaf] === level ? d[leaf] / RETAIN_DISTANCE_FACTOR : d[leaf];
+        finishes.push({leaf, level, cost, score: distance * distance * cost});
       }
     }
     finishes.sort((a, b) => a.score - b.score);

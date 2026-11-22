@@ -202,16 +202,105 @@ function xrTree(boxes, counts = [18, 10]) {
   const filenames = [];
   const children = Object.entries(boxes).map(([id, [min, max]]) => ({
     bound: {min, max},
-    lods: counts.map((count, level) => ({
+    lods: (Array.isArray(counts) ? counts : counts[id]).map((count, level) => ({
       file: filenames.push(id + '-' + level + '/meta.json') - 1, offset: 0, count,
     })),
   }));
-  return parseLod({lodLevels: 2, filenames, tree: {bound: {min: [-100,-100,-100], max: [100,100,100]}, children}}, 'https://fixture.invalid/lod-meta.json');
+  return parseLod({lodLevels: children[0].lods.length, filenames, tree: {bound: {min: [-100,-100,-100], max: [100,100,100]}, children}}, 'https://fixture.invalid/lod-meta.json');
 }
 function xrLeaf(tree, id) {
   return Array.from({length: tree.leaves}, (_, leaf) => leaf)
     .find(leaf => tree.files[tree.file[leaf * tree.levels]].endsWith('/' + id + '-0/meta.json'));
 }
+
+test('a two-level budget keeps a close ranking stable and gives up stale detail on retreat', () => {
+  const tree = xrTree({left: [[-1.5,-1,-5],[-.12,1,-4]], right: [[.12,-1,-5],[1.5,1,-4]]});
+  const left = xrLeaf(tree, 'left'), right = xrLeaf(tree, 'right');
+  const settings = {...defaultLodSettings(false), splatBudget: 28, viewPriority: true};
+  function select(x, z, previous) {
+    const levels = new Int8Array(tree.leaves);
+    const total = selectLevels(tree, {x,y:0,z}, {x:0,y:0,z:-1}, settings, levels, new Float32Array(tree.leaves), 1, .35, previous);
+    assert.ok(total <= settings.splatBudget);
+    return levels;
+  }
+  const start = select(-.09, 0);
+  assert.equal(start[left], 0);
+  assert.equal(select(.09, 0)[right], 0, 'a cold ranking crosses between the two leaves');
+  assert.deepEqual(select(.09, 0, start), start);
+  assert.deepEqual([...select(.09, 100, start)], [1,1], 'authored distance can remove even a held upgrade');
+});
+
+test('small camera moves keep an affordable central finish stable while a clear turn redirects it', () => {
+  const tree = xrTree({
+    left: [[-1.5,-1,-5], [-.12,1,-4]],
+    right: [[.12,-1,-5], [1.5,1,-4]],
+    middle: [[-.4,-1,-9], [.4,1,-8]],
+    distant: [[-.4,-1,-95], [.4,1,-94]],
+    rear: [[-.4,-1,8], [.4,1,9]],
+  }, {
+    left: [100,30,20,10], right: [100,30,20,10], middle: [100,90,80,20],
+    distant: [100,30,20,10], rear: [100,30,20,10],
+  });
+  const left = xrLeaf(tree, 'left'), right = xrLeaf(tree, 'right');
+  const middle = xrLeaf(tree, 'middle'), distant = xrLeaf(tree, 'distant'), rear = xrLeaf(tree, 'rear');
+  // The middle upgrade stops the primary fit, with room left for only one
+  // central finish above the two candidates' intermediate levels.
+  const settings = {...defaultLodSettings(false), baseDistance: 12, splatBudget: 80,
+    rangeMin: 1, rangeMax: 3, updateDistance: .01, viewPriority: true, coverage: {mode:'guarded-view'}};
+  function run(x, yaw, previous) {
+    const levels = new Int8Array(tree.leaves);
+    const radians = THREE.MathUtils.degToRad(yaw);
+    const total = selectLevels(tree, {x, y: 0, z: 0}, {x: Math.sin(radians), y: 0, z: -Math.cos(radians)},
+      settings, levels, new Float32Array(tree.leaves), 1, .35, previous);
+    assert.equal(total, settings.splatBudget);
+    assert.equal(levels[rear], -1);
+    assert.equal(levels[distant], 3, 'the authored distance limit still protects distant coverage');
+    assert.equal(levels[middle], 3, 'the unaffordable upgrade leaves its coarse coverage intact');
+    assert.deepEqual([levels[left], levels[right]].sort(), [1,2], 'both central leaves stay within the authored level range');
+    return levels;
+  }
+  const winner = levels => levels[left] < levels[right] ? left : right;
+  const positions = [-.09, -.045, 0, .045, .09, .045, 0, -.045, -.09];
+  let previous = run(positions[0], 0);
+  assert.equal(winner(previous), left, 'first selection follows the legacy ranking');
+  assert.equal(winner(run(.09, 0)), right, 'without history, the small move reverses the ranking');
+  for (const x of positions.slice(1)) {
+    previous = run(x, 0, previous);
+    assert.equal(winner(previous), left, `near-equal movement should retain the previous central finish at x=${x}`);
+  }
+  const turned = run(.09, 22, previous);
+  assert.equal(winner(turned), right, 'a clear change in view redirects the finish');
+  assert.deepEqual(run(.09, 22, turned), turned, 'a fixed pose settles on one selection');
+
+  // Run the same camera path through the pager. A 45° square lens matches
+  // the standalone selector's reference lens. Suppress only file I/O.
+  const camera = new THREE.PerspectiveCamera(45, 1, .05, 100);
+  const stream = new SogLodStream({renderer: {}, tree, camera, matrixWorld: new THREE.Matrix4(), settings, degree: 0});
+  stream.load = () => {};
+  let time = 0;
+  function tick(x, yaw = 0, elapsed = 120) {
+    camera.position.x = x;
+    camera.rotation.y = THREE.MathUtils.degToRad(-yaw);
+    camera.updateMatrixWorld();
+    const selections = stream.stats.selections;
+    time += elapsed;
+    stream.update(time, .35);
+    assert.equal(stream.stats.selections, selections + 1, 'this frame exercises the selector');
+    assert.equal(stream.stats.selected, settings.splatBudget);
+    return stream.inspect().desired;
+  }
+  try {
+    const first = run(-.09, 0);
+    for (const x of positions.slice(0, 5)) {
+      assert.deepEqual(tick(x), first, 'the pager carries the preceding selection across small moves');
+    }
+    stream.invalidate();
+    assert.deepEqual(tick(.09), run(.09, 0), 'settings invalidation resets history at the same camera pose');
+    assert.deepEqual(tick(.09, -22, 5), run(.09, -22), 'a large turn immediately selects for the new view');
+  } finally {
+    stream.dispose();
+  }
+});
 
 test('the same walk and tight budget refine the approached region in desktop and headset coverage modes', () => {
   const tree = xrTree({north:[[-1,-1,-6],[1,1,-5]], south:[[-1,-1,5],[1,1,6]]}, [26_000,25_000]);

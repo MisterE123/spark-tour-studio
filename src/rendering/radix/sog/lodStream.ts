@@ -91,6 +91,7 @@ export class SogLodStream {
   private readonly files: LodFile[];
   private readonly environment?: LodFile;
   private readonly desired: Int8Array;
+  private readonly previousDesired: Int8Array;
   private readonly shown: Int8Array;
   private readonly distance: Float32Array;
   // Every leaf's coarsest level's file: loaded first, never evicted
@@ -154,6 +155,7 @@ export class SogLodStream {
       each.required = Math.max(each.required, tree.offset[at] + tree.count[at]);
     }
     this.desired = new Int8Array(tree.leaves).fill(-1);
+    this.previousDesired = new Int8Array(tree.leaves);
     this.shown = new Int8Array(tree.leaves).fill(-1);
     this.distance = new Float32Array(tree.leaves);
     for (let leaf = 0; leaf < tree.leaves; leaf += 1) {
@@ -215,13 +217,19 @@ export class SogLodStream {
     const projectionChanged = Math.abs(fov - this.lastFovScale) > 1e-4;
     const changedView = moved || this.dirty || projectionChanged || headMargin !== this.lastHeadMargin;
     if (!s.freeze && (crossedGuard || (changedView && now - this.selectedAt >= MIN_SELECT_MS))) {
+      // Only carry fine-detail preferences across continuous motion. A new
+      // viewpoint, wide turn, lens or preset should choose its own detail.
+      const continuous = s.viewPriority && !this.dirty && !projectionChanged
+        && angle < XR_REAR_GUARD_ANGLE && distance < s.baseDistance * .25;
+      if (continuous) this.previousDesired.set(this.desired);
       this.selectedAt = now;
       this.dirty = false;
       this.lastEye.copy(this.eye);
       this.lastForward.copy(this.forward);
       this.lastFovScale = fov;
       this.lastHeadMargin = headMargin;
-      this.stats.selected = selectLevels(this.tree, this.eye, this.forward, s, this.desired, this.distance, fov, headMargin);
+      this.stats.selected = selectLevels(this.tree, this.eye, this.forward, s, this.desired, this.distance, fov, headMargin,
+        continuous ? this.previousDesired : undefined);
       this.stats.selections += 1;
       this.changed = true;
     }

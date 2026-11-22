@@ -3,12 +3,13 @@ import type {Page,SceneLink} from './model';
 import {glassVariables} from '../shared/appearance.mjs';
 import {resolveRichReference,resolveContentResource} from '../shared/rich-text.mjs';
 import {imagePanel} from './spatial-ui';
+import {materialSymbols,type IconName} from './material-symbols';
 import {xrRichContent} from './xr-rich-text';
 
 export const XR_CONTENT_CARD={width:2.08,height:2.01,scale:.167} as const;
 
 type ContentMesh=THREE.Mesh<THREE.PlaneGeometry,THREE.MeshBasicMaterial>;
-type Item={mesh:ContentMesh;top:number};
+type Item={mesh:ContentMesh;height:number};
 type CardActions={close:()=>void;menu:()=>void;openScene:(link:SceneLink)=>void};
 
 const bodyX=-.035;
@@ -17,6 +18,7 @@ const imageDepth=.025;
 const cardTop=.94;
 const readerBottom=-.69;
 const portraitExtension=.26;
+const imagePlaceholderHeight=.64;
 
 function surface(width:number,height:number,color=0xffffff,opacity=1){
  const material=new THREE.MeshBasicMaterial({color,opacity,transparent:true,depthTest:false,depthWrite:false,toneMapped:false});
@@ -40,7 +42,7 @@ function canvasFor(width:number,height:number,density=450){
  return canvas;
 }
 
-function label(text:string,width:number,height:number,{font=30,button=false,center=false}={}){
+function label(text:string,width:number,height:number,{font=30,button=false,center=false,icon}:{font?:number;button?:boolean;center?:boolean;icon?:IconName}={}){
  const canvas=canvasFor(width,height),context=canvas.getContext('2d')!;
  if(button){
   const highlight=context.createLinearGradient(0,0,0,canvas.height);
@@ -53,6 +55,14 @@ function label(text:string,width:number,height:number,{font=30,button=false,cent
   context.roundRect(1,1,canvas.width-2,canvas.height-2,15);
   context.fill();
   context.stroke();
+ }
+ if(icon){
+  const size=Math.min(canvas.width,canvas.height)*.78;
+  context.translate((canvas.width-size)/2,(canvas.height+size)/2);
+  context.scale(size/960,size/960);
+  context.fillStyle='#f5f5f5';
+  context.fill(new Path2D(materialSymbols[icon]));
+  return texturedSurface(width,height,canvas);
  }
  const lines=text.split('\n');
  context.font=`600 ${font}px system-ui`;
@@ -115,6 +125,8 @@ export class XRContent {
  get bottom(){return readerBottom-(this.focusedPortrait?portraitExtension:0);}
  readonly width=1.81;
  private focusedPortrait=false;
+ private fitPhoto=false;
+ private photoAspects=new Map<string,number>();
  private pageOffset=0;
  private items:Item[]=[];
  private hud?:THREE.Group;
@@ -129,6 +141,8 @@ export class XRContent {
   this.extent=0;
   this.focus=-1;
   this.focusedPortrait=false;
+  this.fitPhoto=false;
+  this.photoAspects.clear();
   this.items=[];
   this.hud=undefined;
   this.track=undefined;
@@ -150,15 +164,18 @@ export class XRContent {
   if(this.focus>=0&&!focusedUrl){
    this.focus=-1;
    this.focusedPortrait=false;
+   this.fitPhoto=false;
    this.offset=this.pageOffset;
   }
 
   const focused=this.focus>=0;
+  const focusedAspect=this.photoAspects.get(focusedUrl);
+  const canFit=focusedAspect!==undefined&&this.width/focusedAspect>this.top-this.bottom;
   const footerY=this.bottom-.20;
   const valid=()=>this.page===page&&this.hud===hud&&hud.visible;
   const add=(mesh:ContentMesh)=>{
    mesh.userData.contentItem=true;
-   const item={mesh,top:0};
+   const item={mesh,height:mesh.geometry.parameters.height};
    this.items.push(item);
    hud.add(mesh);
    return item;
@@ -167,8 +184,29 @@ export class XRContent {
    for(const mesh of textSurfaces(value,this.width,caption?28:32))add(mesh);
   };
   const image=(url:string,caption:string,index:number)=> {
-   const mesh=imagePanel(url,this.width,this.focusedPortrait?1.37:1.06,valid,()=>this.layout(),true,focused?2048:1536);
+   const resize=(aspect:number)=>{
+    const width=focused&&this.fitPhoto?Math.min(this.width,(this.top-this.bottom)*aspect):this.width;
+    item.height=width/aspect;
+    if(mesh.userData.imageState==='ready')resizePlane(mesh,width,item.height);
+   };
+   // A width-filled portrait can be several times taller than the viewport.
+   // Allocate its layout space separately from the bounded placeholder raster.
+   const mesh=imagePanel(url,this.width,imagePlaceholderHeight,valid,()=>{
+    const aspect=mesh.userData.imageAspect as number;
+    this.photoAspects.set(url,aspect);
+    resize(aspect);
+    this.layout();
+   },true,focused?2048:1536);
+   const item=add(mesh);
+   const knownAspect=this.photoAspects.get(url);
+   if(knownAspect)resize(knownAspect);
    if(!focused){
+    const unload=mesh.userData.unloadImage;
+    mesh.userData.unloadImage=()=>{
+     if(mesh.userData.imageState!=='ready')return;
+     unload();
+     resizePlane(mesh,this.width,imagePlaceholderHeight);
+    };
     mesh.userData.imageIndex=index;
     mesh.userData.label='Enlarge image'+(caption?': '+caption:'');
     mesh.userData.action=()=>{
@@ -177,11 +215,12 @@ export class XRContent {
      this.offset=0;
      this.focus=index;
      this.focusedPortrait=mesh.userData.imageAspect<1;
+     this.fitPhoto=false;
      refresh();
     };
-   }
-   add(mesh);
+   }else delete mesh.userData.unloadImage;
    if(caption)text(caption,true);
+   return resize;
   };
 
   hud.add(backing(glassShade,this.focusedPortrait?portraitExtension:0));
@@ -193,7 +232,21 @@ export class XRContent {
   this.addSeparator(hud,this.bottom-.05);
 
   if(focusedBlock&&focusedUrl){
-   image(focusedUrl,focusedBlock.text,this.focus);
+   const resize=image(focusedUrl,focusedBlock.text,this.focus);
+   if(canFit){
+    const setMode=(fit:boolean)=>{
+     this.fitPhoto=fit;
+     this.offset=0;
+     fitButton.visible=!fit;
+     fillButton.visible=fit;
+     resize(focusedAspect);
+     this.layout();
+    };
+    const fitButton=this.control(hud,'Fit photo','Fit photo',.65,.65,footerY,()=>setMode(true),29);
+    const fillButton=this.control(hud,'Fill width','Fill width',.65,.65,footerY,()=>setMode(false),29);
+    fitButton.visible=!this.fitPhoto;
+    fillButton.visible=this.fitPhoto;
+   }
   }else{
    if(customPage)text('This custom page is available in the browser view.');
    else if(!entries.length)text('No content');
@@ -219,20 +272,24 @@ export class XRContent {
   if(focused)this.control(hud,'‹ Back to\ncontent','Back to content',.69,-.625,footerY,()=>{
    this.focus=-1;
    this.focusedPortrait=false;
+   this.fitPhoto=false;
    this.offset=this.pageOffset;
    refresh();
   },27);
   else this.control(hud,'Tour menu','Tour menu',.69,-.625,footerY,actions.menu,30);
 
   const step=(this.top-this.bottom)*.55;
-  const up=this.control(hud,'⌃','Up',.25,-.12,footerY,()=>this.scroll(-step),45);
-  const down=this.control(hud,'⌄','Down',.25,.18,footerY,()=>this.scroll(step),45);
+  const up=this.control(hud,'','Up',.25,-.12,footerY,()=>this.scroll(-step),30,'arrow_upward');
+  const down=this.control(hud,'','Down',.25,.18,footerY,()=>this.scroll(step),30,'arrow_downward');
   up.userData.contentScroll=-1;
   down.userData.contentScroll=1;
-  const hint=label('Aim + right stick\nto scroll',.65,.24,{font:25,center:true});
-  hint.position.set(.65,footerY,imageDepth);
-  hud.add(hint);
-  this.scrollControls=[up,down,hint];
+  this.scrollControls=[up,down];
+  if(!canFit){
+   const hint=label('Aim + right stick\nto scroll',.65,.24,{font:25,center:true});
+   hint.position.set(.65,footerY,imageDepth);
+   hud.add(hint);
+   this.scrollControls.push(hint);
+  }
 
   const viewport=this.top-this.bottom;
   this.track=surface(.018,viewport,0xffffff,.22);
@@ -249,8 +306,8 @@ export class XRContent {
   hud.add(separator);
  }
 
- private control(hud:THREE.Group,text:string,name:string,width:number,x:number,y:number,action:()=>void,font:number){
-  const control=label(text,width,.24,{font,center:true,button:true});
+ private control(hud:THREE.Group,text:string,name:string,width:number,x:number,y:number,action:()=>void,font:number,icon?:IconName){
+  const control=label(text,width,.24,{font,center:true,button:true,icon});
   control.position.set(x,y,.04);
   control.userData.label=name;
   control.userData.action=action;
@@ -260,21 +317,17 @@ export class XRContent {
 
  private layout(){
   if(!this.hud||!this.track||!this.thumb)return;
-  let height=0;
-  for(const item of this.items){
-   item.top=height;
-   height+=item.mesh.geometry.parameters.height+itemGap;
-  }
+  const height=this.items.reduce((total,item)=>total+item.height+itemGap,0);
   const viewport=this.top-this.bottom;
   this.extent=Math.max(0,height-itemGap-viewport);
   this.offset=THREE.MathUtils.clamp(this.offset,0,this.extent);
-  for(const item of this.items){
-   const {mesh}=item;
-   const upper=this.top-item.top+this.offset;
-   const lower=upper-mesh.geometry.parameters.height;
-   cropItem(mesh,upper,lower,this.top,this.bottom);
+  let upper=this.top+this.offset;
+  for(const {mesh,height} of this.items){
+   const lower=upper-height;
+   cropItem(mesh,upper,upper-mesh.geometry.parameters.height,this.top,this.bottom);
    if(upper>this.bottom-viewport&&lower<this.top+viewport)mesh.userData.loadImage?.();
    else if(upper<this.bottom-viewport*2||lower>this.top+viewport*2)mesh.userData.unloadImage?.();
+   upper=lower-itemGap;
   }
   const overflow=this.extent>.0001;
   const size=Math.max(.13,viewport*viewport/(viewport+this.extent));
@@ -298,6 +351,12 @@ export class XRContent {
   const point=this.hud.worldToLocal(hit.point.clone());
   return point.y>=this.bottom-1e-6&&point.y<=this.top+1e-6&&Math.abs(point.x-bodyX)<=this.width/2+1e-6;
  }
+}
+
+function resizePlane(mesh:ContentMesh,width:number,height:number){
+ if(mesh.geometry.parameters.width===width&&mesh.geometry.parameters.height===height)return;
+ mesh.geometry.dispose();
+ mesh.geometry=new THREE.PlaneGeometry(width,height);
 }
 
 // Shorten the quad and remap its UVs to the visible section. Clipping stays

@@ -2,6 +2,8 @@
 // These vectors are part of the local application bundle; they never load a font or remote resource.
 import {bubbleIcons} from './bubble-icons';
 export const materialSymbols={
+  arrow_upward:'M440-160v-487L216-423l-56-57 320-320 320 320-56 57-224-224v487h-80Z',
+  arrow_downward:'M440-800v487L216-537l-56 57 320 320 320-320-56-57-224 224v-487h-80Z',
   chevron_left:'M560-240 320-480l240-240 56 56-184 184 184 184-56 56Z',
   chevron_right:'m400-240-56-56 184-184-184-184 56-56 240 240-240 240Z',
   // Rotations of the bundled Google chevrons, for vertical scroll controls.

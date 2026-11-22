@@ -10,12 +10,14 @@ const browserChannel=process.env.SPARK_TEST_BROWSER_CHANNEL||'msedge';
 const browser=await chromium.launch({channel:browserChannel==='bundled'?undefined:browserChannel,args:['--use-angle=swiftshader','--enable-unsafe-swiftshader']});
 try{
  const page=await browser.newPage({viewport:{width:720,height:600}});
+ let portraitLoads=0;
  const images={
-  '/portrait.svg':'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="400"><path fill="#fae000" d="M0 0h200v200H0z"/><path fill="#0044ff" d="M0 200h200v200H0z"/></svg>',
+  '/portrait.svg':'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="400"><path fill="#fae000" d="M0 0h200v134H0z"/><path fill="#05cc29" d="M0 134h200v132H0z"/><path fill="#0044ff" d="M0 266h200v134H0z"/></svg>',
   '/wide.svg':'<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="2000" viewBox="0 0 400 200"><path fill="#ff2000" d="M0 0h200v200H0z"/><path fill="#00d040" d="M200 0h200v200H200z"/></svg>'
  };
  await page.route('http://wrist-reader.test/**',route=>{
   const pathname=new URL(route.request().url()).pathname;
+  if(pathname==='/portrait.svg')portraitLoads++;
   if(pathname==='/')return route.fulfill({contentType:'text/html',body:'<!doctype html><link rel="icon" href="data:,"><style>body{margin:0}</style>'});
   const image=images[pathname];
   return image?route.fulfill({contentType:'image/svg+xml',body:image}):route.fulfill({status:404});
@@ -98,7 +100,7 @@ try{
   const wide=check.images()[0],left=check.pixels(wide,-width/4,0),right=check.pixels(wide,width/4,0);
   const named=hud.children.map(o=>o.userData.label||o.userData.contentText||'');
   const inlinePortrait=check.images()[1].geometry.parameters;
-  return {width:check.physicalWidth,height:check.physicalHeight,aspect:width/height,wideWidth:width*hud.scale.x,inlinePortraitHeight:inlinePortrait.height*hud.scale.x,above:closeBounds.bottom>content.top,
+  return {width:check.physicalWidth,height:check.physicalHeight,aspect:width/height,wideWidth:width*hud.scale.x,inlinePortraitWidth:inlinePortrait.width*hud.scale.x,inlinePortraitAspect:inlinePortrait.width/inlinePortrait.height,above:closeBounds.bottom>content.top,
    corners:closeBounds.left>0&&closeBounds.right<card.right&&closeBounds.top<card.top&&close.geometry.parameters.width*hud.scale.x>=.04,
    footer:footer.every((b,i)=>b.top<content.bottom&&b.bottom>card.bottom&&(!i||b.left>footer[i-1].right)),
    visibleBounds:hud.children.filter(o=>o.visible&&o.userData.contentItem).every(o=>{
@@ -109,8 +111,20 @@ try{
    rasterMax:Math.max(...check.rasters().filter(n=>n!==1536)),wideRaster:wide.material.map.image.width,left,right};
  });
  assert.ok(initial.width>.34&&initial.width<.35&&initial.height<.34);
+ const arrows=await page.evaluate(()=>['Up','Down'].map(name=>{
+  const canvas=layout.labeled(name).material.map.image;
+  const rows=name==='Up'?[.37,.68]:[.63,.32];
+  return rows.map(y=>{
+   const data=canvas.getContext('2d').getImageData(0,Math.floor(y*canvas.height),canvas.width,1).data;
+   const ink=[];
+   for(let x=Math.floor(canvas.width*.18);x<canvas.width*.82;x++)if(data[x*4+3]>225)ink.push(x);
+   return {span:ink.length?ink.at(-1)-ink[0]+1:0,center:data[Math.floor(canvas.width/2)*4+3]>225};
+  });
+ }));
+ for(const [head,shaft] of arrows)assert.ok(head.span>shaft.span*2&&shaft.span>=4&&shaft.center,'scroll button has a directional arrowhead and a solid shaft');
  assert.equal(initial.aspect,2);
- assert.ok(initial.wideWidth>.29&&initial.inlinePortraitHeight>.17&&initial.inlinePortraitHeight<.18);
+ assert.ok(initial.wideWidth>.29&&initial.inlinePortraitWidth>.29&&initial.inlinePortraitWidth<.31);
+ assert.equal(initial.inlinePortraitAspect,.5);
  assert.ok(initial.above&&initial.corners&&initial.footer&&initial.ordered&&initial.visibleBounds);
  assert.ok(initial.rasterMax<=936&&initial.wideRaster===1536);
  assert.ok(initial.left[0]>initial.left[1]*2&&initial.right[1]>initial.right[0]*2,JSON.stringify(initial));
@@ -140,20 +154,45 @@ try{
   return before;
  });
  await page.waitForFunction(()=>layout.images().length===1&&layout.images()[0].userData.imageState==='ready');
+ const beforeScrolling=portraitLoads;
  const portrait=await page.evaluate(()=>{
-  const check=layout,photo=check.images()[0],before=check.content.offset;
-  check.tick();
+  const check=layout,{content,hud,labeled,click,bounds}=check,photo=check.images()[0];
   const {width,height}=photo.geometry.parameters;
-  const photoBounds=check.bounds(photo),backBounds=check.bounds(check.labeled('Back to content'));
-  const fullyShown=photo.scale.y===1&&photoBounds.top<=check.content.top+1e-9&&photoBounds.bottom>backBounds.top;
-  const upper=check.pixels(photo,0,height/4),lower=check.pixels(photo,0,-height/4);
-  check.click(check.labeled('Down'));
-  const captionScroll=check.content.offset>before;
-  check.click(check.labeled('Back to content'));
-  return {aspect:width/height,height:height*check.hud.scale.x,upper,lower,captionScroll,fullyShown};
+  const map=photo.material.map,regions=[.88,.50,.12],bandPixels=Array(3).fill(null);
+  const footer=['Back to content','Up','Down','Fit photo'].map(labeled).map(bounds);
+  const separateControls=footer.every((b,i)=>b.top<content.bottom&&(!i||b.left>footer[i-1].right));
+  const clipsToReader=()=>bounds(photo).bottom>=content.bottom-1e-9&&bounds(photo).top<=content.top+1e-9;
+  const spans=[];
+  for(let i=0;i<5;i++){
+   if(photo.visible){
+    const uv=photo.geometry.attributes.uv,top=uv.getY(0),bottom=uv.getY(2);
+    check.tick();spans.push([top,bottom,clipsToReader()]);
+    for(const [index,v] of regions.entries())if(v<top&&v>bottom&&!bandPixels[index]){
+     bandPixels[index]=check.pixels(photo,0,((v-bottom)/(top-bottom)-.5)*height);
+    }
+   }
+   click(labeled('Down'));
+  }
+  const captionReachable=hud.children.some(o=>o.visible&&o.userData.contentText?.includes('Portrait caption'));
+  const afterDown=content.offset;
+  click(labeled('Up'));
+  const upMoved=content.offset<afterDown;
+  click(labeled('Fit photo'));
+  const fitted=photo.geometry.parameters;
+  const fullFit=photo.geometry.attributes.uv.getY(0)===1&&photo.geometry.attributes.uv.getY(2)===0&&clipsToReader();
+  click(labeled('Fill width'));
+  const reusedMap=photo.material.map===map&&photo.geometry.parameters.width===width;
+  return {aspect:width/height,width:width*hud.scale.x,bandPixels,spans,captionReachable,upMoved,fullFit,fitAspect:fitted.width/fitted.height,reusedMap,separateControls};
  });
- assert.equal(portrait.aspect,.5);assert.ok(portrait.height>.22&&portrait.height<.24&&portrait.captionScroll&&portrait.fullyShown);
- assert.ok(portrait.upper[0]>2*portrait.upper[2]&&portrait.upper[1]>2*portrait.upper[2]&&portrait.lower[2]>2*portrait.lower[0],JSON.stringify(portrait));
+ assert.equal(portrait.aspect,.5);assert.equal(portrait.fitAspect,.5);
+ assert.ok(portrait.width>.29&&portrait.width<.31&&portrait.separateControls);
+ assert.ok(portrait.captionReachable&&portrait.upMoved&&portrait.fullFit&&portrait.reusedMap);
+ assert.equal(portraitLoads,beforeScrolling,'photo scroll and fit toggle retain the loaded texture');
+ const {spans,bandPixels:[upper,middle,lower]}=portrait;
+ assert.equal(spans[0][0],1);assert.equal(spans.at(-1)[1],0);
+ assert.ok(spans.every(([top,bottom,clips],index)=>clips&&(!index||top>=spans[index-1][1]&&bottom<=spans[index-1][1])));
+ assert.ok(upper&&middle&&lower&&upper[0]>2*upper[2]&&upper[1]>2*upper[2]&&middle[1]>2*middle[0]&&lower[2]>2*lower[0],JSON.stringify(portrait));
+ await page.evaluate(()=>layout.click(layout.labeled('Back to content')));
  await page.waitForFunction(()=>layout.images().every(o=>o.userData.imageState==='ready'));
  assert.ok(Math.abs(await page.evaluate(()=>layout.content.offset)-offset)<.001);
  const last=await page.evaluate(()=>{

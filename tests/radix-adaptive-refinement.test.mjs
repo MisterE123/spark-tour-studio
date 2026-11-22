@@ -18,6 +18,15 @@ await build({
     resolveDir: process.cwd(),
   },
   outfile: bundle, bundle: true, format: 'esm', platform: 'node', packages: 'external', logLevel: 'silent',
+  plugins: [{name:'fixture-gpu-upload',setup(builder) {
+    builder.onLoad({filter:/[/\\]sog[/\\]gpuDecode\.ts$/}, () => ({contents:`
+      export function uploadSogGpu(renderer, prepared) {
+        return {arrays:{count:prepared.count,dispose(){}},degree:0,layout:'extSplats'};
+      }
+      export function prepareSogGpu(){throw Error('Unexpected real decoding in this selector fixture');}
+      export function closePrepared(){}
+    `}));
+  }}],
 });
 const bitmapDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'ImageBitmap');
 Object.defineProperty(globalThis, 'ImageBitmap', {configurable: true, value: class ImageBitmap {}});
@@ -74,30 +83,15 @@ function select(x, settings) {
   return {total, levels};
 }
 
-test('with initially slow desktop cadence that improves as budget decreases, walking still requests, lands and displays nearby refinement after reaching minimum detail', () => {
-  assert.equal(tree.levelTotals[coarse], floor);
-  const settings = {...defaultLodSettings(false), splatBudget: authored};
-  const camera = new THREE.PerspectiveCamera(65, 16/9, .05, 20000);
-  camera.lookAt(1,0,0);
-  const stream = new SogLodStream({renderer: {}, tree, camera, matrixWorld: new THREE.Matrix4(), settings, degree: 0});
-  // Only substitute file I/O and GPU objects. The selector, request queue,
-  // fallback, range tables, collection and residency policy run normally.
-  const queued = [];
+// Complete only network/image preparation synchronously. The real pager owns
+// slots, cancellation, GPU landing order, fallback, and range selection.
+function readyFiles(stream) {
   const requested = [];
-  stream.load = file => {
-    file.state = 'loading';
-    stream.stats.loading = ++stream.loads;
-    requested.push(file);
-    queued.push(file);
-  };
-  stream.land = () => {
-    const file = queued.shift();
-    if (!file) return;
-    file.state = 'resident';
-    file.splats = file.required;
-    file.resident = {drop() {}};
-    stream.stats.loading = --stream.loads;
-    stream.changed = true;
+  stream.readMetadata = job => {
+    requested.push(job.file);
+    job.prepared = {count:job.file.required};
+    job.file.state = 'ready';
+    stream.schedulePending = true;
   };
   stream.objectOf = (file, key, leaves) => {
     if (key !== file.key) {
@@ -106,6 +100,16 @@ test('with initially slow desktop cadence that improves as budget decreases, wal
     }
     return file.object;
   };
+  return requested;
+}
+
+test('with initially slow desktop cadence that improves as budget decreases, walking still requests, lands and displays nearby refinement after reaching minimum detail', () => {
+  assert.equal(tree.levelTotals[coarse], floor);
+  const settings = {...defaultLodSettings(false), splatBudget: authored};
+  const camera = new THREE.PerspectiveCamera(65, 16/9, .05, 20000);
+  camera.lookAt(1,0,0);
+  const stream = new SogLodStream({renderer: {}, tree, camera, matrixWorld: new THREE.Matrix4(), settings, degree: 0});
+  const requested = readyFiles(stream);
   const controller = new AdaptiveDetailController();
   let time = 0, lastScale = 1;
   function tick(x) {
@@ -172,7 +176,7 @@ test('view priority follows turns in place and lens changes without responding t
     const settings = {...defaultLodSettings(false), splatBudget: authored, updateAngle: 90, viewPriority};
     const camera = new THREE.PerspectiveCamera(65, 16/9, .05, 20000);
     const stream = new SogLodStream({renderer: {}, tree, camera, matrixWorld: new THREE.Matrix4(), settings, degree: 0});
-    stream.load = () => {};
+    stream.start = () => {};
     const tick = (time, yaw) => {
       camera.rotation.y = THREE.MathUtils.degToRad(yaw);
       camera.updateMatrixWorld();
@@ -276,7 +280,7 @@ test('small camera moves keep an affordable central finish stable while a clear 
   // the standalone selector's reference lens. Suppress only file I/O.
   const camera = new THREE.PerspectiveCamera(45, 1, .05, 100);
   const stream = new SogLodStream({renderer: {}, tree, camera, matrixWorld: new THREE.Matrix4(), settings, degree: 0});
-  stream.load = () => {};
+  stream.start = () => {};
   let time = 0;
   function tick(x, yaw = 0, elapsed = 120) {
     camera.position.x = x;
@@ -360,26 +364,7 @@ test('immersive snap turns and teleports restore warm coarse ranges before new d
   const camera = new THREE.PerspectiveCamera(60,1,.05,100);
   const settings = {...defaultLodSettings(true), splatBudget:20, residentBudget:20, viewPriority:true, coverage:{mode:'guarded-view'}};
   const stream = new SogLodStream({renderer:{},tree,camera,matrixWorld:new THREE.Matrix4(),settings,degree:0});
-  const queued = [];
-  stream.load = file => {
-    file.state = 'loading';
-    queued.push(file);
-    stream.loads++;
-  };
-  stream.land = () => {
-    const file = queued.shift();
-    if (!file) return;
-    file.state = 'resident';
-    file.splats = file.required;
-    file.resident = {drop() {}};
-    stream.changed = true;
-    stream.loads--;
-  };
-  stream.objectOf = (file,key,leaves) => {
-    file.key = key;
-    file.object = {count:stream.rangesOf(leaves,file.level).meta.count};
-    return file.object;
-  };
+  const queued = readyFiles(stream);
   const tick = time => {
     camera.updateMatrixWorld();
     stream.update(time,.35);

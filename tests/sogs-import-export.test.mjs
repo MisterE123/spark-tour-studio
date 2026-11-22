@@ -23,6 +23,11 @@ async function writeScene(root){const meta={version:1,lodLevels:2,counts:[8,4],c
 async function viewer(root){await fs.mkdir(path.join(root,'assets'),{recursive:true});await fs.mkdir(path.join(root,'licenses'));await fs.writeFile(path.join(root,'assets/viewer.js'),'export {};');await fs.writeFile(path.join(root,'index.html'),'<!doctype html><title>Tour</title><script type="module" src="./assets/viewer.js"></script>');}
 function project(source){const p=blankProject();p.scenes=[newScene('north','North Graveyard',source)];p.startScene='north';return p;}
 
+async function loadRendererModule(filename){
+ const {outputFiles:[runtime]}=await build({entryPoints:[fileURLToPath(new URL(`../src/rendering/radix/sog/${filename}`,import.meta.url))],bundle:true,write:false,format:'esm',platform:'node'});
+ return import('data:text/javascript;base64,'+Buffer.from(runtime.contents).toString('base64'));
+}
+
 test('SOG codebooks must validate before replacing an existing source or exporting', async t=>{
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'sogs replacement '));
  t.after(()=>fs.rm(root,{recursive:true,force:true}));
@@ -31,8 +36,7 @@ test('SOG codebooks must validate before replacing an existing source or exporti
  const valid=zipSync(files),invalid=structuredClone(meta);
  invalid.scales.codebook.pop();
  const broken=zipSync({...files,'meta.json':Buffer.from(JSON.stringify(invalid))});
- const {outputFiles:[runtime]}=await build({entryPoints:[fileURLToPath(new URL('../src/rendering/radix/sog/sog.ts',import.meta.url))],bundle:true,write:false,format:'esm',platform:'node'});
- const {openSogInput}=await import('data:text/javascript;base64,'+Buffer.from(runtime.contents).toString('base64'));
+ const {openSogInput}=await loadRendererModule('sog.ts');
  assert.equal((await openSogInput(valid)).source.meta.count,meta.count);
  await assert.rejects(openSogInput(broken),/codebooks/);
  await fs.writeFile(path.join(root,'valid.sog'),valid);
@@ -104,6 +108,25 @@ test('streamed SOG ranges enforce chunk dependencies and one detail level per fi
  meta.tree.lods[1].offset=1;
  await fs.writeFile(file,JSON.stringify(meta));
  await assert.rejects(sogFiles(file),/range exceeds its chunk/);
+});
+
+test('desktop and renderer retain sparse LoD levels in indexed objects and legacy arrays', async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'sogs sparse levels '));
+ t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const meta=await writeScene(root),file=path.join(root,'lod-meta.json');
+ const {parseLod,availableLevel}=await loadRendererModule('lod.ts');
+ const fine=meta.tree.lods[0],coarse=meta.tree.lods[1];
+ meta.lodLevels=3;
+ meta.counts=[8,0,4];
+ for(const lods of [{0:fine,2:coarse},[fine,,coarse],[fine,null,coarse]]){
+  meta.tree.lods=lods;
+  const json=JSON.stringify(meta);
+  await fs.writeFile(file,json);
+  const parsed=parseLod(JSON.parse(json),'https://fixture.invalid/lod-meta.json');
+  assert.deepEqual([...parsed.file],[0,-1,1]);
+  assert.equal(availableLevel(parsed,0,1),2);
+  assert.equal((await sogFiles(file)).files.length,19);
+ }
 });
 
 test('format detection retains RAD while accepting exactly the supported SOG entry names',()=>{assert.equal(splatFormat('https://cdn.example/scans/lod-meta.json?v=2#x'),'sog-lod');assert.equal(splatFormat('imports/%23100%25/meta.json'),'sog');assert.equal(splatFormat('Scene%20%23100%25.sog'),'sog');assert.equal(splatFormat('old.rad'),'rad');assert.equal(splatFormat('config/tour.json'),undefined);assert.equal(splatFormat('scene.sogs'),undefined);assert.equal(splatFormat('scene.zip'),undefined);for(const source of ['scene.sog','scene/meta.json','scene/lod-meta.json','retained.rad'])assert.deepEqual(validateProject(project(source)),[]);});

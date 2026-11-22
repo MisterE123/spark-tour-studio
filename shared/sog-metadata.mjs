@@ -59,11 +59,20 @@ export function inspectSogLod(meta) {
     if (!Array.isArray(children) || children.length > 100_000) throw Error('SOG LoD contains invalid children.');
     for (const child of children) stack.push(child);
     if (node.lods == null && children.length) continue;
-    if (!node.lods || typeof node.lods !== 'object' || Array.isArray(node.lods)) throw Error('SOG LoD contains an empty leaf.');
+    if (!node.lods || typeof node.lods !== 'object') throw Error('SOG LoD contains an empty leaf.');
+    let lods = node.lods;
     let hasRange = false;
     for (const [key, range] of Object.entries(node.lods)) {
       const level = Number(key);
-      if (String(level) !== key || !integer(level) || level >= lodLevels || !integer(range?.file) || range.file >= filenames.length || !integer(range.offset) || !integer(range.count) || range.offset + range.count > 0xffffffff) {
+      if (String(level) !== key || !integer(level) || level >= lodLevels) throw Error('SOG LoD contains an invalid splat range.');
+      // JSON serializes holes in a legacy level array as null. The renderer
+      // uses sparse levels to find the next available coarser range.
+      if (range == null) {
+        if (lods === node.lods) lods = {...node.lods};
+        delete lods[key];
+        continue;
+      }
+      if (!integer(range.file) || range.file >= filenames.length || !integer(range.offset) || !integer(range.count) || range.offset + range.count > 0xffffffff) {
         throw Error('SOG LoD contains an invalid splat range.');
       }
       if (!range.count) continue;
@@ -73,7 +82,7 @@ export function inspectSogLod(meta) {
       hasRange = true;
     }
     if (!hasRange) throw Error('SOG LoD contains an empty leaf.');
-    leaves.push(node);
+    leaves.push(lods === node.lods ? node : {...node, lods});
     if (leaves.length > 1_000_000 || leaves.length * lodLevels > 8_000_000) throw Error('SOG LoD contains an unsupported number of leaf ranges.');
   }
   return { leaves, fileLevel, required };

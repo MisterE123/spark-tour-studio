@@ -267,7 +267,7 @@ function viewWeight(cosAngle: number): number {
   return 0.10 + 0.25 * Math.max(0, cosAngle) / OUTER_COS;
 }
 
-function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, forward: Vec3Like, nearest: number, penalty: number): number {
+function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, forward: Vec3Like, nearest: number, penalty: number, stereoFocus: boolean): number {
   const cx = (bounds[b] + bounds[b + 3]) / 2 - eye.x;
   const cy = (bounds[b + 1] + bounds[b + 4]) / 2 - eye.y;
   const cz = (bounds[b + 2] + bounds[b + 5]) / 2 - eye.z;
@@ -297,6 +297,25 @@ function cameraPriorityDistance(bounds: Float32Array, b: number, eye: Vec3Like, 
   // depth. Also sample its three facing planes: the last plane crossed is the
   // actual entry for a hit, and a near miss retains the same soft edge.
   let best = rankAt(Math.max(distance, depth), distance);
+  if (stereoFocus) {
+    // A loose region can contain the viewer while the visible face is close.
+    // Its incoming faces are behind the viewer, so use the forward exit in
+    // that case. Otherwise use the first genuine hit along the head ray.
+    let entry = 0, exit = Infinity;
+    function intersectAxis(center: number, half: number, direction: number) {
+      if (direction === 0) {
+        if (Math.abs(center) > half) exit = -Infinity;
+        return;
+      }
+      const a = (center - half) / direction, b = (center + half) / direction;
+      entry = Math.max(entry, Math.min(a, b));
+      exit = Math.min(exit, Math.max(a, b));
+    }
+    intersectAxis(cx, hx, forward.x);
+    intersectAxis(cy, hy, forward.y);
+    intersectAxis(cz, hz, forward.z);
+    if (exit > entry) best = Math.min(best, (entry || exit) * onAxis);
+  }
   // A region can reach the foreground even when it has a long side. Its
   // thickness and the depth of any rearward center keep a thin box that
   // barely protrudes past the eye from receiving a near-zero focus distance.
@@ -375,7 +394,7 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
     // position - (rangeMin + b - 1) * step
     logDistances[leaf] = (Math.log(Math.max(distance, 1e-6)) - logBase - LOG_MIN) * BIN_SCALE;
     if (s.viewPriority) {
-      let rankDistance = cameraPriorityDistance(bounds, b, eye, forward, nearest, penalty) * fov;
+      let rankDistance = cameraPriorityDistance(bounds, b, eye, forward, nearest, penalty, !!stereoPriority) * fov;
       if (stereoPriority && nearest * fov < 2 * s.baseDistance && !stereoPriority.outside(bounds, b, 0)) {
         // A floor or wall can fill the close viewport while its loose box center
         // points sideways or behind the head. Give that foreground extent a

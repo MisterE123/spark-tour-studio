@@ -446,6 +446,34 @@ test('immersive residual budget buys the next available finer level through a sp
   assert.equal(select(86).levels.sparse,3,'the intermediate step cannot overshoot by one splat');
 });
 
+test('stereo center priority follows the first forward face from inside and outside a loose region',()=>{
+  const tree=xrTree({face:[[-.25,.65,-1.7],[.55,1.2,-.9]],loose:[[-3,-80,-4],[3,.85,4]],
+    middle:[[-.25,.8,-2.4],[1,2.1,-1.55]],edge:[[2,.05,-2],[3.1,2,-1.1]],out:[[8,2,-1],[8.2,2.3,-.7]]},
+    {face:[220,64,28,9,4],loose:[90,40,21,10,3],middle:[100,60,24,13,5],edge:[98,70,19,9,5],out:[120,115,29,12,5]});
+  const settings={...defaultLodSettings(true),splatBudget:35,viewPriority:true,coverage:{mode:'guarded-view'}};
+  const forward=new THREE.Vector3(.26,.68,-.7).normalize(),loose=xrLeaf(tree,'loose'),face=xrLeaf(tree,'face');
+  const run=(travel,stereo=true,coverage=settings.coverage,previous)=>{
+    const eye=forward.clone().multiplyScalar(travel),eyes=stereoEyes(90,1),volume=new StereoCoverage();
+    for(const camera of eyes){camera.position.add(eye);camera.lookAt(camera.position.clone().add(forward));camera.updateMatrixWorld();}
+    volume.update(eyes,new THREE.Matrix4());
+    const levels=new Int8Array(tree.leaves),distances=new Float32Array(tree.leaves);
+    const total=selectLevels(tree,eye,forward,{...settings,coverage},levels,distances,1,.35,previous,stereo?volume:undefined);
+    return {levels,distances,total};
+  };
+  const exterior=run(-6);
+  assert.ok(Math.abs(exterior.distances[loose]-(6+4/forward.z)/2)<1e-6,'entry through the near face determines exterior distance');
+  const farther=run(-.45),close=run(0,true,settings.coverage,farther.levels),fresh=run(0),mono=run(0,false);
+  assert.ok(close.distances[loose]<farther.distances[loose]);
+  assert.ok(Math.abs(close.distances[loose]-.85/(2*forward.y))<1e-6,'exit through the front face determines distance');
+  assert.ok(mono.distances[loose]>100,'the loose rear centroid would dominate without valid stereo');
+  assert.equal(mono.levels[loose],4);
+  assert.equal(close.levels[loose],3);
+  assert.equal(fresh.levels[loose],3);
+  assert.equal(close.levels[face],mono.levels[face]);
+  for(const result of [exterior,farther,close,fresh])assert.ok(result.total<=settings.splatBudget);
+  assert.deepEqual(run(0,true,{mode:'whole-scene'}),run(0,false,{mode:'whole-scene'}),'desktop does not use the stereo correction');
+});
+
 test('a long offscreen range pays for detail only when its nearest corners also clear the motion guard', () => {
   const stereo = new StereoCoverage();
   stereo.update(stereoEyes(90, 1), new THREE.Matrix4());

@@ -1,93 +1,354 @@
 import * as THREE from 'three';
 import type {Page,SceneLink} from './model';
-import {richTextToBlocks,resolveRichReference,resolveContentResource} from '../shared/rich-text.mjs';
-import {imagePanel,panel} from './spatial-ui';
+import {resolveRichReference,resolveContentResource} from '../shared/rich-text.mjs';
+import {imagePanel} from './spatial-ui';
+import {xrRichContent} from './xr-rich-text';
+
+export const XR_CONTENT_CARD={width:2.08,height:1.88,scale:.14} as const;
 
 type ContentMesh=THREE.Mesh<THREE.PlaneGeometry,THREE.MeshBasicMaterial>;
-type Item={mesh:ContentMesh;height:number;top:number};
+type Item={mesh:ContentMesh;top:number};
+type CardActions={close:()=>void;menu:()=>void;openScene:(link:SceneLink)=>void};
 
-// These are solid bars. Rasterizing the narrow track as a text panel would
-// allocate a 768 by 61,440 canvas every time the visitor opened a page.
-function scrollBar(width:number,height:number,opacity:number){
- const material=new THREE.MeshBasicMaterial({color:0xffffff,opacity,transparent:true,depthTest:false,depthWrite:false,toneMapped:false});
- const bar=new THREE.Mesh(new THREE.PlaneGeometry(width,height),material);
- bar.renderOrder=100;
- return bar;
+const bodyX=-.035;
+const itemGap=.035;
+const imageDepth=.025;
+const footerY=-.76;
+
+function surface(width:number,height:number,color=0xffffff,opacity=1){
+ const material=new THREE.MeshBasicMaterial({color,opacity,transparent:true,depthTest:false,depthWrite:false,toneMapped:false});
+ const mesh=new THREE.Mesh(new THREE.PlaneGeometry(width,height),material);
+ mesh.renderOrder=100;
+ return mesh;
 }
 
-// XR uses the same block order as the browser. Scroll only moves existing
-// surfaces; it never reloads images or changes the document/XR session.
+function texturedSurface(width:number,height:number,canvas:HTMLCanvasElement){
+ const texture=new THREE.CanvasTexture(canvas);
+ texture.colorSpace=THREE.SRGBColorSpace;
+ const mesh=surface(width,height);
+ mesh.material.map=texture;
+ return mesh;
+}
+
+function canvasFor(width:number,height:number){
+ const canvas=document.createElement('canvas');
+ canvas.width=Math.ceil(width*450);
+ canvas.height=Math.ceil(height*450);
+ return canvas;
+}
+
+function label(text:string,width:number,height:number,{font=30,fill='',center=false}={}){
+ const canvas=canvasFor(width,height),context=canvas.getContext('2d')!;
+ if(fill){
+  context.fillStyle=fill;
+  context.beginPath();
+  context.roundRect(0,0,canvas.width,canvas.height,14);
+  context.fill();
+ }
+ const lines=text.split('\n');
+ context.font=`600 ${font}px system-ui`;
+ context.textBaseline='middle';
+ context.textAlign=center?'center':'left';
+ context.fillStyle='#f4f8fc';
+ const lineHeight=font*1.15;
+ for(const [index,line] of lines.entries()){
+  const y=canvas.height/2+(index-(lines.length-1)/2)*lineHeight;
+  context.fillText(truncateLine(context,line,canvas.width-28),center?canvas.width/2:14,y);
+ }
+ return texturedSurface(width,height,canvas);
+}
+
+function truncateLine(context:CanvasRenderingContext2D,value:string,width:number){
+ if(context.measureText(value).width<=width)return value;
+ let result='';
+ for(const character of value){
+  if(context.measureText(result+character+'…').width>width)break;
+  result+=character;
+ }
+ return result.trimEnd()+'…';
+}
+
+function backing(){
+ const {width,height}=XR_CONTENT_CARD;
+ const canvas=canvasFor(width,height),context=canvas.getContext('2d')!;
+ const gradient=context.createLinearGradient(0,0,0,canvas.height);
+ gradient.addColorStop(0,'#1d2936');
+ gradient.addColorStop(1,'#101820');
+ context.fillStyle=gradient;
+ context.strokeStyle='#4b6175';
+ context.lineWidth=3;
+ context.beginPath();
+ context.roundRect(2,2,canvas.width-4,canvas.height-4,32);
+ context.fill();
+ context.stroke();
+ const mesh=texturedSurface(width,height,canvas);
+ mesh.position.z=-.015;
+ mesh.renderOrder=90;
+ mesh.userData.blocks=true;
+ mesh.userData.contentCard=true;
+ return mesh;
+}
+
 export class XRContent {
- page:Page|null=null;offset=0;extent=0;focus=-1;
- readonly top=.91;readonly bottom=-.85;readonly width=2.3;
- private items:Item[]=[];private hud?:THREE.Group;private planes:THREE.Plane[]=[];
- private track?:ContentMesh;private thumb?:ContentMesh;
- private refresh=()=>{};
- reset(){this.page=null;this.offset=0;this.extent=0;this.focus=-1;this.items=[];this.hud=undefined;}
- render(hud:THREE.Group,page:Page,base:string,refresh:()=>void,onSceneLink?:(link:SceneLink)=>void){
-  if(this.page!==page){this.page=page;this.offset=0;this.focus=-1;}
-  this.hud=hud;this.refresh=refresh;this.items=[];this.track=undefined;this.thumb=undefined;
-  this.planes=[new THREE.Plane(),new THREE.Plane(),new THREE.Plane(),new THREE.Plane()];
-  const blocks=page.blocks.flatMap(block=>block.type==='text'&&block.richText?richTextToBlocks(block.richText):[block]);
+ page:Page|null=null;
+ offset=0;
+ extent=0;
+ focus=-1;
+ readonly top=.575;
+ readonly bottom=-.56;
+ readonly width=1.81;
+ private pageOffset=0;
+ private items:Item[]=[];
+ private hud?:THREE.Group;
+ private track?:ContentMesh;
+ private thumb?:ContentMesh;
+ private scrollControls:ContentMesh[]=[];
+
+ reset(){
+  this.page=null;
+  this.offset=0;
+  this.pageOffset=0;
+  this.extent=0;
+  this.focus=-1;
+  this.items=[];
+  this.hud=undefined;
+  this.track=undefined;
+  this.thumb=undefined;
+  this.scrollControls=[];
+ }
+
+ render(hud:THREE.Group,page:Page,base:string,refresh:()=>void,actions:CardActions){
+  if(this.page!==page){this.reset();this.page=page;}
+  this.hud=hud;
+  this.items=[];
+  this.scrollControls=[];
+  const customPage=resolveContentResource(page.html,base);
+  const entries=customPage?[]:page.blocks.flatMap(block=>block.type==='text'&&block.richText
+   ?xrRichContent(block.richText,this.width,base):[{kind:'block',block} as const]);
+  const focusedEntry=entries[this.focus];
+  const focusedBlock=focusedEntry?.kind==='block'&&focusedEntry.block.type==='image'?focusedEntry.block:undefined;
+  const focusedUrl=focusedBlock?resolveContentResource(focusedBlock.url,base):'';
+  if(this.focus>=0&&!focusedUrl){
+   this.focus=-1;
+   this.offset=this.pageOffset;
+  }
+
+  const focused=this.focus>=0;
   const valid=()=>this.page===page&&this.hud===hud&&hud.visible;
-  const add=(mesh:ContentMesh,height=mesh.geometry.parameters.height)=>{
-   mesh.material.clippingPlanes=this.planes;mesh.userData.contentItem=true;
-   const item={mesh,height,top:0};this.items.push(item);hud.add(mesh);return item;
+  const add=(mesh:ContentMesh)=>{
+   mesh.userData.contentItem=true;
+   const item={mesh,top:0};
+   this.items.push(item);
+   hud.add(mesh);
+   return item;
   };
-  const text=(value:string,caption=false)=>{for(const mesh of textSurfaces(value,this.width,caption?30:36))add(mesh);};
-  if(this.focus>=0&&(blocks[this.focus]?.type!=='image'||!resolveContentResource(blocks[this.focus].url,base)))this.focus=-1;
-  if(this.focus>=0){
-   const block=blocks[this.focus],url=resolveContentResource(block.url,base);
-   const image=imagePanel(url,2.55,2.07,valid);image.position.set(0,.03,.025);image.userData.label='Photograph';image.userData.action=()=>{this.focus=-1;this.refresh();};hud.add(image);
-   if(block.text){const caption=panel(block.text,2.55,.22,'rgba(0,0,0,0)');caption.position.set(0,-1.1,.03);hud.add(caption);}
-   return;
+  const text=(value:string,caption=false)=>{
+   for(const mesh of textSurfaces(value,this.width,caption?28:32))add(mesh);
+  };
+  const image=(url:string,caption:string,index:number)=> {
+   const mesh=imagePanel(url,this.width,focused?.92:.70,valid,()=>this.layout(),true,focused?2048:1536);
+   if(!focused){
+    mesh.userData.imageIndex=index;
+    mesh.userData.label='Enlarge image'+(caption?': '+caption:'');
+    mesh.userData.action=()=>{
+     if(mesh.userData.imageState!=='ready')return;
+     this.pageOffset=this.offset;
+     this.offset=0;
+     this.focus=index;
+     refresh();
+    };
+   }
+   add(mesh);
+   if(caption)text(caption,true);
+  };
+
+  hud.add(backing());
+  const title=label(focused?'Photograph':page.title.replace(/\s+/g,' '),1.62,.23,{font:38});
+  title.position.set(-.13,.76,imageDepth);
+  hud.add(title);
+  this.control(hud,'×','Close content',.25,.85,.76,actions.close,48);
+  this.addSeparator(hud,.62);
+  this.addSeparator(hud,-.61);
+
+  if(focusedBlock&&focusedUrl){
+   image(focusedUrl,focusedBlock.text,this.focus);
+  }else{
+   if(customPage)text('This custom page is available in the browser view.');
+   else if(!entries.length)text('No content');
+   else for(const [index,entry] of entries.entries()){
+    if(entry.kind==='surface'){add(entry.create());continue;}
+    const {block}=entry;
+    if(block.type==='image'){
+     const url=resolveContentResource(block.url,base);
+     if(url)image(url,block.text,index);
+     else{ text('Image unavailable',true); text(block.text,true); }
+    }else if(block.type==='embed')text(resolveContentResource(block.url,base)?(block.text?block.text+'\n':'')+'This external embed is available in the browser view.':block.text);
+    else if(block.type==='link')text(resolveRichReference(block.url,base)?block.text+'\n'+block.url+'\nAvailable in the browser view.':block.text);
+    else text(block.text||'');
+   }
+   for(const link of page.sceneLinks||[]){
+    const mesh=label(link.label.replace(/\s+/g,' ')+'  ›',this.width,.22,{fill:'#2c4156'});
+    mesh.userData.label=link.label;
+    mesh.userData.action=()=>actions.openScene(link);
+    add(mesh);
+   }
   }
-  if(resolveContentResource(page.html,base))text('This custom page is available in the browser view.');
-  else if(!blocks.length)text('No content');
-  else for(const [index,block] of blocks.entries()){
-   if(block.type==='image'){
-    const url=resolveContentResource(block.url,base);if(!url){if(block.text)text(block.text,true);continue;}
-    let item:Item|undefined;
-    const image=imagePanel(url,this.width,1.66,valid,loaded=>{
-     if(!item||!this.items.includes(item))return;
-     item.height=loaded.geometry.parameters.height;this.layout();
-    },true,1536);
-    image.userData.imageIndex=index;image.userData.label='Enlarge image'+(block.text?': '+block.text:'');
-    image.userData.action=()=>{this.focus=index;this.refresh();};item=add(image);
-    if(block.text)text(block.text,true);
-   }else if(block.type==='embed')text(resolveContentResource(block.url,base)?(block.text?block.text+'\n':'')+'This external embed is available in the browser view.':block.text);
-   else if(block.type==='link')text(resolveRichReference(block.url,base)?block.text+'\n'+block.url+'\nAvailable in the browser view.':block.text);
-   else text(block.text||'');
-  }
-  for(const link of page.sceneLinks||[]){const button=panel(link.label,this.width,.24,'rgba(255,255,255,.14)','image_arrow_up');button.userData.label=link.label;button.userData.action=()=>onSceneLink?.(link);add(button);}
-  this.track=scrollBar(.022,this.top-this.bottom,.12);this.track.position.set(1.2,(this.top+this.bottom)/2,.04);hud.add(this.track);
-  this.thumb=scrollBar(.026,.2,.65);this.thumb.position.set(1.2,0,.045);hud.add(this.thumb);
+
+  if(focused)this.control(hud,'‹ Back to\ncontent','Back to content',.69,-.625,footerY,()=>{
+   this.focus=-1;
+   this.offset=this.pageOffset;
+   refresh();
+  },27);
+  else this.control(hud,'Tour menu','Tour menu',.69,-.625,footerY,actions.menu,30);
+
+  const step=(this.top-this.bottom)*.55;
+  const up=this.control(hud,'⌃','Up',.25,-.12,footerY,()=>this.scroll(-step),45);
+  const down=this.control(hud,'⌄','Down',.25,.18,footerY,()=>this.scroll(step),45);
+  up.userData.contentScroll=-1;
+  down.userData.contentScroll=1;
+  const hint=label('Aim + right stick\nto scroll',.65,.24,{font:25,center:true});
+  hint.position.set(.65,footerY,imageDepth);
+  hud.add(hint);
+  this.scrollControls=[up,down,hint];
+
+  const viewport=this.top-this.bottom;
+  this.track=surface(.018,viewport,0x8ca9c0,.30);
+  this.track.position.set(.926,(this.top+this.bottom)/2,.03);
+  this.thumb=surface(.026,1,0xaecde3);
+  this.thumb.position.set(.926,0,.035);
+  hud.add(this.track,this.thumb);
   this.layout();
  }
- private layout(){
-  if(!this.hud)return;let height=0;
-  for(const item of this.items){item.top=height;height+=item.height+.065;}
-  this.extent=Math.max(0,height-.065-(this.top-this.bottom));this.offset=THREE.MathUtils.clamp(this.offset,0,this.extent);
-  const viewport=this.top-this.bottom;
-  for(const item of this.items){item.mesh.position.set(0,this.top-item.top-item.height/2+this.offset,.025);const upper=item.mesh.position.y+item.height/2,lower=item.mesh.position.y-item.height/2;item.mesh.visible=upper>this.bottom&&lower<this.top;if(upper>this.bottom-viewport&&lower<this.top+viewport)item.mesh.userData.loadImage?.();else if(upper<this.bottom-viewport*2||lower>this.top+viewport*2)item.mesh.userData.unloadImage?.();}
-  this.hud.updateWorldMatrix(true,false);
-  const matrix=this.hud.matrixWorld;
-  const definitions=[new THREE.Plane(new THREE.Vector3(0,-1,0),this.top),new THREE.Plane(new THREE.Vector3(0,1,0),-this.bottom),new THREE.Plane(new THREE.Vector3(1,0,0),this.width/2),new THREE.Plane(new THREE.Vector3(-1,0,0),this.width/2)];
-  this.planes.forEach((plane,index)=>plane.copy(definitions[index]).applyMatrix4(matrix));
-  if(this.track)this.track.visible=this.extent>.001;
-  if(this.thumb){this.thumb.visible=this.extent>.001;const viewport=this.top-this.bottom,size=Math.max(.14,viewport*viewport/(viewport+this.extent));this.thumb.scale.y=size/.2;this.thumb.position.y=this.top-size/2-(viewport-size)*(this.extent?this.offset/this.extent:0);}
+
+ private addSeparator(hud:THREE.Group,y:number){
+  const separator=surface(1.92,.005,0x4b6175);
+  separator.position.set(0,y,.01);
+  hud.add(separator);
  }
- scroll(delta:number){if(this.focus>=0||!Number.isFinite(delta))return;this.offset=THREE.MathUtils.clamp(this.offset+delta,0,this.extent);this.layout();}
- accepts(hit:THREE.Intersection){if(!hit.object.userData.contentItem||!this.hud)return true;const point=this.hud.worldToLocal(hit.point.clone());return point.y>=this.bottom&&point.y<=this.top&&Math.abs(point.x)<=this.width/2;}
+
+ private control(hud:THREE.Group,text:string,name:string,width:number,x:number,y:number,action:()=>void,font:number){
+  const control=label(text,width,.24,{font,center:true,fill:'#2c4156'});
+  control.position.set(x,y,.04);
+  control.userData.label=name;
+  control.userData.action=action;
+  hud.add(control);
+  return control;
+ }
+
+ private layout(){
+  if(!this.hud||!this.track||!this.thumb)return;
+  let height=0;
+  for(const item of this.items){
+   item.top=height;
+   height+=item.mesh.geometry.parameters.height+itemGap;
+  }
+  const viewport=this.top-this.bottom;
+  this.extent=Math.max(0,height-itemGap-viewport);
+  this.offset=THREE.MathUtils.clamp(this.offset,0,this.extent);
+  for(const item of this.items){
+   const {mesh}=item;
+   const upper=this.top-item.top+this.offset;
+   const lower=upper-mesh.geometry.parameters.height;
+   cropItem(mesh,upper,lower,this.top,this.bottom);
+   if(upper>this.bottom-viewport&&lower<this.top+viewport)mesh.userData.loadImage?.();
+   else if(upper<this.bottom-viewport*2||lower>this.top+viewport*2)mesh.userData.unloadImage?.();
+  }
+  const overflow=this.extent>.0001;
+  const size=Math.max(.13,viewport*viewport/(viewport+this.extent));
+  this.track.visible=overflow;
+  this.thumb.visible=overflow;
+  this.thumb.scale.y=size;
+  this.thumb.position.y=this.top-size/2-(viewport-size)*(overflow?this.offset/this.extent:0);
+  for(const control of this.scrollControls)control.visible=overflow;
+ }
+
+ scroll(delta:number){
+  if(!Number.isFinite(delta))return;
+  const offset=THREE.MathUtils.clamp(this.offset+delta,0,this.extent);
+  if(offset===this.offset)return;
+  this.offset=offset;
+  this.layout();
+ }
+
+ accepts(hit:THREE.Intersection){
+  if(!hit.object.userData.contentItem||!this.hud)return true;
+  const point=this.hud.worldToLocal(hit.point.clone());
+  return point.y>=this.bottom-1e-6&&point.y<=this.top+1e-6&&Math.abs(point.x-bodyX)<=this.width/2+1e-6;
+ }
+}
+
+// Shorten the quad and remap its UVs to the visible section. Clipping stays
+// with the wrist across tracked poses and renderers, and the clipped region
+// cannot intercept a pointer ray.
+function cropItem(mesh:ContentMesh,upper:number,lower:number,top:number,bottom:number){
+ const visibleTop=Math.min(upper,top),visibleBottom=Math.max(lower,bottom);
+ const height=upper-lower;
+ mesh.visible=visibleTop>visibleBottom;
+ if(!mesh.visible)return;
+ mesh.position.set(bodyX,(visibleTop+visibleBottom)/2,imageDepth);
+ mesh.scale.y=(visibleTop-visibleBottom)/height;
+ const uv=mesh.geometry.attributes.uv;
+ const vTop=(visibleTop-lower)/height,vBottom=(visibleBottom-lower)/height;
+ if(uv.getY(0)!==Math.fround(vTop)||uv.getY(2)!==Math.fround(vBottom)){
+  uv.setY(0,vTop);
+  uv.setY(1,vTop);
+  uv.setY(2,vBottom);
+  uv.setY(3,vBottom);
+  uv.needsUpdate=true;
+ }
+}
+
+function wrapLines(context:CanvasRenderingContext2D,value:string,width:number){
+ const lines:string[]=[];
+ for(const paragraph of value.split('\n')){
+  let line='';
+  for(const word of paragraph.trim().split(/\s+/)){
+   const next=line?line+' '+word:word;
+   if(context.measureText(next).width<=width){
+    line=next;
+    continue;
+   }
+   if(line)lines.push(line);
+   line='';
+   if(context.measureText(word).width<=width){
+    line=word;
+    continue;
+   }
+   for(const character of word){
+    if(line&&context.measureText(line+character).width>width){
+     lines.push(line);
+     line='';
+    }
+    line+=character;
+   }
+  }
+  lines.push(line);
+ }
+ return lines;
 }
 
 function textSurfaces(value:string,width:number,font:number){
  if(!value.trim())return [];
- const measure=document.createElement('canvas').getContext('2d')!;measure.font=`500 ${font}px system-ui`;
- const lines:string[]=[];for(const paragraph of value.split('\n')){let line='';for(const word of paragraph.split(/\s+/)){if(line&&measure.measureText(line+word).width>976){lines.push(line.trimEnd());line='';}line+=word+' ';}lines.push(line.trimEnd());}
+ const density=450,pixelWidth=Math.ceil(width*density);
+ const measure=document.createElement('canvas').getContext('2d')!;
+ const fontStyle=`500 ${font}px system-ui`;
+ measure.font=fontStyle;
+ const lines=wrapLines(measure,value,pixelWidth-28);
  const surfaces:ContentMesh[]=[];
- // Bounded textures also handle long rich-text paragraphs without oversized
- // GPU allocations. The blocks remain contiguous in one scrolling column.
- for(let start=0;start<lines.length;start+=24){const chunk=lines.slice(start,start+24),canvas=document.createElement('canvas');canvas.width=1024;canvas.height=Math.ceil(chunk.length*font*1.35+40);const context=canvas.getContext('2d')!;context.font=`500 ${font}px system-ui`;context.textBaseline='top';context.fillStyle='#f5f5f5';context.shadowColor='rgba(0,0,0,.8)';context.shadowBlur=3;chunk.forEach((line,index)=>context.fillText(line,24,20+index*font*1.35));const texture=new THREE.CanvasTexture(canvas);texture.colorSpace=THREE.SRGBColorSpace;const mesh=new THREE.Mesh(new THREE.PlaneGeometry(width,canvas.height/1024*width),new THREE.MeshBasicMaterial({map:texture,transparent:true,depthTest:false,depthWrite:false,toneMapped:false,side:THREE.FrontSide}));mesh.renderOrder=100;mesh.userData.contentText=chunk.join('\n');surfaces.push(mesh);}
+ const lineHeight=Math.ceil(font*1.28);
+ // Bound the height of each text upload even for lengthy paragraphs or URLs.
+ for(let start=0;start<lines.length;start+=16){
+  const chunk=lines.slice(start,start+16),canvas=document.createElement('canvas');
+  canvas.width=pixelWidth;
+  canvas.height=chunk.length*lineHeight+8;
+  const context=canvas.getContext('2d')!;
+  context.font=fontStyle;
+  context.fillStyle='#f4f8fc';
+  context.textBaseline='middle';
+  chunk.forEach((line,index)=>context.fillText(line,14,4+(index+.5)*lineHeight));
+  const mesh=texturedSurface(width,canvas.height/density,canvas);
+  mesh.userData.contentText=chunk.join('\n');
+  surfaces.push(mesh);
+ }
  return surfaces;
 }

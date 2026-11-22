@@ -84,6 +84,14 @@ jobs:
         run: node scripts/radix-xr-check.mjs
       - name: Check visible XR menus in both projection-layer eyes
         run: node scripts/radix-xr-layers-check.mjs
+      - name: Check authored rich text in the wrist reader
+        env:
+          SPARK_TEST_BROWSER_CHANNEL: chromium
+        run: |
+          node scripts/xr-reader-rich-text-check.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node scripts/xr-reader-card-check.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Check inherited scene performance policies and live runtime changes
         run: node scripts/scene-performance-check.mjs
       - name: Check scene overrides and visitor performance controls

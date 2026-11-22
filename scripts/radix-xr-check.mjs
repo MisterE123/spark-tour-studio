@@ -65,6 +65,8 @@ const a=newScene('a','SOG A','scan/lod-meta.json'),b=newScene('b','SOG B','scan/
 for(const scene of [a,b,bad]){scene.modes=['jumps','fly','explore'];scene.collider='floor.glb';scene.background={type:'solid',color:'#183340'};}
 b.transform={position:[2,0,-1],rotation:[0,.3,0],scale:1.4};b.vrScale=1.7;
 const project=blankProject();project.scenes=[a,b,bad];project.startScene=a.id;
+a.hotspots=[{id:'info',label:'Wrist story',position:[0,1.6,-2],kind:'page',target:'wrist-story'}];
+project.pages=[{id:'wrist-story',title:'Wrist story',html:'',blocks:[{type:'text',text:'Read this story on the wrist.\n'.repeat(28),url:''}]}];
 state.loading=runtime.load(ProjectSchema.parse(project),{assetBaseUrl:'./',sceneUrls:{}},location.href).then(()=>state.loaded=true).catch(error=>{state.errors.push(String(error));});
 state.tick=(frames=1)=>{
  const rows=[];
@@ -92,9 +94,18 @@ state.attachControls=()=>{
  return runtime.controllers.map(controller=>({visible:controller.visible,hand:controller.userData.handedness}));
 };
 state.controlEvent=(hand,type)=>{const session=runtime.renderer.xr.getSession(),source=state.controls.find(source=>source.handedness===hand),event=new Event(type);event.inputSource=source;event.frame=state.frame;session.dispatchEvent(event);};
+state.aimTarget=item=>{
+ const source=state.controls[1],origin=new THREE.Vector3().setFromMatrixPosition(source.pose),target=runtime.rig.worldToLocal(item.getWorldPosition(new THREE.Vector3()));
+ const orientation=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(origin,target,new THREE.Vector3(0,1,0)));
+ source.pose.compose(origin,orientation,new THREE.Vector3(1,1,1));state.tick(2);
+ runtime.controllerRay(runtime.controllers.find(controller=>controller.userData.handedness==='right'));
+ return runtime.hitUI();
+};
+state.clickTarget=item=>{if(!item||state.aimTarget(item)!==item)return false;state.controlEvent('right','selectstart');state.controlEvent('right','selectend');state.tick(2);return true;};
 state.selectWristMenu=(close=false)=>{
- const source=state.controls.find(source=>source.handedness==='right'),previous=source.pose.clone(),origin=new THREE.Vector3().setFromMatrixPosition(source.pose),item=close?runtime.hud.children.find(child=>child.userData.label==='Close menu'):runtime.wristMenu,target=runtime.rig.worldToLocal(item.getWorldPosition(new THREE.Vector3())),orientation=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(origin,target,new THREE.Vector3(0,1,0)));
- source.pose.compose(origin,orientation,new THREE.Vector3(1,1,1));state.tick(2);runtime.controllerRay(runtime.controllers.find(controller=>controller.userData.handedness==='right'));const targetHit=runtime.hitUI()===item;state.controlEvent('right','selectstart');state.controlEvent('right','selectend');state.tick(2);source.pose.copy(previous);state.tick(2);return {targetHit,...state.controlSnapshot()};
+ const right=state.controls[1],previous=right.pose.clone(),item=close?runtime.hud.children.find(child=>child.userData.label==='Close menu'):runtime.wristMenu;
+ const targetHit=state.clickTarget(item);
+ right.pose.copy(previous);state.tick(2);return {targetHit,...state.controlSnapshot()};
 };
 state.controlsNeutral=()=>{for(const source of state.controls)source.gamepad.axes=[0,0,0,0];state.tick(2);};
 state.controlSnapshot=()=>({position:runtime.rig.position.toArray(),rotation:runtime.rig.rotation.y,menuOpen:runtime.menuOpen,hudVisible:runtime.hud.visible,blocked:runtime.blocked,firstDisplay:!!runtime.firstDisplay,loading:!!runtime.loading,preparingMode:runtime.preparingMode,collisionMovementBlocked:runtime.collisionMovementBlocked,status:runtime.status,session:runtime.renderer.xr.getSession()===state.sessions[0],output:runtime.renderer.getOutputRenderTarget()===runtime.renderer.xr._xrRenderTarget});
@@ -113,6 +124,22 @@ state.menuPixels=()=>{
   for(let y=minY;y<maxY;y++)for(let x=minX;x<maxX;x++){const at=(y*layer.framebufferWidth+x)*4;samples++;if(Math.abs(after[at]-before[at])+Math.abs(after[at+1]-before[at+1])+Math.abs(after[at+2]-before[at+2])>45)changed++;if(after[at]>120&&after[at+1]>120&&after[at+2]>120)bright++;}
   return {region:[minX,minY,maxX,maxY],samples,changed,bright};
  });
+};
+state.openStory=()=>{
+ const bubble=runtime.bubbles.children.find(child=>child.userData.id==='info');
+ bubble.position.copy(runtime.bubbles.worldToLocal(runtime.trackedHeadPosition().addScaledVector(runtime.camera.getWorldDirection(new THREE.Vector3()),3)));
+ state.tick(3);
+ return state.clickTarget(bubble);
+};
+state.storyPixels=()=>{
+ const views=runtime.renderer.xr.getCamera().cameras,layer=state.layers[0];
+ const samples=()=>{const pixels=state.readStereoPixels();return views.map(({viewport:vp})=>{
+  const at=(Math.floor(vp.y+vp.w*.90)*layer.framebufferWidth+Math.floor(vp.x+vp.z*.89))*4;
+  return pixels[at]+pixels[at+1]+pixels[at+2];
+ });};
+ const dimmed=samples();runtime.readingShade.visible=false;state.tick(2);const undimmed=samples();
+ runtime.readingShade.visible=true;state.tick(2);
+ return {dimmed,undimmed,card:state.menuPixels()};
 };
 state.detachControls=()=>{state.controlsNeutral();const session=runtime.renderer.xr.getSession(),removed=state.controls;session.inputSources=session.inputSources.filter(source=>!removed.includes(source));const event=new Event('inputsourceschange');event.added=[];event.removed=removed;session.dispatchEvent(event);state.controls=undefined;state.tick(2);};
 state.ready=true;
@@ -160,6 +187,24 @@ try{
  report.controls.afterClose=await page.evaluate(()=>{const before=test.controlSnapshot();test.controls[0].gamepad.axes=[0,0,0,-.65];test.tick(24);const after=test.controlSnapshot();test.controlsNeutral();return{before,after};});assert.ok(Math.hypot(...report.controls.afterClose.after.position.map((n,i)=>n-report.controls.afterClose.before.position[i]))>.1,'closing menu restores locomotion');
  report.controls.wristOpen=await page.evaluate(()=>test.selectWristMenu());assert.ok(report.controls.wristOpen.targetHit&&report.controls.wristOpen.menuOpen&&report.controls.wristOpen.hudVisible,'a tracked right controller ray opens the left wrist menu');
  report.controls.wristClose=await page.evaluate(()=>test.selectWristMenu(true));assert.ok(report.controls.wristClose.targetHit&&!report.controls.wristClose.menuOpen&&!report.controls.wristClose.hudVisible,'the right pointer can close the mounted hand menu');
+ assert.ok(await page.evaluate(()=>{test.closedPixels=test.readStereoPixels();return test.openStory();}),'a right trigger hit opens the authored story bubble');
+ await page.waitForTimeout(100);await page.evaluate(()=>test.tick(3));
+ report.controls.story=await page.evaluate(()=>{
+  const r=test.runtime,card=r.hud.children.find(child=>child.userData.contentCard);
+  const pixels=test.storyPixels(),before=test.controlSnapshot(),offset=r.xrContent.offset;
+  r.swapSticks=true;test.aimTarget(card);test.controls[0].gamepad.axes=[0,0,.9,-.9];test.controls[1].gamepad.axes=[0,0,.9,.9];test.tick(24);
+  const after=test.controlSnapshot(),scrolled=r.xrContent.offset-offset;
+  test.controlsNeutral();r.swapSticks=false;
+  const mount=r.hudMount,closed=test.clickTarget(r.hud.children.find(child=>child.userData.label==='Close content'));
+  return {mount,pixels,before,after,scrolled,closed,shadeClosed:r.readingShade.visible,pageClosed:!r.currentPage};
+ });
+ assert.equal(report.controls.story.mount,'hand');
+ assert.ok(report.controls.story.pixels.card.every(eye=>eye.changed>300&&eye.bright>30),'wrist text draws into both real base-layer eye viewports');
+ assert.ok(report.controls.story.pixels.dimmed.every((sample,i)=>sample>0&&sample<report.controls.story.pixels.undimmed[i]*.9),'reading shade dims both real base-layer eye viewports');
+ assert.ok(report.controls.story.scrolled>.15,'right pointing stick still scrolls when movement thumbsticks are swapped');
+ assert.deepEqual(report.controls.story.before.position,report.controls.story.after.position);
+ assert.equal(report.controls.story.before.rotation,report.controls.story.after.rotation);
+ assert.ok(report.controls.story.closed&&!report.controls.story.shadeClosed&&report.controls.story.pageClosed,'closing wrist content removes the shade');
  await page.evaluate(()=>test.mode('explore'));await pump(()=>test.modeDone&&!test.runtime.preparingMode,'controller Walk');
  report.controls.walk=await page.evaluate(()=>{const before=test.controlSnapshot();test.controls[0].gamepad.axes=[0,0,.5,-.6];test.tick(30);const after=test.controlSnapshot();test.controlsNeutral();return{before,after,body:test.runtime.body.translation()};});assert.ok(Math.hypot(report.controls.walk.after.position[0]-report.controls.walk.before.position[0],report.controls.walk.after.position[2]-report.controls.walk.before.position[2])>.1,'left stick must move Walk against the actual floor');assert.ok(Math.abs(report.controls.walk.after.position[1]-report.controls.walk.before.position[1])<.15,'walking remains grounded');assert.ok(report.controls.walk.after.session,'input actions retain the same session');
  await page.evaluate(()=>test.detachControls());

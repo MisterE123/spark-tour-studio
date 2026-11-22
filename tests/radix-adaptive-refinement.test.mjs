@@ -206,11 +206,12 @@ function xrTree(boxes, counts = [18, 10]) {
   const filenames = [];
   const children = Object.entries(boxes).map(([id, [min, max]]) => ({
     bound: {min, max},
-    lods: (Array.isArray(counts) ? counts : counts[id]).map((count, level) => ({
+    lods: Object.fromEntries((Array.isArray(counts) ? counts : counts[id]).flatMap((count, level) => count === null ? [] : [[level, {
       file: filenames.push(id + '-' + level + '/meta.json') - 1, offset: 0, count,
-    })),
+    }]])),
   }));
-  return parseLod({lodLevels: children[0].lods.length, filenames, tree: {bound: {min: [-100,-100,-100], max: [100,100,100]}, children}}, 'https://fixture.invalid/lod-meta.json');
+  const lodLevels = (Array.isArray(counts) ? counts : Object.values(counts)[0]).length;
+  return parseLod({lodLevels, filenames, tree: {bound: {min: [-100,-100,-100], max: [100,100,100]}, children}}, 'https://fixture.invalid/lod-meta.json');
 }
 function xrLeaf(tree, id) {
   return Array.from({length: tree.leaves}, (_, leaf) => leaf)
@@ -398,6 +399,52 @@ function stereoEyes(fov, aspect) {
     return eye;
   });
 }
+
+function foregroundFixture(boxes, counts) {
+  const tree=xrTree(boxes,counts),stereo=new StereoCoverage();
+  stereo.update(stereoEyes(90,1),new THREE.Matrix4());
+  // Keep guarded coverage identical while withholding the foreground vote.
+  const coverageOnly={active:true,outside:(bounds,offset,margin)=>margin===0||stereo.outside(bounds,offset,margin)};
+  const select=(budget,eyes=stereo,settings={})=>{
+    const out=new Int8Array(tree.leaves),distances=new Float32Array(tree.leaves);
+    const count=selectLevels(tree,{x:0,y:0,z:0},{x:0,y:0,z:-1},{...defaultLodSettings(true),splatBudget:budget,viewPriority:true,coverage:{mode:'guarded-view'},...settings},out,distances,1,.35,undefined,eyes);
+    return {count,levels:Object.fromEntries(Object.keys(boxes).map(id=>[id,out[xrLeaf(tree,id)]])),distances};
+  };
+  return {select,coverageOnly};
+}
+
+test('under immersive pressure a close floor spanning the view gains detail while central coverage stays intact',()=>{
+  const boxes={floor:[[-2,-1.03,-1.62],[1.3,-.75,3.2]],center:[[-.4,-.28,-2.02],[.44,.65,-1.72]],
+    medium:[[1.1,-.2,-3.2],[1.7,.68,-2.7]],upper:[[.55,.4,-4],[1.2,1.8,-2.5]],
+    left:[[-2.2,-.3,-4],[-1.65,1.3,-3]],side:[[7,-1.2,-1],[8,-.5,-.7]],rear:[[-1,.1,3],[1,1,4]]};
+  const counts={floor:[120,65,25,10,3],center:[220,90,40,16,4],medium:[110,44,null,18,4],
+    upper:[140,68,27,10,5],left:[88,54,26,9,3],side:[260,110,32,14,7],rear:[90,66,27,11,5]};
+  const {select,coverageOnly}=foregroundFixture(boxes,counts),budget=55;
+  const old=select(budget,coverageOnly),immersive=select(budget);
+  assert.equal(old.levels.floor,4,'the center-only rank left this floor at coarse coverage');
+  assert.equal(immersive.levels.floor,2);
+  assert.equal(immersive.levels.center,old.levels.center);
+  assert.equal(immersive.levels.side,-1);
+  assert.equal(immersive.levels.rear,-1);
+  assert.ok(immersive.count<=budget);
+  assert.ok(select(budget,undefined,{rangeMin:3}).levels.floor>=3,'the authored finest level still caps refinement');
+  const desktop={coverage:{mode:'whole-scene'}};
+  assert.deepEqual(select(budget,undefined,desktop),select(budget,coverageOnly,desktop));
+});
+
+test('immersive residual budget buys the next available finer level through a sparse chain',()=>{
+  const boxes={center:[[-.08,-.1,-.82],[.08,.1,-.64]],sparse:[[-.1,-.09,-1.52],[.1,.09,-1.4]],
+    far:[[-.13,-.12,-4.12],[.13,.12,-3.9]],wide:[[7,-1.2,-1],[8,-.5,-.7]]};
+  const counts={center:[405,120,40,16,4],sparse:[88,33,null,9,3],far:[102,62,30,14,5],wide:[260,110,32,14,7]};
+  const {select,coverageOnly}=foregroundFixture(boxes,counts);
+  const control=select(87,coverageOnly),stereo=select(87);
+  assert.deepEqual(stereo.distances,control.distances,'an on-axis fixture isolates budget use from the new foreground rank');
+  assert.equal(control.count,63);
+  assert.equal(control.levels.sparse,3,'level zero is unaffordable');
+  assert.equal(stereo.levels.sparse,1,'the unused budget pays for level one across the missing level two');
+  assert.equal(stereo.count,87);
+  assert.equal(select(86).levels.sparse,3,'the intermediate step cannot overshoot by one splat');
+});
 
 test('a long offscreen range pays for detail only when its nearest corners also clear the motion guard', () => {
   const stereo = new StereoCoverage();

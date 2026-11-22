@@ -339,6 +339,7 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
   const chains = levelChains(tree, s.rangeMin, s.rangeMax);
   const { span, rangeMin } = chains;
   const canTrimCoverage = s.coverage.mode === 'guarded-view' && Number.isFinite(headMargin);
+  const stereoPriority = canTrimCoverage && stereo?.active ? stereo : undefined;
   const penalty = Math.max(0, s.behindPenalty - 1);
   const logBase = Math.log(Math.max(1e-6, s.baseDistance));
   const logMultiplier = Math.log(Math.max(1.2, s.multiplier));
@@ -374,7 +375,17 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
     // position - (rangeMin + b - 1) * step
     logDistances[leaf] = (Math.log(Math.max(distance, 1e-6)) - logBase - LOG_MIN) * BIN_SCALE;
     if (s.viewPriority) {
-      const rankDistance = cameraPriorityDistance(bounds, b, eye, forward, nearest, penalty) * fov;
+      let rankDistance = cameraPriorityDistance(bounds, b, eye, forward, nearest, penalty) * fov;
+      if (stereoPriority && nearest * fov < 2 * s.baseDistance && !stereoPriority.outside(bounds, b, 0)) {
+        // A floor or wall can fill the close viewport while its loose box center
+        // points sideways or behind the head. Give that foreground extent a
+        // competing rank without giving a large box a zero distance.
+        const cx = (bounds[b] + bounds[b + 3]) / 2 - eye.x;
+        const cy = (bounds[b + 1] + bounds[b + 4]) / 2 - eye.y;
+        const cz = (bounds[b + 2] + bounds[b + 5]) / 2 - eye.z;
+        const centerDistance = Math.sqrt(cx * cx + cy * cy + cz * cz);
+        rankDistance = Math.min(rankDistance, .7 * Math.max(nearest, .15 * centerDistance) * fov);
+      }
       d[leaf] = rankDistance; // The pager uses the same priority for comparable pending files.
       viewLogDistances[leaf] = (Math.log(Math.max(rankDistance, 1e-6)) - logBase - LOG_MIN) * BIN_SCALE;
     }
@@ -512,18 +523,26 @@ export function selectLevels(tree: SogLodTree, eye: Vec3Like, forward: Vec3Like,
     total += chains.count[leaf * span + b];
   }
   if (s.viewPriority && penalty > 0 && requested > budget && total < budget && coarsest < budget) {
-    // One large upgrade can stop the fit with enough room for the rest of a
-    // nearby object's inscription. Only finish ranges already chosen for
-    // refinement and inside the finest distance band.
+    // One large upgrade can stop the fit with space for nearby detail. In VR,
+    // use an affordable step for a visible range; whole-scene selection keeps
+    // the existing preference for finishing ranges at their finest band.
     const spare = budget - total;
     const finestThreshold = UNIT_BIN + rangeMin * step;
     const finishes: {leaf: number; level: number; cost: number; score: number}[] = [];
     for (let leaf = 0; leaf < leaves; leaf++) {
-      if (viewLogDistances[leaf] > finestThreshold) continue;
-      const first = leaf * span, level = chains.level[first], selected = out[leaf];
+      const first = leaf * span, selected = out[leaf];
+      let level = chains.level[first];
       if (selected <= level || selected === chains.level[first + span - 1]) continue;
-      if (cappedByDistance && chains.level[first + finestAllowedBand[leaf]] !== level) continue;
-      const cost = chains.count[first] - tree.count[leaf * tree.levels + selected];
+      const visible = stereoPriority && !stereoPriority.outside(bounds, leaf * 6, 0);
+      if (visible) {
+        // Find the nearest finer available band, including sparse level chains.
+        for (let b = span - 2; b > 0; b--) {
+          const next = chains.level[first + b];
+          if (next < selected) { level = next; break; }
+        }
+      } else if (viewLogDistances[leaf] > finestThreshold) continue;
+      if (cappedByDistance && chains.level[first + finestAllowedBand[leaf]] > level) continue;
+      const cost = tree.count[leaf * tree.levels + level] - tree.count[leaf * tree.levels + selected];
       if (cost > 0 && cost <= spare) {
         // Projected area falls with squared distance. Among affordable
         // finishes, favor the greater on-screen benefit per added splat.

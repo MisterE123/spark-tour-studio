@@ -46,11 +46,11 @@ try{
    text('longword'.repeat(350)),text('End of document')
   ]};
   const missing={id:'missing',title:'Missing photograph',html:'',blocks:[photo('absent.svg','Missing caption'),text('Still readable')]};
-  let closed=0,menu=0,opened=0,page=article;
+  let closed=0,menu=0,opened=0,page=article,glassShade=.36;
   const actions={close:()=>{closed++;},menu:()=>{menu++;},openScene:()=>{opened++;}};
   const render=()=>{
    for(const child of [...hud.children])releaseUI(child);
-   content.render(hud,page,location.href,render,actions);
+   content.render(hud,page,location.href,render,actions,glassShade);
    scene.updateMatrixWorld(true);
   };
   const tick=()=>renderer.render(scene,camera);
@@ -84,7 +84,7 @@ try{
   };
   window.layout={content,hud,backing,images,labeled,tick,rasters,bounds,pixels,hit,click,physicalWidth:width*scale,physicalHeight:height*scale,
    portraitLabel:'Enlarge image: '+portrait.text,actionCounts:()=>({closed,menu,opened}),
-   useMissing:()=>{page=missing;render();}};
+   useMissing:()=>{page=missing;render();},useShade:value=>{glassShade=value;render();}};
   render();
  });
  await page.waitForFunction(()=>layout.images().every(o=>o.userData.imageState==='ready'));
@@ -97,8 +97,9 @@ try{
   check.tick();
   const wide=check.images()[0],left=check.pixels(wide,-width/4,0),right=check.pixels(wide,width/4,0);
   const named=hud.children.map(o=>o.userData.label||o.userData.contentText||'');
-  return {width:check.physicalWidth,height:check.physicalHeight,aspect:width/height,above:closeBounds.bottom>content.top,
-   corners:closeBounds.left>0&&closeBounds.right<card.right&&closeBounds.top<card.top&&close.geometry.parameters.width*hud.scale.x>=.034,
+  const inlinePortrait=check.images()[1].geometry.parameters;
+  return {width:check.physicalWidth,height:check.physicalHeight,aspect:width/height,wideWidth:width*hud.scale.x,inlinePortraitHeight:inlinePortrait.height*hud.scale.x,above:closeBounds.bottom>content.top,
+   corners:closeBounds.left>0&&closeBounds.right<card.right&&closeBounds.top<card.top&&close.geometry.parameters.width*hud.scale.x>=.04,
    footer:footer.every((b,i)=>b.top<content.bottom&&b.bottom>card.bottom&&(!i||b.left>footer[i-1].right)),
    visibleBounds:hud.children.filter(o=>o.visible&&o.userData.contentItem).every(o=>{
     const b=bounds(o);
@@ -107,8 +108,9 @@ try{
    ordered:named.indexOf(check.portraitLabel)<named.indexOf('After the photograph'),
    rasterMax:Math.max(...check.rasters().filter(n=>n!==1536)),wideRaster:wide.material.map.image.width,left,right};
  });
- assert.ok(initial.width>.27&&initial.width<.30&&initial.height<.28);
+ assert.ok(initial.width>.34&&initial.width<.35&&initial.height<.34);
  assert.equal(initial.aspect,2);
+ assert.ok(initial.wideWidth>.29&&initial.inlinePortraitHeight>.17&&initial.inlinePortraitHeight<.18);
  assert.ok(initial.above&&initial.corners&&initial.footer&&initial.ordered&&initial.visibleBounds);
  assert.ok(initial.rasterMax<=936&&initial.wideRaster===1536);
  assert.ok(initial.left[0]>initial.left[1]*2&&initial.right[1]>initial.right[0]*2,JSON.stringify(initial));
@@ -142,13 +144,15 @@ try{
   const check=layout,photo=check.images()[0],before=check.content.offset;
   check.tick();
   const {width,height}=photo.geometry.parameters;
+  const photoBounds=check.bounds(photo),backBounds=check.bounds(check.labeled('Back to content'));
+  const fullyShown=photo.scale.y===1&&photoBounds.top<=check.content.top+1e-9&&photoBounds.bottom>backBounds.top;
   const upper=check.pixels(photo,0,height/4),lower=check.pixels(photo,0,-height/4);
   check.click(check.labeled('Down'));
   const captionScroll=check.content.offset>before;
   check.click(check.labeled('Back to content'));
-  return {aspect:width/height,height:height*check.hud.scale.x,upper,lower,captionScroll};
+  return {aspect:width/height,height:height*check.hud.scale.x,upper,lower,captionScroll,fullyShown};
  });
- assert.equal(portrait.aspect,.5);assert.ok(portrait.height<.131&&portrait.captionScroll);
+ assert.equal(portrait.aspect,.5);assert.ok(portrait.height>.22&&portrait.height<.24&&portrait.captionScroll&&portrait.fullyShown);
  assert.ok(portrait.upper[0]>2*portrait.upper[2]&&portrait.upper[1]>2*portrait.upper[2]&&portrait.lower[2]>2*portrait.lower[0],JSON.stringify(portrait));
  await page.waitForFunction(()=>layout.images().every(o=>o.userData.imageState==='ready'));
  assert.ok(Math.abs(await page.evaluate(()=>layout.content.offset)-offset)<.001);
@@ -169,5 +173,15 @@ try{
   return {readable:check.hud.children.some(o=>o.visible&&o.userData.contentText==='Still readable'),actions:check.actionCounts()};
  });
  assert.deepEqual(recovery,{readable:true,actions:{closed:1,menu:1,opened:0}});
- console.log('PASS compact wrist card geometry, controller hit regions, cropped photo pixels, rich image order, scroll recovery and failed media');
+ const shades=await page.evaluate(()=>{
+  const check=layout;
+  return [.16,.36,.75].map(value=>{
+   check.useShade(value);
+   const canvas=check.backing().material.map.image;
+   return Array.from(canvas.getContext('2d').getImageData(canvas.width/2,canvas.height/2,1,1).data);
+  });
+ });
+ assert.ok(shades.every(([r,g,b,a])=>r===g&&g===b&&a>0&&a<255));
+ assert.ok(shades[0][3]<shades[1][3]&&shades[1][3]<shades[2][3]);
+ console.log('PASS neutral wrist glass and adjustable shade, larger portrait and landscape pixels, controller hit regions, scroll recovery and failed media');
 }finally{await browser.close();}

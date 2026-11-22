@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import type {Page,SceneLink} from './model';
+import {glassVariables} from '../shared/appearance.mjs';
 import {resolveRichReference,resolveContentResource} from '../shared/rich-text.mjs';
 import {imagePanel} from './spatial-ui';
 import {xrRichContent} from './xr-rich-text';
 
-export const XR_CONTENT_CARD={width:2.08,height:1.88,scale:.14} as const;
+export const XR_CONTENT_CARD={width:2.08,height:2.01,scale:.167} as const;
 
 type ContentMesh=THREE.Mesh<THREE.PlaneGeometry,THREE.MeshBasicMaterial>;
 type Item={mesh:ContentMesh;top:number};
@@ -13,7 +14,9 @@ type CardActions={close:()=>void;menu:()=>void;openScene:(link:SceneLink)=>void}
 const bodyX=-.035;
 const itemGap=.035;
 const imageDepth=.025;
-const footerY=-.76;
+const cardTop=.94;
+const readerBottom=-.69;
+const portraitExtension=.26;
 
 function surface(width:number,height:number,color=0xffffff,opacity=1){
  const material=new THREE.MeshBasicMaterial({color,opacity,transparent:true,depthTest:false,depthWrite:false,toneMapped:false});
@@ -30,26 +33,34 @@ function texturedSurface(width:number,height:number,canvas:HTMLCanvasElement){
  return mesh;
 }
 
-function canvasFor(width:number,height:number){
+function canvasFor(width:number,height:number,density=450){
  const canvas=document.createElement('canvas');
- canvas.width=Math.ceil(width*450);
- canvas.height=Math.ceil(height*450);
+ canvas.width=Math.ceil(width*density);
+ canvas.height=Math.ceil(height*density);
  return canvas;
 }
 
-function label(text:string,width:number,height:number,{font=30,fill='',center=false}={}){
+function label(text:string,width:number,height:number,{font=30,button=false,center=false}={}){
  const canvas=canvasFor(width,height),context=canvas.getContext('2d')!;
- if(fill){
-  context.fillStyle=fill;
+ if(button){
+  const highlight=context.createLinearGradient(0,0,0,canvas.height);
+  highlight.addColorStop(0,'rgba(255,255,255,.14)');
+  highlight.addColorStop(1,'rgba(255,255,255,.06)');
+  context.fillStyle=highlight;
+  context.strokeStyle='rgba(255,255,255,.28)';
+  context.lineWidth=2;
   context.beginPath();
-  context.roundRect(0,0,canvas.width,canvas.height,14);
+  context.roundRect(1,1,canvas.width-2,canvas.height-2,15);
   context.fill();
+  context.stroke();
  }
  const lines=text.split('\n');
  context.font=`600 ${font}px system-ui`;
  context.textBaseline='middle';
  context.textAlign=center?'center':'left';
- context.fillStyle='#f4f8fc';
+ context.fillStyle='#f5f5f5';
+ context.shadowColor='rgba(0,0,0,.65)';
+ context.shadowBlur=4;
  const lineHeight=font*1.15;
  for(const [index,line] of lines.entries()){
   const y=canvas.height/2+(index-(lines.length-1)/2)*lineHeight;
@@ -68,21 +79,27 @@ function truncateLine(context:CanvasRenderingContext2D,value:string,width:number
  return result.trimEnd()+'…';
 }
 
-function backing(){
- const {width,height}=XR_CONTENT_CARD;
- const canvas=canvasFor(width,height),context=canvas.getContext('2d')!;
- const gradient=context.createLinearGradient(0,0,0,canvas.height);
- gradient.addColorStop(0,'#1d2936');
- gradient.addColorStop(1,'#101820');
- context.fillStyle=gradient;
- context.strokeStyle='#4b6175';
+function backing(glassShade:number|undefined,extension:number){
+ const {width}=XR_CONTENT_CARD,height=XR_CONTENT_CARD.height+extension;
+ const canvas=canvasFor(width,height,Math.min(450,936/height)),context=canvas.getContext('2d')!;
+ const gradient=context.createLinearGradient(0,0,canvas.width,canvas.height);
+ gradient.addColorStop(0,'rgba(255,255,255,.063)');
+ gradient.addColorStop(1,'rgba(255,255,255,0)');
+ context.strokeStyle='rgba(255,255,255,.31)';
  context.lineWidth=3;
  context.beginPath();
  context.roundRect(2,2,canvas.width-4,canvas.height-4,32);
+ // The VR scene remains visible through the desktop glass. A neutral backing
+ // keeps the unblurred scene from competing with the reader text.
+ context.fillStyle='rgba(0,0,0,.18)';
+ context.fill();
+ context.fillStyle=glassVariables({glassShade})['--glass-strong'];
+ context.fill();
+ context.fillStyle=gradient;
  context.fill();
  context.stroke();
  const mesh=texturedSurface(width,height,canvas);
- mesh.position.z=-.015;
+ mesh.position.set(0,cardTop-height/2,-.015);
  mesh.renderOrder=90;
  mesh.userData.blocks=true;
  mesh.userData.contentCard=true;
@@ -95,8 +112,9 @@ export class XRContent {
  extent=0;
  focus=-1;
  readonly top=.575;
- readonly bottom=-.56;
+ get bottom(){return readerBottom-(this.focusedPortrait?portraitExtension:0);}
  readonly width=1.81;
+ private focusedPortrait=false;
  private pageOffset=0;
  private items:Item[]=[];
  private hud?:THREE.Group;
@@ -110,6 +128,7 @@ export class XRContent {
   this.pageOffset=0;
   this.extent=0;
   this.focus=-1;
+  this.focusedPortrait=false;
   this.items=[];
   this.hud=undefined;
   this.track=undefined;
@@ -117,7 +136,7 @@ export class XRContent {
   this.scrollControls=[];
  }
 
- render(hud:THREE.Group,page:Page,base:string,refresh:()=>void,actions:CardActions){
+ render(hud:THREE.Group,page:Page,base:string,refresh:()=>void,actions:CardActions,glassShade?:number){
   if(this.page!==page){this.reset();this.page=page;}
   this.hud=hud;
   this.items=[];
@@ -130,10 +149,12 @@ export class XRContent {
   const focusedUrl=focusedBlock?resolveContentResource(focusedBlock.url,base):'';
   if(this.focus>=0&&!focusedUrl){
    this.focus=-1;
+   this.focusedPortrait=false;
    this.offset=this.pageOffset;
   }
 
   const focused=this.focus>=0;
+  const footerY=this.bottom-.20;
   const valid=()=>this.page===page&&this.hud===hud&&hud.visible;
   const add=(mesh:ContentMesh)=>{
    mesh.userData.contentItem=true;
@@ -146,7 +167,7 @@ export class XRContent {
    for(const mesh of textSurfaces(value,this.width,caption?28:32))add(mesh);
   };
   const image=(url:string,caption:string,index:number)=> {
-   const mesh=imagePanel(url,this.width,focused?.92:.70,valid,()=>this.layout(),true,focused?2048:1536);
+   const mesh=imagePanel(url,this.width,this.focusedPortrait?1.37:1.06,valid,()=>this.layout(),true,focused?2048:1536);
    if(!focused){
     mesh.userData.imageIndex=index;
     mesh.userData.label='Enlarge image'+(caption?': '+caption:'');
@@ -155,6 +176,7 @@ export class XRContent {
      this.pageOffset=this.offset;
      this.offset=0;
      this.focus=index;
+     this.focusedPortrait=mesh.userData.imageAspect<1;
      refresh();
     };
    }
@@ -162,13 +184,13 @@ export class XRContent {
    if(caption)text(caption,true);
   };
 
-  hud.add(backing());
+  hud.add(backing(glassShade,this.focusedPortrait?portraitExtension:0));
   const title=label(focused?'Photograph':page.title.replace(/\s+/g,' '),1.62,.23,{font:38});
   title.position.set(-.13,.76,imageDepth);
   hud.add(title);
   this.control(hud,'×','Close content',.25,.85,.76,actions.close,48);
   this.addSeparator(hud,.62);
-  this.addSeparator(hud,-.61);
+  this.addSeparator(hud,this.bottom-.05);
 
   if(focusedBlock&&focusedUrl){
    image(focusedUrl,focusedBlock.text,this.focus);
@@ -187,7 +209,7 @@ export class XRContent {
     else text(block.text||'');
    }
    for(const link of page.sceneLinks||[]){
-    const mesh=label(link.label.replace(/\s+/g,' ')+'  ›',this.width,.22,{fill:'#2c4156'});
+    const mesh=label(link.label.replace(/\s+/g,' ')+'  ›',this.width,.22,{button:true});
     mesh.userData.label=link.label;
     mesh.userData.action=()=>actions.openScene(link);
     add(mesh);
@@ -196,6 +218,7 @@ export class XRContent {
 
   if(focused)this.control(hud,'‹ Back to\ncontent','Back to content',.69,-.625,footerY,()=>{
    this.focus=-1;
+   this.focusedPortrait=false;
    this.offset=this.pageOffset;
    refresh();
   },27);
@@ -212,22 +235,22 @@ export class XRContent {
   this.scrollControls=[up,down,hint];
 
   const viewport=this.top-this.bottom;
-  this.track=surface(.018,viewport,0x8ca9c0,.30);
+  this.track=surface(.018,viewport,0xffffff,.22);
   this.track.position.set(.926,(this.top+this.bottom)/2,.03);
-  this.thumb=surface(.026,1,0xaecde3);
+  this.thumb=surface(.026,1,0xe6e6e6,.75);
   this.thumb.position.set(.926,0,.035);
   hud.add(this.track,this.thumb);
   this.layout();
  }
 
  private addSeparator(hud:THREE.Group,y:number){
-  const separator=surface(1.92,.005,0x4b6175);
+  const separator=surface(1.92,.005,0xffffff,.16);
   separator.position.set(0,y,.01);
   hud.add(separator);
  }
 
  private control(hud:THREE.Group,text:string,name:string,width:number,x:number,y:number,action:()=>void,font:number){
-  const control=label(text,width,.24,{font,center:true,fill:'#2c4156'});
+  const control=label(text,width,.24,{font,center:true,button:true});
   control.position.set(x,y,.04);
   control.userData.label=name;
   control.userData.action=action;

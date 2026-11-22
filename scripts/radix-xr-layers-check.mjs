@@ -184,7 +184,7 @@ try{
    await page.evaluate(()=>test.tick(5));
    const content=await page.evaluate(()=>test.content());row.bubble.push({degrees,...content});
    assert.equal(content.page,'bubble-page');assert.equal(content.visible,true);assert.equal(content.mount,'hand');assert.equal(content.shade,true);
-   assert.ok(content.physicalWidth>=.27&&content.physicalWidth<=.30,'popup has a compact physical wrist width');
+   assert.ok(content.physicalWidth>=.33&&content.physicalWidth<=.36,'the reader is within the authored wrist reading size');
    assert.ok(content.surfaces.length>0&&content.surfaces.every(size=>Math.max(...size)<=2048),'all popup textures are bounded, including invisible controls: '+JSON.stringify(content.surfaces));
    assert.ok(content.images.includes('ready'),'the popup loads an actual photograph texture');
    assert.ok(content.regions.every(region=>region.every(edge=>edge>0&&edge<1)),'the compact raised-wrist card is entirely in both eyes at either viewing pitch: '+JSON.stringify(content));

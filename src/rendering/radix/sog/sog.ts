@@ -23,6 +23,7 @@
 import { ArrayData, Sh, ShPalette, SplatMath, Splats, type ShDegree, type SplatLayout } from "../vendor/radix-core.module.js";
 import { decodePixels, type Pixels } from "./webp.js";
 import { ZipArchive } from "./zip.js";
+import { inspectSogMeta } from '../../../../shared/sog-metadata.mjs';
 
 export const SH_C0 = 0.28209479177387814;
 
@@ -60,41 +61,14 @@ interface RawMeta {
 // Codebooks may start with null: PlayCanvas extrapolates entry 0
 function patchCodebook(codebook?: (number | null)[]): number[] | undefined {
   if (codebook && codebook[0] === null) {
-    codebook[0] = codebook[1]! + (codebook[1]! - codebook[255]!) / 255;
+    return [codebook[1]! + (codebook[1]! - codebook[255]!) / 255, ...codebook.slice(1) as number[]];
   }
   return codebook as number[] | undefined;
 }
 
-export function isSogMeta(json: unknown): json is RawMeta {
-  const meta = json as RawMeta;
-  return typeof meta === "object" && meta !== null && Array.isArray(meta.means?.files) && Array.isArray(meta.quats?.files) && Array.isArray(meta.sh0?.files);
-}
-
 export function parseSogMeta(json: unknown): SogMeta {
-  if (!isSogMeta(json)) {
-    throw new Error("Not a SOG meta.json");
-  }
-  const raw = json;
-  if (raw.version !== undefined && raw.version !== 1 && raw.version !== 2) throw new Error("This SOG metadata version is not supported.");
-  const version = raw.version === 2 ? 2 : 1;
-  if (version === 1 && raw.quats.encoding && raw.quats.encoding !== "quaternion_packed") {
-    throw new Error(`SOGS quaternion encoding ${raw.quats.encoding} is not supported`);
-  }
-  const count = version === 2 ? raw.count : raw.means.shape?.[0];
-  if (!Number.isSafeInteger(count) || !count || count < 1 || count > 100_000_000) {
-    throw new Error("SOG meta.json has no splat count");
-  }
-  const files = (value: unknown, length: number) => Array.isArray(value) && value.length === length && value.every(name => typeof name === "string" && name.length > 0 && !name.includes("\u0000"));
-  const numbers = (value: unknown, length: number) => Array.isArray(value) && value.length === length && value.every(Number.isFinite);
-  if (!files(raw.means.files, 2) || !files(raw.scales?.files, 1) || !files(raw.quats.files, 1) || !files(raw.sh0.files, 1) || !numbers(raw.means.mins, 3) || !numbers(raw.means.maxs, 3)) throw new Error("SOG metadata has invalid position bounds or channel files.");
-  if (raw.means.mins.some((min, axis) => min > raw.means.maxs[axis] || !Number.isFinite(Math.expm1(Math.abs(min))) || !Number.isFinite(Math.expm1(Math.abs(raw.means.maxs[axis]))))) throw new Error("SOG position bounds are not finite and ordered.");
-  if (version === 1) {
-    if (!numbers(raw.scales.mins, 3) || !numbers(raw.scales.maxs, 3) || !numbers(raw.sh0.mins, 4) || !numbers(raw.sh0.maxs, 4)) throw new Error("SOGS channel ranges are invalid.");
-  } else {
-    const codebook = (values: unknown) => Array.isArray(values) && values.length === 256 && values.every((v, i) => Number.isFinite(v) || i === 0 && v === null);
-    if (!codebook(raw.scales.codebook) || !codebook(raw.sh0.codebook) || raw.shN && !codebook(raw.shN.codebook)) throw new Error("SOG channel codebooks are invalid.");
-  }
-  if (raw.shN && (!files(raw.shN.files, 2) || version === 1 && (!Number.isFinite(raw.shN.mins) || !Number.isFinite(raw.shN.maxs)))) throw new Error("SOG spherical-harmonics metadata is invalid.");
+  const {version, count} = inspectSogMeta(json);
+  const raw = json as RawMeta;
 
   const meta: SogMeta = {
     version,
@@ -127,7 +101,7 @@ export interface SogSource {
   name: string;
   meta: SogMeta;
   signal?: AbortSignal;
-  getFile(name: string): Promise<Uint8Array<ArrayBuffer>>;
+  getFile(name: string, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>>;
 }
 
 // What a URL or dropped files hold: one SOG, or a LoD scene's lod-meta.json
@@ -184,7 +158,7 @@ export function urlSource(url: string, json: unknown, onProgress?: Progress, sig
     name: url,
     signal,
     meta: parseSogMeta(json),
-    getFile: (file) => fetchBytes(sogResourceUrl(file, url), onProgress, `downloading ${file}`, signal),
+    getFile: (file, channelSignal = signal) => fetchBytes(sogResourceUrl(file, url), onProgress, `downloading ${file}`, channelSignal),
   };
 }
 

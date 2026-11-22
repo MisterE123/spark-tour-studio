@@ -128,7 +128,7 @@ class RadixAsset extends SplatAssetGroup {
   }else if(this.single)this.proxy.offer(this.url,this.single.gpu.arrays,()=>this.single!.resident.hold());
   if(this.settled==='ready')this.stats.phase=this.stats.loading?'streaming':'ready';
  }
- override raycast(raycaster:THREE.Raycaster,intersects:THREE.Intersection[]){this.proxy.intersect(raycaster,this,this.bounds,intersects);}
+ override raycast(raycaster:THREE.Raycaster,intersects:THREE.Intersection[]){this.proxy.intersect(raycaster,this,intersects);}
  retry(){
   if(this.dead)return;
   this.stats.error='';this.stats.failed=0;
@@ -159,6 +159,7 @@ export class RadixBackend implements SplatBackend {
  private completedDraw=0;
  private markedDraw=0;
  private drawnCollection=SplatCollection.EMPTY;
+ private emptyCollection?:SplatCollection;
  private countRead=false;
  private countedAt=-Infinity;
  private readonly physicalView=new THREE.ArrayCamera();
@@ -174,9 +175,13 @@ export class RadixBackend implements SplatBackend {
   const prepare=this.node.onBeforeRender.bind(this.node);
   this.node.onBeforeRender=(renderer,scene,camera)=>{prepare(renderer,scene,this.physicalCamera(camera));this.beforeDrawCalls=this.renderer.info.render.drawCalls;};
   this.node.onAfterRender=()=>{
+   const {collection,geometry,sortMode,view}=this.node,order=view?.order;
    // Three calls onAfterRender even while an asynchronous pipeline is still
    // compiling. Only a real backend draw advances the render-call counter.
-   if(this.node.geometry.instanceCount>0&&this.renderer.info.render.drawCalls>this.beforeDrawCalls){this.completedDraw++;this.drawnCollection=this.node.sortMode==='gpu'?this.node.collection:this.node.view?.order?.collection??SplatCollection.EMPTY;}
+   if(geometry.instanceCount>0&&this.renderer.info.render.drawCalls>this.beforeDrawCalls){this.completedDraw++;this.drawnCollection=sortMode==='gpu'?collection:order?.collection??SplatCollection.EMPTY;}
+   // A completed CPU sort for the current collection may intentionally submit
+   // no instances. A pending or stale sort with zero instances is still pending.
+   if(sortMode==='cpu'&&geometry.instanceCount===0&&collection.count>0&&order?.collection===collection&&order.visible===0)this.emptyCollection=collection;
   };
   this.head.matrixAutoUpdate=false;this.physicalView.matrixAutoUpdate=false;this.physicalView.matrixWorldAutoUpdate=false;this.applySettings(settings);
  }
@@ -222,6 +227,7 @@ export class RadixBackend implements SplatBackend {
  }
  update(camera:THREE.Camera,time=performance.now()){
   if(this.dead)return;
+  this.emptyCollection=undefined;
   camera=this.renderer.xr.isPresenting?this.renderer.xr.getCamera():camera;
   camera.updateMatrixWorld();camera=this.physicalCamera(camera);this.head.matrix.copy(camera.matrixWorld);this.head.matrixWorld.copy(camera.matrixWorld);this.head.matrixWorldInverse.copy(camera.matrixWorld).invert();
   const view=camera as THREE.ArrayCamera,eye=view.isArrayCamera?view.cameras[0]:camera;
@@ -242,11 +248,13 @@ export class RadixBackend implements SplatBackend {
  }
  markRendered(){
   if(this.dead)return;this.stats.frames++;
-  if(this.completedDraw>this.markedDraw&&this.drawnCollection===this.node.collection)for(const member of this.members)if(member.stats.shown>0)this.presented.add(member);
+  const collection=this.node.collection,drewCurrent=this.completedDraw>this.markedDraw&&this.drawnCollection===collection;
+  if(drewCurrent||this.emptyCollection===collection)for(const member of this.members)if(member.stats.shown>0)this.presented.add(member);
+  this.emptyCollection=undefined;
   this.markedDraw=this.completedDraw;
   if(this.node.sortMode==='cpu')this.stats.visible=this.node.view?.order?.visible??0;
   else if(this.completedDraw>0&&!this.countRead&&performance.now()-this.countedAt>1000){
-   const collection=this.node.collection;this.countRead=true;this.countedAt=performance.now();
+   this.countRead=true;this.countedAt=performance.now();
    void this.node.readSortedCount().then(count=>{if(!this.dead&&this.node.collection===collection)this.stats.visible=count;}).catch(()=>{}).finally(()=>{this.countRead=false;});
   }
  }

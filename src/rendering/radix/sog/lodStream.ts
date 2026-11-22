@@ -26,7 +26,7 @@ import { closePrepared, prepareSogGpu, uploadSogGpu, type PreparedSog } from "./
 import { availableLevel, fovScale, selectLevels, XR_REAR_GUARD_ANGLE, type LodSettings, type SogLodTree } from "./lod.js";
 import { Resident } from "./resident.js";
 import { MAX_RANGES, RANGES_BUNDLE, sogObject, type SogArrays, type SogSelection } from "./sh.js";
-import { fetchBytes, urlSource } from "./sog.js";
+import { fetchBytes, urlSource, type SogSource } from "./sog.js";
 
 const MAX_LOADS = 4;
 const MIN_SELECT_MS = 100;
@@ -43,7 +43,7 @@ interface LodFile {
   url: string;
   // -1: the environment
   level: number;
-  state: "idle" | "loading" | "resident" | "failed";
+  state: "idle" | "metadata" | "waiting" | "preparing" | "ready" | "resident" | "failed";
   gpu?: SogArrays;
   resident?: Resident;
   splats: number;
@@ -54,6 +54,17 @@ interface LodFile {
   key?: string;
   object?: AnySplatObject;
 }
+
+interface FileJob {
+  file: LodFile;
+  controller: AbortController;
+  source?: SogSource;
+  bytes: number;
+  prepared?: PreparedSog;
+}
+
+type Priority = [tier: number, level: number, distance: number];
+const byPriority = (a: Priority, b: Priority) => b[0] - a[0] || b[1] - a[1] || a[2] - b[2];
 
 export interface LodStats {
   selections: number;
@@ -97,10 +108,12 @@ export class SogLodStream {
   // Every leaf's coarsest level's file: loaded first, never evicted
   private readonly base = new Set<number>();
   private readonly pool: GpuArrays[] = [];
-  // Downloaded files waiting for their upload
-  private readonly ready: { file: LodFile; prepared: PreparedSog }[] = [];
+  // Waiting metadata and decoded images both occupy a slot. Only decoded
+  // images reserve bytes. A job owns its signal through the last channel.
+  private readonly jobs = new Map<LodFile, FileJob>();
+  private demand = new Map<LodFile, Priority>();
+  private schedulePending = true;
   private degree: number;
-  private loads = 0;
   private selectedAt = -Infinity;
   private dirty = true;
   private changed = true;
@@ -112,13 +125,11 @@ export class SogLodStream {
   private lastFovScale = NaN;
   private lastHeadMargin = 0;
   private readonly toObject = new THREE.Matrix4();
-  private readonly abort = new AbortController();
   private readonly onError?: (error: Error) => void;
   private readonly unlinkAbort?: () => void;
   private pendingBytes = 0;
   private readonly maxPendingBytes: number;
   private readonly selection?: SogSelection;
-  private readonly reservations = new Map<LodFile, number>();
 
   constructor({ renderer, tree, camera, matrixWorld, settings, degree, signal, onError, selection, maxPendingBytes = 128 * 1024 * 1024 }: {
     renderer: WebGPURenderer;
@@ -145,7 +156,6 @@ export class SogLodStream {
       const canceled = () => this.dispose();
       signal.addEventListener('abort', canceled, {once: true});
       this.unlinkAbort = () => signal.removeEventListener('abort', canceled);
-      if (signal.aborted) this.abort.abort(signal.reason);
     }
     const file = (url: string, level: number): LodFile => ({ url, level, state: "idle", splats: 0, required: 0, lastUsed: 0, tint: new THREE.Color(1, 1, 1) });
     this.files = tree.files.map((url, i) => file(url, tree.fileLevel[i]));
@@ -167,6 +177,7 @@ export class SogLodStream {
       waiting: TIERS.map(() => 0),
     };
     this.applyTints();
+    if (signal?.aborted) this.dispose();
   }
 
   // Settings changed (selection, tints): re-select at the next update
@@ -197,7 +208,6 @@ export class SogLodStream {
     if (this.disposed || this.paused) {
       return false;
     }
-    this.land();
     const s = this.settings;
     this.toObject.copy(this.matrixWorld).invert();
     this.eye.setFromMatrixPosition(this.camera.matrixWorld).applyMatrix4(this.toObject);
@@ -233,13 +243,23 @@ export class SogLodStream {
       this.stats.selections += 1;
       this.changed = true;
     }
-    if (!this.changed) {
-      return false;
+    if (!this.changed && !this.schedulePending) return false;
+    this.schedulePending = false;
+    if (this.changed) this.demand = this.priorities();
+    // Cancel superseded detail before uploading images for this view.
+    for (const job of this.jobs.values()) {
+      if (!this.demand.has(job.file)) this.cancelJob(job);
     }
+    const landed = this.landNext();
+    const redraw = this.changed || landed;
     this.changed = false;
-    this.show(now);
-    this.evict(this.request(now));
-    return true;
+    if (redraw) {
+      this.show(now);
+      if (landed) this.demand = this.priorities();
+    }
+    this.schedule(now);
+    if (redraw) this.evict(this.demand);
+    return redraw;
   }
 
   // What each file's object draws (checks): the file, its level, the
@@ -265,13 +285,12 @@ export class SogLodStream {
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    this.abort.abort();
     this.unlinkAbort?.();
     for (const file of [...this.files, ...(this.environment ? [this.environment] : [])]) {
       file.resident?.drop();
     }
-    this.ready.forEach(({ prepared }) => closePrepared(prepared));
-    this.ready.length = 0;
+    for (const job of this.jobs.values()) this.cancelJob(job);
+    this.demand.clear();
     this.pool.forEach((list) => list.dispose());
     this.pool.length = 0;
     this.collection = SplatCollection.EMPTY;
@@ -302,15 +321,16 @@ export class SogLodStream {
 
   // Start loads by tier, then coarsest level first, then nearest leaf (the
   // environment first of all); the files wanted
-  private request(now: number): Set<number> {
+  private priorities(): Map<LodFile, Priority> {
     const { tree, distance } = this;
-    // Per file: [tier, level, distance], the most urgent of its leaves
-    const priority = new Map<number, [number, number, number]>();
+    const priority = new Map<LodFile, Priority>();
+    if (this.environment) priority.set(this.environment, [BASE + 1, -1, 0]);
     const want = (f: number, tier: number, d: number) => {
-      const level = this.files[f].level;
-      const current = priority.get(f);
-      if (!current || tier > current[0] || (tier === current[0] && (level > current[1] || (level === current[1] && d < current[2])))) {
-        priority.set(f, [tier, level, d]);
+      const file = this.files[f];
+      const current = priority.get(file);
+      // Every leaf sharing this file has the same file level.
+      if (!current || tier > current[0] || (tier === current[0] && d < current[2])) {
+        priority.set(file, [tier, file.level, d]);
       }
     };
     for (const f of this.base) {
@@ -334,78 +354,108 @@ export class SogLodStream {
       }
     }
 
+    return priority;
+  }
+
+  private schedule(now: number) {
     this.stats.waiting.fill(0);
-    for (const [f, [tier]] of priority) {
-      this.files[f].lastUsed = now;
-      if (this.files[f].state !== "resident") {
-        this.stats.waiting[tier] += 1;
-      }
+    const queue: [LodFile, Priority][] = [];
+    for (const [file, rank] of this.demand) {
+      file.lastUsed = now;
+      if (file.level >= 0 && file.state !== 'resident') this.stats.waiting[rank[0]]++;
+      if (file.state === 'waiting' || file.state === 'idle') queue.push([file, rank]);
     }
-    if (this.environment?.state === "idle" && this.loads + this.ready.length < MAX_LOADS) {
-      void this.load(this.environment);
+    queue.sort((a, b) => byPriority(a[1], b[1]));
+    for (const [file] of queue) {
+      if (file.state === 'waiting') this.admit(this.jobs.get(file)!);
+      else if (this.jobs.size < MAX_LOADS) this.start(file);
     }
-    const queue = [...priority].filter(([f]) => this.files[f].state === "idle").sort(([, a], [, b]) => b[0] - a[0] || b[1] - a[1] || a[2] - b[2]);
-    for (const [f] of queue) {
-      if (this.loads + this.ready.length >= MAX_LOADS || this.pendingBytes >= this.maxPendingBytes) {
-        break;
-      }
-      void this.load(this.files[f]);
-    }
-    return new Set(priority.keys());
   }
 
-  // Download a file and decode its images off the main thread; update()
-  // then uploads it (one file per update, so landings spread over frames)
-  private async load(file: LodFile) {
-    file.state = "loading";
-    this.loads += 1;
-    this.stats.loading = this.loads;
+  private start(file: LodFile) {
+    const job: FileJob = {file, controller: new AbortController(), bytes: 0};
+    this.jobs.set(file, job);
+    this.stats.loading = this.jobs.size;
+    file.state = 'metadata';
+    void this.readMetadata(job);
+  }
+
+  private async readMetadata(job: FileJob) {
+    const {file, controller: {signal}} = job;
     try {
-      const metaBytes = await fetchBytes(file.url, undefined, 'loading metadata', this.abort.signal);
-      const source = urlSource(file.url, JSON.parse(new TextDecoder().decode(metaBytes)), undefined, this.abort.signal);
+      const bytes = await fetchBytes(file.url, undefined, 'loading metadata', signal);
+      signal.throwIfAborted();
+      const source = urlSource(file.url, JSON.parse(new TextDecoder().decode(bytes)), undefined, signal);
       if (source.meta.count < file.required) throw new Error("SOG LoD ranges exceed their source file's splat count.");
-      // Bound decoded image sets while the GPU lands one file per frame.
-      const estimate = source.meta.count * (source.meta.shN ? 28 : 24);
-      if (estimate > this.maxPendingBytes) throw new Error("This SOG LoD chunk is too large to prepare safely. Re-export with smaller LoD chunks.");
-      if (this.pendingBytes > 0 && this.pendingBytes + estimate > this.maxPendingBytes) { file.state = 'idle'; this.changed = true; return; }
-      this.pendingBytes += estimate;
-      this.reservations.set(file, estimate);
-      const prepared = await prepareSogGpu(source);
-      if (this.disposed) {
-        closePrepared(prepared);
-        this.releaseReservation(file);
-      } else {
-        this.ready.push({ file, prepared });
-      }
-    } catch (error) {
-      this.releaseReservation(file);
-      if (this.disposed || this.abort.signal.aborted) return;
-      const failure = new Error(`SOG LoD: ${file.url}: ${error instanceof Error ? error.message : String(error)}`, {cause: error});
-      file.state = "failed";
-      this.stats.failed += 1;
-      this.changed = true;
-      this.onError?.(failure);
-    } finally {
-      this.loads -= 1;
-      this.stats.loading = this.loads + this.ready.length;
-    }
+      if (this.imageBytes(source) > this.maxPendingBytes) throw new Error("This SOG LoD chunk is too large to prepare safely. Re-export with smaller LoD chunks.");
+      job.source = source;
+      file.state = 'waiting';
+      this.schedulePending = true;
+    } catch (error) { this.failJob(job, error); }
   }
 
-  // Upload the next downloaded file
-  private land() {
-    const job = this.ready.shift();
-    if (!job) {
-      return;
+  private imageBytes(source: SogSource) {
+    return source.meta.count * (source.meta.shN ? 28 : 24);
+  }
+
+  private admit(job: FileJob) {
+    const source = job.source!;
+    const bytes = this.imageBytes(source);
+    if (this.pendingBytes + bytes > this.maxPendingBytes) return;
+    job.bytes = bytes;
+    this.pendingBytes += bytes;
+    job.file.state = 'preparing';
+    void this.prepare(job, source);
+  }
+
+  private async prepare(job: FileJob, source: SogSource) {
+    try {
+      job.prepared = await prepareSogGpu(source);
+      job.controller.signal.throwIfAborted();
+      job.file.state = 'ready';
+      this.schedulePending = true;
+    } catch (error) { this.failJob(job, error); }
+  }
+
+  private cancelJob(job: FileJob) {
+    if (job.controller.signal.aborted) return;
+    job.controller.abort();
+    // An asynchronous decoder still owns its memory until it acknowledges
+    // cancellation. Never free that reservation for a second decode early.
+    if (job.file.state === 'waiting' || job.file.state === 'ready') this.endJob(job, 'idle');
+  }
+
+  private endJob(job: FileJob, state: LodFile['state']) {
+    if (job.prepared) closePrepared(job.prepared);
+    this.pendingBytes -= job.bytes;
+    this.jobs.delete(job.file);
+    job.file.state = state;
+    this.stats.loading = this.jobs.size;
+    this.schedulePending = true;
+  }
+
+  private failJob(job: FileJob, error: unknown) {
+    const canceled = job.controller.signal.aborted;
+    this.endJob(job, canceled ? 'idle' : 'failed');
+    if (canceled) return;
+    this.stats.failed++;
+    this.onError?.(new Error(`SOG LoD: ${job.file.url}: ${error instanceof Error ? error.message : String(error)}`, {cause: error}));
+  }
+
+  // Land at most one file per frame, preferring current visible demand.
+  private landNext(): boolean {
+    let next: FileJob | undefined;
+    for (const job of this.jobs.values()) {
+      if (job.file.state !== 'ready' || !this.demand.has(job.file)) continue;
+      if (!next || byPriority(this.demand.get(job.file)!, this.demand.get(next.file)!) < 0) next = job;
     }
+    if (!next) return false;
+    const file = next.file, prepared = next.prepared!;
+    next.prepared = undefined; // uploadSogGpu owns and closes these images.
     const start = performance.now();
-    const { file } = job;
     let gpu: SogArrays;
-    try { gpu = uploadSogGpu(this.renderer, job.prepared); }
-    catch (error) {
-      file.state = 'failed'; this.stats.failed += 1; this.changed = true;
-      this.onError?.(error instanceof Error ? error : new Error(String(error)));
-      return;
-    } finally { this.releaseReservation(file); }
+    try { gpu = uploadSogGpu(this.renderer, prepared); }
+    catch (error) { this.failJob(next, error); return false; }
     this.stats.decodeMs = performance.now() - start;
     file.gpu = gpu;
     file.splats = gpu.arrays.count;
@@ -413,15 +463,9 @@ export class SogLodStream {
       gpu.arrays.dispose();
       gpu.palette?.dispose();
     });
-    file.state = "resident";
-    this.stats.loaded += 1;
-    this.stats.loading = this.loads + this.ready.length;
-    this.changed = true;
-  }
-
-  private releaseReservation(file: LodFile) {
-    this.pendingBytes = Math.max(0, this.pendingBytes - (this.reservations.get(file) ?? 0));
-    this.reservations.delete(file);
+    this.endJob(next, 'resident');
+    this.stats.loaded++;
+    return true;
   }
 
   private returnTable(table: GpuArrays) {
@@ -547,14 +591,13 @@ export class SogLodStream {
 
   // Past the resident budget, drop files nothing shows or wants, least
   // recently used first
-  private evict(wanted: Set<number>) {
+  private evict(wanted: ReadonlyMap<LodFile, Priority>) {
     const all = [...this.files, ...(this.environment ? [this.environment] : [])];
     let splats = all.reduce((sum, file) => sum + (file.state === "resident" ? file.splats : 0), 0);
     const candidates = this.files
-      .map((file, f) => ({ file, f }))
-      .filter(({ file, f }) => file.state === "resident" && !file.object && !wanted.has(f))
-      .sort((a, b) => a.file.lastUsed - b.file.lastUsed);
-    for (const { file } of candidates) {
+      .filter(file => file.state === "resident" && !file.object && !wanted.has(file))
+      .sort((a, b) => a.lastUsed - b.lastUsed);
+    for (const file of candidates) {
       if (splats <= this.settings.residentBudget) {
         break;
       }

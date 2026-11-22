@@ -1,19 +1,20 @@
 # 3DGS Perspectives Studio
 
-Windows authoring application and a shared Spark 2.4.0 / Three.js web viewer. Exported tours include a website, editable JSON, locally bundled runtime code, and a Windows launcher.
+Windows authoring application and a shared Radix / Three.js web viewer on the experimental `Experiemental-Radix-SOGS` branch. Exported tours include a website, editable JSON, locally bundled runtime code, and a Windows launcher. See the [Radix experiment guide](RADIX_EXPERIMENT.md) for compatibility and testing.
 
 ## Run
 
-Use the portable editor EXE in `release/`, or develop with Node.js 24 on Windows:
+Use the experimental portable editor EXE in `experimental-release/`, or develop with Node.js 24 on Windows:
 
 ```powershell
 npm ci
+npm run bundle:sogs
 npm run build
 npm run launcher
 npm run editor
 ```
 
-`npm run package` builds the web application, unsigned Node SEA launcher, and portable Electron editor. Building may download Electron and packaging tools. The resulting applications do not require Node.js on the visitor's machine. The tour launcher is approximately 94 MB because it includes its own Node runtime.
+`npm run package:experimental` builds the Windows x64 portable editor, unsigned tour launcher, and local web runtime. It bundles the SOGS converter and may download pinned build dependencies. The packaged editor and launcher include the runtimes they need.
 
 For web development, `npm run dev` serves the viewer. The desktop editor uses the production build; run `npm run build` before reopening it. `editor.html` in a regular browser explains how to launch the desktop application.
 
@@ -22,7 +23,7 @@ See [hosting and loading performance](HOSTING.md) for local gzip delivery, repea
 ## Author a tour
 
 1. **File → New project**: choose an empty project directory, or **File → Open project** to reopen a project/export. Save, Preview and Export remain one-click actions.
-2. **Add → RAD scenes**: pick one or more LichtFeld `.rad` files, or use **Add → Hosted scene**. Local imports reference their original files during editing.
+2. **Add → SOGS scenes**: choose `.sog`, `meta.json`, or `lod-meta.json`, or use **Add → PLY scenes** to convert a Gaussian splat PLY. For an HTTPS SOGS source, use **Add → Hosted scene**. Keep manifests and their companion textures together.
 3. Adjust scene orientation/scale under **Splat transform**. Tour coordinates use meters and Y-up. Set names, thumbnails, allowed modes and entry views. **Scene → Background** offers Solid color, Equirectangular panorama and Gaussian splat.
 4. Drag to look, use Drone with WASD/arrows and Space/E up or Shift/Q down to position the camera, then **Add → Capture viewpoint**. Select Views in the tour browser to choose a view. Its inspector lets you rename, reorder, duplicate, update or delete it. Thumbnails are captured with each saved camera view.
 5. For Walk and constrained Drone, import a collision GLB or choose **Tools → Generate collider**. The optional **Paged collision** format generates streamable collision and walking tiles; **Legacy GLB mesh** preserves the complete-mesh workflow. Select authored areas or estimate and review an editable whole-scene box. Preview the wireframe, designate a clear walking start, and test navigation before export. See **Paged collision** below for area and headroom settings.
@@ -50,7 +51,7 @@ Search, filter bubble types, or sort Views and Bubbles by Name, Distance or Crea
 
 The splash screen’s **Places & stories** directory searches scene names, listed viewpoints, bubble labels and generated content text. Select a result to load its scene and teleport to the view or a nearby clear position facing the bubble; information bubbles open their content. Visiting a link bubble takes you to the marker, and selecting the marker activates its link. Unlisted viewpoints stay out of direct view results while remaining valid entry points and bubble destinations. Walking visits require a nearby floor and capsule clearance. Scene switches reuse the same renderer and WebXR session. Loading displays the scene thumbnail (or tour cover) and a stage progress bar in the viewer and editor, with a matching in-world VR panel. The bar tracks scene preparation rather than all streamed LoD detail. New information bubbles start with empty text.
 
-Scene and collider transforms apply live without restarting RAD streaming or returning the camera to the entry view. Collision wireframe visibility survives alignment edits and collider replacement. Only collision physics and walking routes rebuild when alignment changes. Search visits face the selected bubble; in XR the rig turns while preserving the physical head pose.
+Scene and collider transforms apply live without returning the camera to the entry view. Collision wireframe visibility survives alignment edits and collider replacement. Only collision physics and walking routes rebuild when alignment changes. Search visits face the selected bubble; in XR the rig turns while preserving the physical head pose.
 
 The splash cover fills the screen behind the glass title and search panels. The search directory opens with **Scenes** selected, showing the available scenes in authored order. Switch to All, Views or Bubbles to find other tour content. Its bounded, scrollable results area remains available over the cover on mobile. XR opens directly into the tour with its menu closed. Grip or the wrist menu opens a smaller translucent panel. Generated bubble content includes every text/image block and rich-text image, in one continuously scrolling panel. Use the left thumbstick or hold the scroll buttons. Photos fit a larger reading surface without stretching; select a photo to inspect it larger and return to the same scroll position. Captions remain with their images. Missing images leave the card controls usable. Selecting an XR viewpoint clears old head-collision history, so a jump across a wall does not leave the headset dark. Physical head penetration still fades in Drone and Walk. That check follows the actual stereo eye midpoint and physical tracked motion in the current navigation rig; controller movement cannot leave an old world-space path stuck over the view. Head clearance respects VR scale. Pending collision pages pause movement without being mistaken for head penetration.
 
@@ -78,13 +79,13 @@ Collision generation and bounds estimation continue when you change inspector ta
 
 For paged collision, **Selected areas** uses ordered ball and box shapes to define the space visitors may enter. Green adds navigable space; coral removes it. The scanned model inside remains solid, and space outside the authored domain is blocked. Move, rotate and resize shapes with their numeric fields and 3D handles. Box face handles move one wall while leaving the opposite wall fixed. These shapes describe a navigable volume, rather than a selection of floor splats alone: include enough room for a person or drone.
 
-**Entire scene** starts with **Estimate scene bounds**. The estimate reads original RAD leaf splats with opacity filtering, excludes distant outliers, and displays a box for review. Move/rotate/resize that box before generating, or re-estimate explicitly. Whole-scene coverage is bounded by this editable box. Switching coverage preserves both the whole-scene box and the separate authored shapes; saving, reopening, undo and export retain them.
+**Entire scene** starts with **Estimate scene bounds**. Review the estimated box, then move, rotate or resize it before generating. The editor retains this box and the separate authored shapes when you switch coverage.
 
 **Extend areas upward** is optional and defaults off. With it off, generation uses the exact ball/box domain. With it on, **Additional headroom · meters** extends the navigable domain upward without removing the scanned geometry inside it. This is useful for an outdoor area whose initial volume is close to the ground. Collision detail and headroom use tour meters. Transparent-splat filtering remains available for either format.
 
 **Page edge length · meters** controls the amount of collision data needed before a nearby area becomes available. Smaller pages reduce each download and preparation unit, with more requests; larger pages cover more space per request. The default is 8 meters. Valid sizes depend on detail: each edge contains a multiple of four cells, up to 256, with a minimum physical edge of 2 meters and a maximum of 64 meters. The control shows the cell dimensions and clamps page size when detail changes. Page size is saved with the scene authoring options and recorded in the generated manifest.
 
-Generation streams RAD pages, stages point buckets on disk, and builds bounded sparse voxel tiles instead of allocating a whole-scene dense grid. Walking tiles are prepared in a background worker during authoring. The viewer downloads and checksum-verifies complete collision pages, then builds exact physics only in small blocks near the visitor. Blocks have at most 32 cells per edge and preserve the original voxel detail. Cached pages do not retain distant physics surfaces: the 48 MiB page cache and local physics budget have independent lifetimes. Page size controls network delivery, while local blocks bound physics preparation even for large, detailed pages.
+Generation reads SOGS leaf splats, stages point buckets on disk, and builds bounded sparse voxel tiles instead of allocating a whole-scene dense grid. Walking tiles are prepared in a background worker during authoring. The viewer downloads and checksum-verifies complete collision pages, then builds exact physics only in small blocks near the visitor. Blocks have at most 32 cells per edge and preserve the original voxel detail. Cached pages do not retain distant physics surfaces: the 48 MiB page cache and local physics budget have independent lifetimes. Page size controls network delivery, while local blocks bound physics preparation even for large, detailed pages.
 
 For paged collision, **Show collision wireframe** displays guides for the whole saved generated area at any distance, with finer guide subdivisions nearby. The detailed collision mesh still appears near the visitor. The distant guides show coverage boundaries rather than reconstructed obstacle surfaces. They use the saved collider, so editing generation shapes does not change them until a new collider is generated. Existing collision files need no regeneration; older files without valid saved area shapes show their overall manifest bounds. These display guides do not download distant collision tiles or add physics.
 
@@ -104,7 +105,7 @@ To host collision on a separate origin, set optional `collisionBaseUrl` in `conf
 
 Open **Tools → Tour version history** to enable local Git for a project. The editor detects installed Git 2.30 or newer; use **Choose git.exe…** if necessary. Git is optional and is not required by exported viewers. This release uses your installed Git rather than redistributing a Git runtime.
 
-**Save version** saves current editor changes and creates a named commit. Ordinary Save and autosave remain independent. Local RADs and companion chunks, colliders, media and imported custom-page assets are copied into the project on the first version that uses them. Their project references stay stable; original source files are preserved. Remote assets remain URLs and their remote contents are not backed up. Git ignores machine-specific source mappings, recovery copies, logs, raw PLY/training inputs and executable/archive outputs.
+**Save version** saves current editor changes and creates a named commit. Ordinary Save and autosave remain independent. Local splat sources and their companion files, colliders, media and imported custom-page assets are copied into the project on the first version that uses them. Their project references stay stable; original source files are preserved. Remote assets remain URLs and their remote contents are not backed up. Git ignores machine-specific source mappings, recovery copies, logs, raw PLY/training inputs and executable/archive outputs.
 
 Select a version to compare its tour data with the current working tour. **Restore selected version** saves current edits as a checkpoint, restores the chosen files, and creates a new restore commit without rewriting later history. Unrelated staged files are not included in editor-created tour commits. Refresh the panel after using an external Git client. Disable history to hide the operations while retaining `.git` and existing commits on disk. Save As copies a regular project repository; copies of externally linked Git worktrees omit the `.git` pointer rather than linking the new folder back to the old checkout.
 
@@ -132,7 +133,7 @@ Legacy GLB walking routes build in a worker and cache completed meshes in browse
 
 See [GitHub CLI authentication](https://cli.github.com/manual/gh_auth_login) and [Pages branch publishing](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site). A Pages permission or plan failure after upload is reported separately from upload success, with a settings link. Automatic CDN uploading is outside this release.
 
-Export, Hosting & delivery, and the history panel's Hosting size section estimate the published website's size, including local RAD companions, media, colliders, generated pages and bundled runtime files. Above 1 GB, the editor warns that GitHub Pages needs an alternative website host or separately hosted splats. Missing/remote assets are identified as unmeasured, so the estimate is a lower bound in those cases. Files above GitHub's 100 MiB ordinary Git limit are noted without preventing local history or export. Git metadata and history preferences are excluded from exported sites and HTTP serving.
+Export, Hosting & delivery, and the history panel's Hosting size section estimate the published website's size, including local SOGS manifests and textures, media, colliders, generated pages and bundled runtime files. Above 1 GB, the editor warns that GitHub Pages needs an alternative website host or separately hosted splats. Missing/remote assets are identified as unmeasured, so the estimate is a lower bound in those cases. Files above GitHub's 100 MiB ordinary Git limit are noted without preventing local history or export. Git metadata and history preferences are excluded from exported sites and HTTP serving.
 
 ## Visitor introduction and glass appearance
 
@@ -154,7 +155,7 @@ Scene changes keep the same renderer and XRSession. The viewer never navigates t
 
 ## Export and hosting
 
-**Portable:** includes local assets and downloads referenced remote assets. RAD metadata is read to collect `.radc` companions. Known external iframe embeds and custom-page resource references fail portable export. External hyperlinks are allowed but need Internet when opened. Review custom JavaScript that constructs network URLs dynamically; static inspection cannot establish its offline behavior.
+**Portable:** includes local assets and downloads referenced remote assets. SOGS manifests are read to collect the referenced chunks and textures. Known external iframe embeds and custom-page resource references fail portable export. External hyperlinks are allowed but need Internet when opened. Review custom JavaScript that constructs network URLs dynamically; static inspection cannot establish its offline behavior.
 
 **Referenced:** keeps remote URLs. The optional omit-local-splats setting leaves those files for separate upload. Application scripts, workers, WASM, styles and required notices remain bundled; editor-only chunks are excluded.
 
@@ -162,7 +163,7 @@ On Windows, run `Launch Tour.exe`. It opens the default browser and a server-con
 
 Local HTTPS sharing includes `.scv` paged collision data and `.bin` walking tiles. Exports made before v1.21.3 need an updated launcher for paged collision on shared devices: re-export, or stop the old server, replace only `Launch Tour.exe` with the current version, then restart sharing and reload the visitor page. The tour data does not need rebuilding.
 
-For public viewing, upload the export to an HTTPS static host. Subdirectory hosting is supported. Serve `.rad` with real `206 Partial Content` responses; do not rewrite asset requests to the HTML page. Remote asset hosts must allow CORS for the tour origin. Keep companion chunk names/paths unchanged. Configure CDN authentication for all chunks, not only the RAD header.
+For public viewing, upload the export to an HTTPS static host. Subdirectory hosting is supported. Serve `.json` manifests as JSON, `.webp` textures as WebP, and `.sog` as a binary download. Preserve relative paths and configure CORS for any remote asset origins.
 
 Edit `config/hosting.json` without rebuilding:
 
@@ -170,7 +171,7 @@ Edit `config/hosting.json` without rebuilding:
 {
   "assetBaseUrl": "https://cdn.example.com/my-tour/",
   "sceneUrls": {
-    "optional-scene-id": "https://other.example.com/interior.rad"
+    "optional-scene-id": "https://other.example.com/interior/lod-meta.json"
   }
 }
 ```
@@ -200,36 +201,36 @@ The receiver accepts messages only from the currently displayed sandboxed iframe
 ## Validation
 
 ```powershell
+npm run bundle:sogs
 npm test
-node scripts/smoke.mjs
-node scripts/render-check.mjs
-node scripts/launcher-check.mjs
-node scripts/prototype-check.mjs
+npx playwright install chromium --no-shell
+$env:SPARK_TEST_BROWSER_CHANNEL = 'chromium'
+node scripts/radix-backend-check.mjs
 ```
 
-Browser smoke scripts use locally installed Microsoft Edge. Electron smoke tests use a hidden window, native-dialog test doubles, temporary project/export folders, and blocked external browser requests. Render tests use a tiny generated RAD fixture; they do not substitute for testing large LichtFeld captures.
+The strict renderer smoke test uses Playwright-pinned Chromium, with actual software WebGPU and WebGL checks. Electron smoke tests use a hidden window, native-dialog test doubles, temporary project/export folders, and blocked external browser requests. Test real captures separately on your target hardware.
 
-See `MANUAL_TESTS.md` for real capture and Quest acceptance. No real headset or user capture was available during implementation. Builds are unsigned development distributions.
+See the [Radix experiment guide](RADIX_EXPERIMENT.md) for the renderer smoke command and hardware retest instructions. Builds are unsigned development distributions.
 
 ### RAD compatibility
 
-The `.rad` container supports both ordinary splats and a LoD hierarchy. This tour's streaming path requires the hierarchy (`lodTree` plus child links). A LoD progress indicator during export does not prove those fields reached the output. If the editor reports a missing tree, inspect the LichtFeld export log and produce a successful LoD-enabled RAD. It does not automatically load a large flat RAD into browser memory or modify the source.
+Existing RAD scenes remain in project data. Open a copy of the tour and use **Replace scene splat** to migrate each scene to the equivalent SOGS source. Use the source PLY in the same coordinate system if you need to regenerate the splats.
 
-## Import a PLY (v1.1)
+## Import a PLY
 
-Choose **Add → PLY scenes** after creating/opening a project. Select Quality (Bhattacharyya) or Quick (Tiny LoD), choose the maximum spherical-harmonics degree, and click **Choose PLY & queue**. Degree 3 preserves all available SH coefficients; lower limits reduce output size. The converter expects supported Gaussian splat PLY data; the bundled Spark 2.4.0 converter’s PLY decoder uses binary little-endian PLY.
+Choose **Add → PLY scenes**, set processing mode, LoD reduction and the maximum spherical-harmonics degree, then select **Choose PLY & queue**. Automatic processing prefers GPU and can fall back to CPU. Adaptive reduction preserves more detail where possible and uniform reduction prioritizes conversion time. Degree 3 retains available view-dependent color coefficients and lower limits reduce output size.
 
-The viewer runtime is pinned to Spark 2.4.0. It is bundled locally in editor previews and exported websites, including its decoder code, workers and WASM. The bundled CPU PLY converter is also pinned to Spark 2.4.0, with its source checksum and executable provenance recorded separately. Upgrading the application does not rewrite existing scene assets.
+The Radix viewer and its required runtime code are bundled locally in editor previews and exported websites.
 
-The editor bundles Spark 2.4.0's unmodified Rust `build-lod` tool, compiled in release mode with CPU features. End users need neither Rust nor Node.js. Conversion runs outside the renderer, with live stage messages and a Cancel button. It uses `--gsplat --rad-chunked`, validates the resulting LoD metadata and every companion chunk, then adds the scene. The original PLY is unchanged. A temporary hard link avoids copying on compatible local volumes; otherwise the PLY is copied with streaming I/O. Failed/cancelled output is removed, with available diagnostics kept in `conversion-logs/`.
+The editor bundles PlayCanvas splat-transform and its pinned GPU and CPU dependencies. Conversion runs in a separate process, reports progress and validates the streamed SOGS output before adding the scene. You can cancel from the Import queue. Source PLY files remain intact.
 
-Converted assets are stored in `assets/converted/<id>/` inside the project and travel through Save As/export like imported RAD assets. Save the project after importing. Large PLY files can require substantial RAM and conversion time; the converter reads the splats into memory. This release does not provide an out-of-core conversion algorithm. It does not generate collision geometry.
+Converted assets travel through Save As and export with the project. Save the project after importing. Large PLY files can require substantial memory and conversion time. Generate collision geometry separately.
 
-To update an existing scan, select its scene and choose **Source asset → Re-import PLY** (also under Tools). Choose the updated PLY in the same coordinate system, then queue it with the desired LoD/SH settings. Successful conversion replaces only the scene's source: IDs, bubbles, content, viewpoints, alignment, colliders and navigation settings remain intact, including annotations edited during conversion. Failure/cancellation leaves the current source unchanged. If the target was deleted or its source changed, the result is not applied. Previous generated files remain available for undo. A relative per-scene hosting override points to the new local RAD, and save/recovery/undo retain that override together with the source.
+To update an existing scan, select its scene and choose **Replace scene splat**. Use a SOGS source or convert a PLY with the same coordinate system. The old source remains active until replacement succeeds. Successful replacement preserves the scene ID, views, stories, links, alignment, audio and colliders.
 
-Developer rebuild: install Rust 1.98.1 (Windows x64 GNU or MSVC toolchain) into `.build/cargo` and `.build/rustup`, without changing PATH, or supply `CARGO_HOME` and `RUSTUP_HOME`. Run `npm run build:converter` before packaging. The script verifies the pinned Spark v2.4.0 archive checksum, uses Cargo.lock and release optimizations, and records executable provenance and license notices in `converter/`. It downloads the source archive if needed. No Rust source modifications are applied.
+Developer rebuild uses `npm run bundle:sogs` to fetch and verify pinned converter dependencies. `npm run package:experimental` handles this automatically.
 
-Importer verification: `node --test tests/converter.test.mjs`, `node scripts/ply-import-check.mjs`, and `node scripts/render-import-check.mjs <export-folder>`. Set `SPARK_PACKAGED=1` to run the import UI check against `release/win-unpacked/3DGS Perspectives Studio.exe`.
+Importer verification uses `node scripts/sogs-conversion-check.mjs` and `node scripts/radix-authoring-check.mjs`. Set `SPARK_RADIX_EDITOR_EXE` to the packaged `experimental-release/win-unpacked/3DGS Perspectives Studio.exe` to check native import and export against the packaged editor.
 
 ## Viewpoints and audio (v1.4)
 
@@ -246,19 +247,19 @@ Desktop navigation: left-drag looks around; right-drag pans in the camera plane;
 
 Open **Tools → Performance presets**. Every adjustment becomes part of the tour immediately and is included in export; use the normal project **Save** to retain it after reopening. Selecting or importing a preset sets the tour's starting profile. Controls participate in undo/redo and recoverable autosave. Name the result and choose **Save preset** or **Save as new preset** to keep a reusable snapshot. Import/export buttons exchange standalone JSON preset files between projects.
 
-The selected preset, unfinished name and adjustments (including ExtSplats) survive closing settings and switching tabs. Custom adjustments are saved independently of named presets, so checking ExtSplats does not require a separate preset-save or default-setting step. Selecting a stored preset replaces custom adjustments with its stored values. Project Save, Save As, and autosave recovery retain all performance controls.
+The selected preset, unfinished name and adjustments survive closing settings and switching tabs. Custom adjustments are saved independently of named presets, so current adjustments can be used without creating another preset. Selecting a stored preset replaces custom adjustments with its stored values. Project Save, Save As, and autosave recovery retain all performance controls.
 
 Viewer Settings includes all saved presets and Advanced performance controls. Visitor changes last across scene transitions without rewriting the project. Resolution cap applies to desktop rendering; XR foveation is a headset/browser hint. The preset controls do not change source splats, and rendered splat targets are not hard memory limits.
 
 Performance controls wait for the tour configuration and follow the active renderer settings, including changes made through VR controls. Opening Settings during a slow network load preserves the saved precision profile when tuning another control. Loopback viewing and local HTTPS sharing use the same authored settings.
 
-**Precision & storage → Extended splat precision (ExtSplats)** enables Spark's 32-byte streamed storage with float32 centers for foreground and background RAD. It can avoid coordinate banding introduced by the compact 16-byte runtime representation, at higher GPU memory/bandwidth cost. It is saved as `pagedExtSplats` in performance presets and defaults off. Changing it reloads the streamed resources while keeping the camera, canvas, movement mode and WebXR session. It cannot recover precision already discarded when creating the source file. Spark documents the distinction between loaded and paged precision in [Handling huge coordinates](https://sparkjs.dev/docs/lod-getting-started/#handling-huge-coordinates).
+Radix scene and viewpoint performance settings use the `performance.radix` namespace. Projects retain compatibility settings for the earlier renderer in their saved data.
 
 See [the versioned preset specification](specs/performance/README.md), [JSON Schema](specs/performance/preset.schema.json), and [complete example](specs/performance/balanced.performance.json). Export includes copies of each named preset, the active tour settings at `performance/active/preset.performance.json`, and the specification. The viewer uses the settings saved in `config/tour.json`. Runtime code, WASM and workers remain bundled locally.
 
 ## Scene import queue
 
-**Add → RAD scenes** and **Add → PLY scenes** both accept multiple files. Choose the PLY conversion method and SH degree for each batch; those settings stay attached to the queued files. Imports run serially to avoid concurrent converter memory use, and each successful import adds a scene named after its source file. RAD imports validate the paged header and companion chunks, then reference the source folder; PLY imports write converted chunks inside the project. Originals are preserved.
+**Add → SOGS scenes** and **Add → PLY scenes** accept multiple files. SOGS imports validate the manifest and companion textures. PLY conversion settings are kept with each batch and imports run serially to limit memory use.
 
 Open **Import queue** in the sidebar to see progress, cancel individual jobs, retry failures or clear finished jobs. **Pause after current** lets the active import finish before stopping; you can add more files while paused or running. Failed jobs do not block later imports. Editing and Save remain available during imports; switching projects, Save as, export and collision generation wait until pending imports finish or are cancelled. Completed scenes use the normal project save and autosave workflow. The pending queue is session-only and is cancelled when the editor closes; it does not resume after restart.
 
@@ -294,17 +295,17 @@ The Windows editor saves native crash dumps and renderer/GPU failure details ben
 
 ## Scene backgrounds
 
-Each scene can choose a solid hex color, a 360° equirectangular image, or a second streamable RAD splat. Older scenes keep the existing dark backdrop. Panorama images support drag/drop, the file chooser and URLs; use a 2:1 JPEG, PNG, WebP or other supported image and adjust its rotation in degrees. Background splats have independent world-space position, rotation and scale, and no collision geometry. The same renderer and XR session display the foreground and background. Both splats share the performance preset’s streaming budget. Rotation/alignment changes reuse the loaded background assets.
+Each scene can choose a solid hex color, a 360° equirectangular image, or a second streamable SOGS splat. Older scenes keep the existing dark backdrop. Panorama images support drag/drop, the file chooser and URLs; use a 2:1 JPEG, PNG, WebP or other supported image and adjust its rotation in degrees. Background splats have independent world-space position, rotation and scale, and no collision geometry. The same renderer and XR session display the foreground and background. Both splats share the performance preset’s streaming budget. Rotation/alignment changes reuse the loaded background assets.
 
 The optional scene `background` field has one of these forms:
 
 ```json
 { "type": "solid", "color": "#264b73" }
 { "type": "panorama", "source": "media/sky.jpg", "yawDegrees": 0 }
-{ "type": "splat", "source": "splats/sky.rad", "transform": { "position": [0, 0, 0], "rotation": [0, 0, 0], "scale": 1 } }
+{ "type": "splat", "source": "splats/sky/lod-meta.json", "transform": { "position": [0, 0, 0], "rotation": [0, 0, 0], "scale": 1 } }
 ```
 
-Transforms use meters and radians, with Y-up. Panorama images resolve relative to the site; background RAD paths use `assetBaseUrl` just like scene splats, and absolute HTTPS URLs override that base. Portable exports include background assets and required RAD companion chunks. Referenced exports preserve CDN references and apply the existing omit-splats option to background splats too.
+Transforms use meters and radians, with Y-up. Panorama images resolve relative to the site; background SOGS paths use `assetBaseUrl` just like scene splats, and absolute HTTPS URLs override that base. Portable exports include background assets and required manifests and textures. Referenced exports preserve CDN references and apply the existing omit-splats option to background splats too.
 
 ## Changing navigation modes
 
@@ -324,14 +325,11 @@ In Views, uncheck **Listed in visitor views** to hide a viewpoint from the visit
 
 3DGS Perspectives Studio's original code is MIT-licensed; see [LICENSE](LICENSE). Bundled dependencies retain their respective terms and notices in [THIRD_PARTY.md](THIRD_PARTY.md) and the exported `licenses/` directory. Tour authors retain responsibility for their own scan and media rights.
 
-GitHub Actions builds and tests Windows x64 on pushes to `main`, pull requests, version tags and manual runs. It installs pinned Node 24.21.0 and Rust 1.98.1, builds the Spark converter from checksum-verified source, runs the tests, builds the site and launcher, bundles the editor mesh engine, and checks the packaged editor plus exported viewer. Branch and manual builds provide one Windows ZIP containing the portable editor, standalone tour launcher, web runtime template, licenses and SHA-256 checksums. GitHub Releases publish that same ZIP; local builds still produce the portable EXE. The web runtime template contains no authored scene assets; use the editor to export an actual tour.
+The **Radix SOGS experimental builds** workflow checks Windows x64 packaging, bundled conversion, software WebGPU and WebGL rendering, and the exported visitor. Ordinary pushes to `Experiemental-Radix-SOGS` run the full checks, upload the verified ZIP, and publish a separate experimental prerelease. The ZIP contains the portable editor, tour launcher, web runtime template, notices, and SHA-256 checksums. The web runtime template needs authored content exported from the editor.
 
-Pushing a new `vX.Y.Z` tag publishes a GitHub Release after the build passes. The tag must match `package.json`; existing release tags must not be moved. Update the package and lockfile version first with `npm version X.Y.Z --no-git-tag-version`, commit the change, then create and push the matching tag. The executables are unsigned. Quest hardware acceptance remains a manual check.
+To run the full branch workflow and upload the candidate ZIP without publishing a GitHub Release, include `[test candidate]` in the tip commit message. You can also run the workflow on `Experiemental-Radix-SOGS` with **Publish a prerelease after the full checks pass** left unchecked. The experimental workflow uses `radix-sogs-experiment-*` tags for publication. Stable `vX.Y.Z` tags belong to the stable workflow on `main`.
 
-Local packaging requires `npm run build:converter` once before `npm run package`. Supply `CARGO_HOME` and `RUSTUP_HOME` for the pinned Rust installation; Windows GNU and MSVC toolchains are supported. GitHub's hosted Windows runner uses MSVC. Build outputs, private configuration, local scan data and caches are excluded from Git.
-
-
-A failed publishing step can be recovered through Actions → **Publish tested release** → **Run workflow**. Supply the existing version tag and the original build run ID. Publishing verifies that the tag matches the tested build commit, that the Windows packaging job passed, and that every downloadable file matches its SHA-256 manifest. It does not move tags or rebuild the application.
+The executables are unsigned. Test the candidate on a physical Quest and the target laptop before publishing. Keep build outputs, credentials, local tour data and caches out of Git.
 
 ## Bubble appearance and mouse capture
 
@@ -349,7 +347,7 @@ Legacy content bubbles with empty references reconnect to their stable content I
 
 Tour settings separate glass translucency, whole-bubble distance fade, size and optional occlusion culling. At 0% translucency the bubble interior is opaque. Distance fade affects the icon, rim, glass and label together. Tour defaults specify the disappearance distance in meters or disable fading; each scene can inherit it, multiply it, set its own distance, or disable fading. Existing strength-based settings keep their original behavior until edited. Below 5% visibility a bubble no longer intercepts mouse, touch or XR rays. Selected editor bubbles remain visible for placement.
 
-**Hide obscured bubbles** is optional and defaults on. It uses a loaded collider and Spark's currently available streamed splats to check line of sight, with bounded work per frame and a surface tolerance. No extra splat scenes or files are loaded. Visibility can lag by a fraction of a second and reflects available LoD; thin surfaces or incomplete scans can affect results. Disable it in Tour settings independently of distance fade.
+**Hide obscured bubbles** is optional and defaults on. It uses a loaded collider and the renderer’s currently available streamed splats to check line of sight, with bounded work per frame and a surface tolerance. No extra splat scenes or files are loaded. Visibility can lag by a fraction of a second and reflects available LoD; thin surfaces or incomplete scans can affect results. Disable it in Tour settings independently of distance fade.
 
 Formatted text is stored as versioned rich JSON on text blocks; the plain text is retained for compatibility. Existing plain text, image/link/embed blocks and HTML pages remain readable. Popups and individual exported pages share the same safe renderer. Generated XR panels preserve readable headings/list text, images and links through native panels. The editor's rich-text libraries are bundled locally and excluded from the exported visitor runtime. Google icons are bundled SVG paths, including the chosen viewpoint and equirectangular panorama icons; no icon font is fetched.
 

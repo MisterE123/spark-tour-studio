@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [Experiemental-Radix-SOGS]
   workflow_dispatch:
+    inputs:
+      publish_prerelease:
+        description: Publish a prerelease after the full checks pass
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -61,8 +66,14 @@ jobs:
         env:
           SPARK_SOGS_TOOLS: experimental-release/win-unpacked/resources/sogs-tools
         run: node scripts/sogs-conversion-check.mjs
-      - name: Check actual SOGS LoD rendering, selectors and cancellation
+      - name: Check actual WebGPU and WebGL SOGS rendering, selectors and cancellation
+        env:
+          SPARK_TEST_BROWSER_CHANNEL: chromium
         run: node scripts/radix-backend-check.mjs
+      - name: Check streaming recovery after a fast turn
+        env:
+          SPARK_TEST_BROWSER_CHANNEL: chromium
+        run: node scripts/radix-stream-recovery-check.mjs
       - name: Check finest SOGS selection and both collision meshers
         run: node scripts/radix-collision-check.mjs
       - name: Check persistent XR manager, stereo navigation and resolution settings
@@ -119,7 +130,10 @@ jobs:
 
   prerelease:
     name: Publish tested experimental prerelease
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/Experiemental-Radix-SOGS'
+    if: >-
+      github.ref == 'refs/heads/Experiemental-Radix-SOGS' &&
+      ((github.event_name == 'push' && github.event.head_commit.id == github.sha && github.event.head_commit.message != null && !contains(github.event.head_commit.message, '[test candidate]')) ||
+      (github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true))
     needs: windows
     runs-on: windows-2025
     permissions:

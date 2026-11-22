@@ -34,14 +34,20 @@ test.stop=()=>backend.dispose();test.ready=true;
 `);
 await build({entryPoints:[path.join(out,'harness.ts')],bundle:true,format:'esm',platform:'browser',target:'es2022',outfile:path.join(out,'harness-bundle.js'),plugins:[{name:'source-root',setup(build){build.onResolve({filter:/^\/src\//},args=>({path:path.join(workspace,args.path.slice(1))}));}}]});event('source-bundled');
 const {server,url:base}=await startServer({root:out,resolve:name=>name.startsWith('assets-fixture/')?{root:path.join(out,name.split('/')[1]==='sh0'?'fixtures-sh0':'fixtures'),relative:name.split('/').slice(2).join('/')}:undefined});event('server',base);
-const hardware=process.env.RADIX_BACKEND_HARDWARE==='1',args=['--enable-webgl','--enable-unsafe-webgpu',...(hardware?[]:['--enable-unsafe-swiftshader','--use-angle=swiftshader'])];
-const browserServer=await chromium.launchServer({channel:'msedge',headless:true,args});const browser=await chromium.connect(browserServer.wsEndpoint());const results=[];let page;event('browser',hardware?'hardware allowed':'SwiftShader software');
+const hardware=process.env.RADIX_BACKEND_HARDWARE==='1';
+const channel=process.env.SPARK_TEST_BROWSER_CHANNEL||'chromium';
+const args=['--enable-automation','--enable-webgl','--enable-unsafe-webgpu',...(hardware?[]:['--enable-unsafe-swiftshader','--use-webgpu-adapter=swiftshader',...(process.platform==='win32'?['--use-angle=d3d11-warp']:[])])];
+const launchOptions={...(process.env.SPARK_BROWSER_EXECUTABLE?{executablePath:process.env.SPARK_BROWSER_EXECUTABLE}:{channel:channel==='bundled'?undefined:channel}),headless:true,timeout:30000,args};
+await fs.writeFile(path.join(out,'launch.json'),JSON.stringify({launchOptions,hardware},null,2));
+const browserServer=await chromium.launchServer(launchOptions);const browser=await chromium.connect(browserServer.wsEndpoint());const results=[];let page;event('browser',hardware?'hardware allowed':'software WebGPU via SwiftShader');
 const watchdog=setTimeout(()=>{event('watchdog');void browserServer.kill();setTimeout(()=>process.exit(2),5000).unref();},150000);
 try{
 for(const backend of ['webgpu-gl','webgpu']){
  page=await browser.newPage({viewport:{width:512,height:512}});const errors=[],logs=[];page.on('pageerror',e=>{errors.push(e.message);event('pageerror',e.message);});page.on('console',message=>{event(message.type(),message.text());if(message.type()==='error'||message.type()==='warn')logs.push(message.text());});
  await page.addInitScript(()=>{const deleted=new WeakMap(),created=new WeakMap();window.glAudit=[];const p=WebGL2RenderingContext.prototype,create=p.createTexture,remove=p.deleteTexture,bind=p.bindTexture;p.createTexture=function(){const texture=create.call(this);if(texture)created.set(texture,new Error('texture allocated').stack);return texture;};p.deleteTexture=function(texture){if(texture)deleted.set(texture,new Error('texture deleted').stack);return remove.call(this,texture);};p.bindTexture=function(target,texture){if(texture&&deleted.has(texture)){const error={created:created.get(texture),deleted:deleted.get(texture),bound:new Error('deleted texture bound').stack};window.glAudit.push(error);console.error('DELETED_TEXTURE_BIND '+JSON.stringify(error));}return bind.call(this,target,texture);};});
  event('navigate',backend);await page.goto(base+'index.html?backend='+backend,{waitUntil:'domcontentloaded'});event('loaded',backend);await page.waitForFunction(()=>window.test?.ready,null,{timeout:30000});event('renderer-ready',backend);
+ const actualBackend=await page.evaluate(()=>test.backend.stats.backend);
+ assert.equal(actualBackend,backend,`This fixture requires the actual ${backend} renderer; received ${actualBackend}.`);
  await page.evaluate(()=>{test.load('main');});
  await page.waitForFunction(()=>test.loads.main.state!=='pending',null,{timeout:30000});
  const first=await page.evaluate(()=>test.snapshot());await fs.writeFile(path.join(out,backend+'-first.json'),JSON.stringify({first,errors,logs},null,2));
@@ -65,7 +71,8 @@ for(const backend of ['webgpu-gl','webgpu']){
  // One shared view survives desktop and synthetic stereo cameras. This proves
  // renderer stereo code, not a physical WebXR session or headset performance.
  const stereo=await page.evaluate(()=>{const eyes=[0,1].map(i=>{const e=new THREE.PerspectiveCamera(55,.5,.01,1000);e.position.x=i?.032:-.032;e.viewport=new THREE.Vector4(i*256,0,256,512);return e;}),array=new THREE.ArrayCamera(eyes);array.position.copy(test.camera.position);array.quaternion.copy(test.camera.quaternion);array.add(...eyes);array.updateMatrixWorld(true);test.backend.update(array,performance.now());test.backend.renderer.render(test.scene,array);test.backend.markRendered();return {views:test.backend.node.views.size,head:test.backend.head.matrixWorld.elements,eyes:eyes.map(e=>e.matrixWorld.elements)};});assert.equal(stereo.views,1);
- const gpuInfo=await page.evaluate(async()=>{try{const adapter=await navigator.gpu?.requestAdapter(),info=adapter?.info;return info?{vendor:info.vendor,architecture:info.architecture,device:info.device,description:info.description}:null;}catch{return null;}});
+ assert.equal(recovered.backend,backend,'The requested graphics backend survives scene replacement and cancellation');
+ const gpuInfo=await page.evaluate(()=>{const info=test.backend.renderer.backend.device?.adapterInfo;return info?{vendor:info.vendor,architecture:info.architecture,device:info.device,description:info.description}:null;});
  const glAudit=await page.evaluate(()=>window.glAudit);await fs.writeFile(path.join(out,backend+'-gl-audit.json'),JSON.stringify(glAudit,null,2));
  results.push({requested:backend,actual:recovered.backend,hardwareAllowed:hardware,gpuInfo,first,tinted,green,changed,picked,transformProof,continuity,failed,recovered,stereo,errors,logs,glAudit});assert.deepEqual(errors,[]);assert.deepEqual(recovered.errors,[]);assert.deepEqual(glAudit,[],'no disposed GPU textures are rebound');assert.ok(!logs.some(line=>/INVALID_OPERATION|INVALID_VALUE|WebGL:|validation error|DELETED_TEXTURE/.test(line)),'graphics validation stays clean');
  await page.evaluate(()=>test.stop());await page.close();page=undefined;

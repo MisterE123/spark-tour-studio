@@ -231,23 +231,29 @@ export async function prepareSogGpu(source: SogSource): Promise<PreparedSog> {
   };
   const entries = Object.entries(names).filter((entry): entry is [ImageName, string] => entry[1] !== undefined);
   const owned = new Set<ImageBitmap>();
-  let failed = false;
+  const channels = new AbortController();
+  const signal = source.signal ? AbortSignal.any([source.signal, channels.signal]) : channels.signal;
   const image = async (file: string) => {
-    const bitmap = await source.getFile(file).then(decodeBitmap);
-    if (failed || source.signal?.aborted) { bitmap.close(); throw new DOMException("SOG image preparation was canceled.", "AbortError"); }
+    const bytes = await source.getFile(file, signal);
+    signal.throwIfAborted();
+    const bitmap = await decodeBitmap(bytes);
+    if (signal.aborted) { bitmap.close(); signal.throwIfAborted(); }
     owned.add(bitmap);
     return bitmap;
   };
+  const pending = entries.map(([, file]) => image(file));
+  if (meta.shN) pending.push(image(meta.shN.files[0]));
   try {
-    const [bitmaps, centroids] = await Promise.all([
-      Promise.all(entries.map(([, file]) => image(file))),
-      meta.shN ? image(meta.shN.files[0]) : undefined,
-    ]);
+    const bitmaps = await Promise.all(pending);
+    const centroids = meta.shN ? bitmaps.pop() : undefined;
     const width = bitmaps[0].width, height = bitmaps[0].height;
     if (width * height < meta.count || bitmaps.some(bitmap => bitmap.width !== width || bitmap.height !== height)) throw new Error("SOG channel images have inconsistent dimensions or too few splats.");
     return { source, images: entries.map(([name], i) => [name, bitmaps[i]]), centroids };
   } catch (error) {
-    failed = true;
+    channels.abort();
+    // An image decoder already in progress cannot be canceled. Hold the
+    // pager reservation until every sibling has returned its bitmap.
+    await Promise.allSettled(pending);
     owned.forEach(bitmap => bitmap.close());
     throw error;
   }

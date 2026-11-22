@@ -16,6 +16,7 @@
 // fill the budget), in "limit" mode the same but at most 1 (the distances
 // are the most detail allowed).
 import {sogResourceUrl} from './sog.js';
+import {inspectSogLod} from '../../../../shared/sog-metadata.mjs';
 import type {RadixCoveragePolicy} from '../../../../shared/radix-performance.mjs';
 
 interface RawNode {
@@ -105,59 +106,31 @@ export function fovScale(fov: number, aspect: number): number {
   return Math.min(tanHalfV, tanHalfH) / Math.tan(Math.PI / 8);
 }
 
-export function isLodMeta(json: unknown): boolean {
-  const meta = json as RawLodMeta;
-  return typeof meta === "object" && meta !== null && typeof meta.lodLevels === "number" && Array.isArray(meta.filenames) && typeof meta.tree === "object";
-}
-
 export function parseLod(json: unknown, url: string): SogLodTree {
-  if (!isLodMeta(json)) {
-    throw new Error("Not a SOG lod-meta.json");
-  }
+  const {leaves: raw, fileLevel} = inspectSogLod(json) as {leaves: RawNode[]; fileLevel: Int8Array};
   const meta = json as RawLodMeta;
   const levels = meta.lodLevels;
-  if (!Number.isInteger(levels) || levels < 1 || levels > 32 || meta.filenames.length < 1 || meta.filenames.length > 100_000) throw new Error("SOG LoD has an invalid level or file count.");
   const urls = meta.filenames.map(name => sogResourceUrl(name, url));
-  const raw: RawNode[] = [];
-  const stack = [meta.tree];
-  const seen = new Set<RawNode>();
-  const validBound = (node: RawNode) => [node?.bound?.min, node?.bound?.max].every(values => Array.isArray(values) && values.length === 3 && values.every(value => Number.isFinite(value) && Math.abs(value) <= 3.4e38)) && node.bound.min.every((v, axis) => v <= node.bound.max[axis]);
-  while (stack.length > 0) {
-    const node = stack.pop()!;
-    if (!validBound(node) || seen.has(node) || seen.size >= 2_000_000) throw new Error("SOG LoD contains invalid or excessive bounds.");
-    seen.add(node);
-    if (node.lods) {
-      raw.push(node);
-    }
-    if (node.children && (!Array.isArray(node.children) || node.children.length > 100_000)) throw new Error("SOG LoD contains invalid children.");
-    for (const child of node.children ?? []) stack.push(child);
-  }
 
   const leaves = raw.length;
-  if (leaves < 1 || leaves > 1_000_000 || leaves * levels > 8_000_000) throw new Error("SOG LoD contains an unsupported number of leaf ranges.");
   const bounds = new Float32Array(leaves * 6);
   const file = new Int32Array(leaves * levels).fill(-1);
   const offset = new Uint32Array(leaves * levels);
   const count = new Uint32Array(leaves * levels);
-  const fileLevel = new Int8Array(meta.filenames.length).fill(-1);
   const levelTotals = new Array<number>(levels).fill(0);
   raw.forEach((node, leaf) => {
     bounds.set(node.bound.min, leaf * 6);
     bounds.set(node.bound.max, leaf * 6 + 3);
     for (const [key, range] of Object.entries(node.lods!)) {
       const level = Number(key);
-      if (!Number.isInteger(level) || level < 0 || level >= levels || !range || !Number.isSafeInteger(range.file) || range.file < 0 || range.file >= urls.length || !Number.isSafeInteger(range.offset) || range.offset < 0 || !Number.isSafeInteger(range.count) || range.count < 0 || range.offset + range.count > 0xffffffff) throw new Error("SOG LoD contains an invalid splat range.");
       if (range.count === 0) continue;
-      if (fileLevel[range.file] !== -1 && fileLevel[range.file] !== level) throw new Error("One SOG LoD file is assigned to several levels.");
       const at = leaf * levels + level;
       file[at] = range.file;
       offset[at] = range.offset;
       count[at] = range.count;
-      fileLevel[range.file] = level;
       levelTotals[level] += range.count;
     }
   });
-  for (let leaf = 0; leaf < leaves; leaf += 1) if (!file.subarray(leaf * levels, (leaf + 1) * levels).some(f => f >= 0)) throw new Error("SOG LoD contains an empty leaf.");
 
   return {
     url,

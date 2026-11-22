@@ -3,11 +3,14 @@ const path=require('node:path');
 const {inflateRawSync}=require('node:zlib');
 const {localReference}=require('./asset-paths.cjs');
 const {contained,privateStateFile}=require('./server.cjs');
+const {inspectSogMeta,inspectSogLod}=require('../shared/sog-metadata.mjs');
+const {sogEntryType,splatEntryName}=require('../shared/splat-format.mjs');
 const remote=source=>/^https?:\/\//i.test(source);
 const MAX_JSON=16*1024*1024,MAX_FILES=100000;
-const integer=(n,min=0)=>Number.isSafeInteger(n)&&n>=min;
 const checkAbort=signal=>{if(signal?.aborted)throw Object.assign(Error('SOG import cancelled.'),{name:'AbortError'});};
-function kind(source){let name;try{name=(remote(source)?decodeURIComponent(new URL(source).pathname):source).replaceAll('\\','/').split('/').at(-1).toLowerCase();}catch{return;}return name==='lod-meta.json'?'sog-lod':name==='meta.json'||name.endsWith('.sog')?'sog':undefined;}
+const entryType=source=>sogEntryType(remote(source)?splatEntryName(source):path.basename(source).toLowerCase());
+function kind(source){const entry=entryType(source);return entry==='lod'?'sog-lod':entry?'sog':undefined;}
+function portableSogName(reference){const entry=sogEntryType(splatEntryName(reference));return {lod:'lod-meta.json',meta:'meta.json',archive:'asset.sog'}[entry];}
 async function json(source,signal){
  checkAbort(signal);let bytes;
  if(remote(source)){const response=await fetch(source,{signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000)});if(!response.ok||!response.body)throw Error('SOG metadata request failed: '+response.status);const parts=[];let size=0;try{for await(const part of response.body){size+=part.length;if(size>MAX_JSON)throw Error('SOG metadata exceeds 16 MiB.');parts.push(part);}}finally{if(!response.body.locked)await response.body.cancel().catch(()=>{});}bytes=Buffer.concat(parts);}
@@ -15,26 +18,9 @@ async function json(source,signal){
  checkAbort(signal);try{return JSON.parse(bytes.toString('utf8'));}catch(error){throw Error('Invalid SOG JSON: '+error.message);}
 }
 function textureNames(meta){
- const count=meta?.version===2?meta.count:meta?.means?.shape?.[0];
- if(!meta||![undefined,1,2].includes(meta.version)||!integer(count,1)||count>268435456)throw Error('Invalid SOG metadata version or count.');
- if(!['mins','maxs'].every(key=>Array.isArray(meta.means?.[key])&&meta.means[key].length===3&&meta.means[key].every(Number.isFinite))||meta.means.mins.some((value,index)=>value>meta.means.maxs[index]))throw Error('Invalid SOG position bounds.');
- const fields=[['means',2],['scales',1],['quats',1],['sh0',1],...(meta.shN?[['shN',2]]:[])],files=[];
- for(const [field,length] of fields){const names=meta[field]?.files;if(!Array.isArray(names)||names.length!==length||names.some(name=>typeof name!=='string'||!name||!/\.webp$/i.test(localReference(name).path)))throw Error('Invalid SOG '+field+' textures.');files.push(...names);}
- // Older SOG v2 writers omitted bands; Radix infers them from the centroid
- // texture width. Preserve that supported path while validating explicit caps.
- if(meta.shN&&meta.version===2&&meta.shN.bands!==undefined&&(!integer(meta.shN.bands,1)||meta.shN.bands>3))throw Error('Invalid SOG harmonic degree.');
- return {count,files:[...new Set(files)]};
-}
-function lodReferences(meta){
- if(!meta||![undefined,1].includes(meta.version)||!integer(meta.lodLevels,1)||meta.lodLevels>32||!Array.isArray(meta.filenames)||!meta.filenames.length||meta.filenames.length>MAX_FILES||meta.filenames.some(name=>typeof name!=='string'||!name))throw Error('Invalid Streamed SOG manifest.');
- const stack=[meta.tree],ranges=[];let nodes=0;
- while(stack.length){const node=stack.pop();if(++nodes>200000||!node||!node.bound||!['min','max'].every(key=>Array.isArray(node.bound[key])&&node.bound[key].length===3&&node.bound[key].every(Number.isFinite))||node.bound.min.some((n,i)=>n>node.bound.max[i]))throw Error('Invalid Streamed SOG bounds.');
-  if(node.children){if(node.lods||!Array.isArray(node.children)||node.children.length!==2)throw Error('Invalid Streamed SOG tree.');stack.push(...node.children);}
-  else{if(!node.lods||typeof node.lods!=='object'||!Object.keys(node.lods).length)throw Error('Invalid Streamed SOG leaf.');for(const [level,range] of Object.entries(node.lods)){if(!/^\d+$/.test(level)||Number(level)>=meta.lodLevels||!integer(range?.file)||range.file>=meta.filenames.length||!integer(range.offset)||!integer(range.count,1)||!Number.isSafeInteger(range.offset+range.count))throw Error('Invalid Streamed SOG leaf range.');ranges.push(range);}}
- }
- if(meta.environment!=null&&(typeof meta.environment!=='string'||!meta.environment))throw Error('Invalid Streamed SOG environment.');
- if(meta.counts!==undefined&&(!Array.isArray(meta.counts)||meta.counts.length!==meta.lodLevels||meta.counts.some(n=>!integer(n))||!meta.counts[0]))throw Error('Invalid Streamed SOG detail counts.');
- return {files:[...new Set([...meta.filenames,...(meta.environment?[meta.environment]:[])])],ranges};
+ const {count,files}=inspectSogMeta(meta);
+ for(const name of files)if(!/\.webp$/i.test(localReference(name).path))throw Error('Invalid SOG texture: '+name);
+ return {count,files};
 }
 async function companion(root,owner,reference){
  const parsed=localReference(reference);if(privateStateFile(parsed.path))throw Error('SOG references private editor files.');
@@ -48,12 +34,12 @@ async function companion(root,owner,reference){
 // Validate without decoding WebP or buffering the large splat files. The returned
 // graph is the single source of truth for imports, history and folder export.
 async function sogFiles(source,{signal,verifyRemote=false}={}){
- checkAbort(signal);if(!remote(source)){if((await fs.lstat(source)).isSymbolicLink())throw Error('SOG entry files cannot be symbolic links.');source=await fs.realpath(source);}if(!kind(source))throw Error('Choose .sog, meta.json or lod-meta.json.');
- if(/\.sog$/i.test(remote(source)?new URL(source).pathname:source)){
+ checkAbort(signal);if(!remote(source)){if((await fs.lstat(source)).isSymbolicLink())throw Error('SOG entry files cannot be symbolic links.');source=await fs.realpath(source);}const entry=entryType(source);if(!entry)throw Error('Choose .sog, meta.json or lod-meta.json.');
+ if(entry==='archive'){
   if(remote(source)){if(verifyRemote){const response=await fetch(source,{method:'HEAD',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(30000)]):AbortSignal.timeout(30000)});if(!response.ok)throw Error('SOG request failed: '+response.status);}return {format:'sog',files:[{path:'',source}],count:undefined};}
   const archive=await archiveMeta(source),parsed=textureNames(archive.meta);for(const name of parsed.files){const entry=archive.names.get(archive.prefix+localReference(name).path);if(!entry||entry.size<12)throw Error('Missing SOG texture: '+name);}return {format:'sog',count:parsed.count,files:[{path:'',source}]};
  }
- const rootMeta=await json(source,signal),isLod=kind(source)==='sog-lod',lod=isLod?lodReferences(rootMeta):undefined,files=new Map([['',{path:'',source}]]),counts=new Map(),destinations=new Map();
+ const rootMeta=await json(source,signal),isLod=entry==='lod',lod=isLod?inspectSogLod(rootMeta):undefined,files=new Map([['',{path:'',source}]]),counts=new Map(),destinations=new Map();
  async function add(owner,reference){const item=await companion(source,owner,reference);let relative;
   if(remote(source)){const rootUrl=new URL('.',source),url=new URL(item.source);if(url.origin!==rootUrl.origin||!url.pathname.startsWith(rootUrl.pathname))throw Error('SOG companion escapes its scene URL.');relative=localReference(url.pathname.slice(rootUrl.pathname.length)+url.search+url.hash);}
   else relative=localReference(require('./asset-paths.cjs').assetReference(path.relative(path.dirname(source),item.source).replaceAll('\\','/')));
@@ -62,11 +48,14 @@ async function sogFiles(source,{signal,verifyRemote=false}={}){
   checkAbort(signal);return item.source;
  }
  async function textures(owner,meta){const parsed=textureNames(meta);counts.set(owner,parsed.count);for(const reference of parsed.files)await add(owner,reference);return parsed.count;}
- if(isLod){for(const name of lod.files){checkAbort(signal);const owner=await add(source,name);await textures(owner,await json(owner,signal));}for(const range of lod.ranges){const owner=remote(source)?new URL(metaName(rootMeta,range),source).href:(await companion(source,source,metaName(rootMeta,range))).source;if(range.offset+range.count>counts.get(owner))throw Error('Streamed SOG range exceeds its chunk.');}}
+ if(isLod){
+  const chunkCount=async name=>{checkAbort(signal);const owner=await add(source,name);return counts.get(owner)??await textures(owner,await json(owner,signal));};
+  for(const [index,name] of rootMeta.filenames.entries())if(await chunkCount(name)<lod.required[index])throw Error('Streamed SOG range exceeds its chunk.');
+  if(rootMeta.environment)await chunkCount(rootMeta.environment);
+ }
  else await textures(source,rootMeta);
  return {format:isLod?'sog-lod':'sog',count:isLod?(rootMeta.counts?.[0]||undefined):counts.get(source),lodLevels:isLod?rootMeta.lodLevels:1,files:[...files.values()]};
 }
-function metaName(meta,range){return meta.filenames[range.file];}
 async function archiveMeta(source){
  const handle=await fs.open(source,'r');
  try{
@@ -110,4 +99,4 @@ async function archiveMeta(source){
   return {meta:JSON.parse(decoded.toString('utf8')),prefix:name.slice(0,-9),names};
  }finally{await handle.close();}
 }
-module.exports={sogFiles,sogKind:kind,textureNames,lodReferences};
+module.exports={sogFiles,sogKind:kind,textureNames,portableSogName};

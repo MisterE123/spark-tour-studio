@@ -5,6 +5,7 @@ import {Splats, type GpuArrays} from './vendor/radix.module.js';
 export class SurfaceProxy {
  private readonly sources = new Set<string>();
  private readonly values:number[] = [];
+ private readonly bounds = new THREE.Box3();
  private busy = false;
  private dead = false;
  private readonly localRay = new THREE.Ray();
@@ -21,6 +22,7 @@ export class SurfaceProxy {
   void(async()=>{
    const chunk=Math.max(1,Math.min(256,Math.floor(target/4))),windows=Math.min(4,Math.ceil(arrays.count/chunk));
    const splat=Splats.makeExtSplat();
+   const rotation=new THREE.Matrix4(),quaternion=new THREE.Quaternion(),extent=new THREE.Vector3(),corner=new THREE.Vector3();
    for(let window=0;window<windows&&!this.dead;window++){
     const start=Math.floor(Math.max(0,arrays.count-chunk)*window/Math.max(1,windows-1));
     const data=await arrays.read({bundles:['extSplats'],start,count:Math.min(chunk,arrays.count-start)});
@@ -30,18 +32,26 @@ export class SurfaceProxy {
      decode(i,splat);
      const {center:c,scales:s,quaternion:q,opacity}=splat;
      if(opacity<.03||![c.x,c.y,c.z,s.x,s.y,s.z,q.x,q.y,q.z,q.w].every(Number.isFinite)||Math.min(s.x,s.y,s.z)<=0)continue;
-     this.values.push(c.x,c.y,c.z,s.x*2.828427,s.y*2.828427,s.z*2.828427,q.x,q.y,q.z,q.w,opacity);
+     const x=s.x*2.828427,y=s.y*2.828427,z=s.z*2.828427;
+     quaternion.set(q.x,q.y,q.z,q.w).normalize();
+     this.values.push(c.x,c.y,c.z,x,y,z,quaternion.x,quaternion.y,quaternion.z,quaternion.w,opacity);
+     // The AABB half-extent is the norm of each row of the rotation scaled
+     // by the three ellipsoid radii. Grow it as samples arrive, in asset space.
+     const m=rotation.makeRotationFromQuaternion(quaternion).elements;
+     extent.set(Math.hypot(m[0]*x,m[4]*y,m[8]*z),Math.hypot(m[1]*x,m[5]*y,m[9]*z),Math.hypot(m[2]*x,m[6]*y,m[10]*z));
+     this.bounds.expandByPoint(corner.set(c.x,c.y,c.z).sub(extent));
+     this.bounds.expandByPoint(corner.set(c.x,c.y,c.z).add(extent));
     }
    }
   })().catch(()=>{if(!this.dead)this.sources.delete(key);}).finally(()=>{release();this.busy=false;});
  }
 
- intersect(raycaster:THREE.Raycaster,object:THREE.Object3D,bounds:THREE.Box3,intersects:THREE.Intersection[]){
+ intersect(raycaster:THREE.Raycaster,object:THREE.Object3D,intersects:THREE.Intersection[]){
   if(this.dead||!this.values.length)return;
   object.updateWorldMatrix(true,false);
   this.inverse.copy(object.matrixWorld).invert();
   this.localRay.copy(raycaster.ray).applyMatrix4(this.inverse);
-  if(!this.localRay.intersectsBox(bounds))return;
+  if(!this.localRay.intersectsBox(this.bounds))return;
   const origin=this.localRay.origin,direction=this.localRay.direction,values=this.values;
   let best=Infinity;
   for(let i=0;i<values.length;i+=11){
@@ -63,5 +73,5 @@ export class SurfaceProxy {
   if(distance<raycaster.near||distance>raycaster.far)return;
   intersects.push({distance,point:this.worldPoint.clone(),object});
  }
- dispose(){this.dead=true;this.values.length=0;this.sources.clear();}
+ dispose(){this.dead=true;this.values.length=0;this.sources.clear();this.bounds.makeEmpty();}
 }

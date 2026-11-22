@@ -7,25 +7,112 @@ import http from 'node:http';
 import {spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import {createRequire} from 'node:module';
+import {fileURLToPath} from 'node:url';
+import {build} from 'esbuild';
 import {zipSync} from 'fflate';
 import {blankProject,newScene,validateProject} from '../shared/project.mjs';
 import {applySceneImport} from '../shared/authoring.mjs';
 import {splatFormat} from '../shared/splat-format.mjs';
 import {plyFixture} from './fixtures.mjs';
-const require=createRequire(import.meta.url),{sogFiles,textureNames}=require('../desktop/sogs.cjs'),{assetReference}=require('../desktop/asset-paths.cjs'),{exportTour}=require('../desktop/export.cjs'),{collectTourFiles}=require('../desktop/tour-files.cjs'),{convertPlyToSogs,conversionOptions}=require('../desktop/sogs-converter.cjs');
+import {sogLodFixture} from './sog-fixtures.mjs';
+const require=createRequire(import.meta.url),{sogFiles,textureNames}=require('../desktop/sogs.cjs'),{assetReference}=require('../desktop/asset-paths.cjs'),{exportTour}=require('../desktop/export.cjs'),{collectTourFiles}=require('../desktop/tour-files.cjs'),{convertPlyToSogs,conversionOptions}=require('../desktop/sogs-converter.cjs'),{ImportQueue}=require('../desktop/import-queue.cjs');
 
 const textures=['means_l.webp','means_u.webp','scales.webp','quats.webp','sh0.webp'];
-function single(count=8){return {version:2,count,means:{mins:[0,0,0],maxs:[1,1,1],files:textures.slice(0,2)},scales:{codebook:[0],files:[textures[2]]},quats:{files:[textures[3]]},sh0:{codebook:[0],files:[textures[4]]}};}
+function single(count=8){return {version:2,count,means:{mins:[0,0,0],maxs:[1,1,1],files:textures.slice(0,2)},scales:{codebook:Array(256).fill(0),files:[textures[2]]},quats:{files:[textures[3]]},sh0:{codebook:Array(256).fill(0),files:[textures[4]]}};}
 async function writeScene(root){const meta={version:1,lodLevels:2,counts:[8,4],count:12,filenames:['fine/meta.json','coarse/meta.json'],environment:'env/meta.json',tree:{bound:{min:[0,0,0],max:[1,1,1]},lods:{0:{file:0,offset:0,count:8},1:{file:1,offset:0,count:4}}}};await fs.mkdir(root,{recursive:true});await fs.writeFile(path.join(root,'lod-meta.json'),JSON.stringify(meta));for(const [folder,count] of [['fine',8],['coarse',4],['env',2]]){await fs.mkdir(path.join(root,folder));await fs.writeFile(path.join(root,folder,'meta.json'),JSON.stringify(single(count)));for(const file of textures)await fs.writeFile(path.join(root,folder,file),Buffer.from('RIFF\0\0\0\0WEBPtestfixture'));}return meta;}
 async function viewer(root){await fs.mkdir(path.join(root,'assets'),{recursive:true});await fs.mkdir(path.join(root,'licenses'));await fs.writeFile(path.join(root,'assets/viewer.js'),'export {};');await fs.writeFile(path.join(root,'index.html'),'<!doctype html><title>Tour</title><script type="module" src="./assets/viewer.js"></script>');}
 function project(source){const p=blankProject();p.scenes=[newScene('north','North Graveyard',source)];p.startScene='north';return p;}
+
+test('SOG codebooks must validate before replacing an existing source or exporting', async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'sogs replacement '));
+ t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const files=Object.fromEntries(Object.entries(sogLodFixture().files).filter(([name])=>name.startsWith('0_0/')).map(([name,data])=>[name.slice(4),data]));
+ const meta=JSON.parse(Buffer.from(files['meta.json']).toString('utf8'));
+ const valid=zipSync(files),invalid=structuredClone(meta);
+ invalid.scales.codebook.pop();
+ const broken=zipSync({...files,'meta.json':Buffer.from(JSON.stringify(invalid))});
+ const {outputFiles:[runtime]}=await build({entryPoints:[fileURLToPath(new URL('../src/rendering/radix/sog/sog.ts',import.meta.url))],bundle:true,write:false,format:'esm',platform:'node'});
+ const {openSogInput}=await import('data:text/javascript;base64,'+Buffer.from(runtime.contents).toString('base64'));
+ assert.equal((await openSogInput(valid)).source.meta.count,meta.count);
+ await assert.rejects(openSogInput(broken),/codebooks/);
+ await fs.writeFile(path.join(root,'valid.sog'),valid);
+ await fs.writeFile(path.join(root,'broken.sog'),broken);
+ const p=project('valid.sog'),before=structuredClone(p);
+ const job=await new Promise(resolve=>{
+  const queue=new ImportQueue(input=>({cancel(){},promise:sogFiles(path.join(root,input.source)).then(()=>({source:input.source}))}),state=>{
+   const [current]=state.jobs;
+   if(current?.state==='failed'||current?.state==='completed')resolve(current);
+  });
+  queue.enqueue([{kind:'sogs',source:'broken.sog',name:'Replacement',replaceSceneId:'north',expectedSource:'valid.sog'}]);
+ });
+ assert.equal(job.state,'failed');
+ assert.match(job.error,/codebooks/);
+ assert.equal(applySceneImport(p,job).status,'ignored');
+ assert.deepEqual(p,before);
+ const working=path.join(root,'working'),dist=path.join(root,'viewer');
+ await fs.mkdir(working);
+ await viewer(dist);
+ const config={projectRoot:working,dist,websiteOnly:true,portable:true,hosting:{assetBaseUrl:'./',sceneUrls:{}},sources:{'imports/scan':{dir:root,kind:'sogs'}}};
+ const failure=path.join(root,'bad');
+ await assert.rejects(exportTour({...config,project:project('imports/scan/broken.sog'),destination:failure}),/codebooks/);
+ assert.ok(existsSync(path.join(failure,'EXPORT_INCOMPLETE.txt')));
+ const control=path.join(root,'good');
+ await exportTour({...config,project:project('imports/scan/valid.sog'),destination:control});
+ assert.equal((await sogFiles(path.join(control,'imports/scan/valid.sog'))).count,meta.count);
+ assert.deepEqual(await fs.readFile(path.join(root,'valid.sog')),Buffer.from(valid));
+ assert.deepEqual(await fs.readFile(path.join(root,'broken.sog')),Buffer.from(broken));
+});
+
+test('both export modes recognize percent-encoded hosted SOG entry names', async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'sogs encoded '));
+ t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const scene=path.join(root,'source'),working=path.join(root,'working'),dist=path.join(root,'viewer');
+ await writeScene(scene);
+ await fs.mkdir(working);
+ await viewer(dist);
+ const archive=Object.fromEntries(await Promise.all(['meta.json',...textures].map(async name=>[name,await fs.readFile(path.join(scene,'fine',name))])));
+ await fs.writeFile(path.join(scene,'scan.sog'),zipSync(archive));
+ const server=http.createServer(async(req,res)=>{
+  try{res.end(await fs.readFile(path.join(scene,decodeURIComponent(new URL(req.url,'http://local').pathname).slice(1))));}
+  catch{res.writeHead(404).end();}
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+ t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const config={projectRoot:working,dist,websiteOnly:true,hosting:{assetBaseUrl:'./',sceneUrls:{}},sources:{}};
+ for(const [index,reference,expected] of [[1,'scan%2Esog','asset.sog'],[2,'fine/%6deta.json','meta.json'],[3,'%6cod-meta.json','lod-meta.json']]){
+  const url=`http://127.0.0.1:${server.address().port}/${reference}?version=2#scan`;
+  const portable=path.join(root,'portable-'+index),referenced=path.join(root,'referenced-'+index);
+  await exportTour({...config,project:project(url),destination:portable,portable:true});
+  const name='imports/remote-1/'+expected;
+  assert.equal(JSON.parse(await fs.readFile(path.join(portable,'config/tour.json'),'utf8')).scenes[0].source,name+'?version=2#scan');
+  assert.equal((await sogFiles(path.join(portable,name))).count,8);
+  await exportTour({...config,project:project(url),destination:referenced,portable:false});
+  assert.equal(JSON.parse(await fs.readFile(path.join(referenced,'config/tour.json'),'utf8')).scenes[0].source,url);
+  assert.equal(existsSync(path.join(referenced,'imports')),false);
+ }
+});
+
+test('streamed SOG ranges enforce chunk dependencies and one detail level per file', async t=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'sogs lod ranges '));
+ t.after(()=>fs.rm(root,{recursive:true,force:true}));
+ const meta=await writeScene(root),file=path.join(root,'lod-meta.json');
+ assert.equal((await sogFiles(file)).files.length,19);
+ meta.tree.lods[1].file=0;
+ await fs.writeFile(file,JSON.stringify(meta));
+ await assert.rejects(sogFiles(file),/assigned to several levels/);
+ meta.tree.lods[1].file=1;
+ meta.tree.lods[1].offset=1;
+ await fs.writeFile(file,JSON.stringify(meta));
+ await assert.rejects(sogFiles(file),/range exceeds its chunk/);
+});
+
 test('format detection retains RAD while accepting exactly the supported SOG entry names',()=>{assert.equal(splatFormat('https://cdn.example/scans/lod-meta.json?v=2#x'),'sog-lod');assert.equal(splatFormat('imports/%23100%25/meta.json'),'sog');assert.equal(splatFormat('Scene%20%23100%25.sog'),'sog');assert.equal(splatFormat('old.rad'),'rad');assert.equal(splatFormat('config/tour.json'),undefined);assert.equal(splatFormat('scene.sogs'),undefined);assert.equal(splatFormat('scene.zip'),undefined);for(const source of ['scene.sog','scene/meta.json','scene/lod-meta.json','retained.rad'])assert.deepEqual(validateProject(project(source)),[]);});
 test('all SOG LOD chunks, nested textures and the environment enter history and portable export',async()=>{const root=await fs.mkdtemp(path.join(os.tmpdir(),'sogs graph '));try{const original=path.join(root,'source #100%20 東'),working=path.join(root,'project'),dist=path.join(root,'viewer'),output=path.join(root,'portable');await writeScene(original);await fs.mkdir(working);await viewer(dist);const p=project('imports/scan/lod-meta.json'),sources={'imports/scan':{dir:original,kind:'sogs'}},hosting={assetBaseUrl:'./',sceneUrls:{}};const graph=await sogFiles(path.join(original,'lod-meta.json'));assert.equal(graph.files.length,19);assert.equal(graph.lodLevels,2);const inventory=await collectTourFiles({projectRoot:working,project:p,hosting,sources});assert.deepEqual(inventory.missing,[]);assert.equal(inventory.files.length,19);await exportTour({project:p,hosting,projectRoot:working,sources,destination:output,dist,portable:true,websiteOnly:true});const exported=JSON.parse(await fs.readFile(path.join(output,'config/tour.json'),'utf8'));assert.equal(exported.scenes[0].source,p.scenes[0].source);await fs.rename(original,original+' moved');assert.equal((await sogFiles(path.join(output,exported.scenes[0].source))).files.length,19);assert.equal(existsSync(path.join(output,'EXPORT_INCOMPLETE.txt')),false);assert.match(await fs.readFile(path.join(output,'README.txt'),'utf8'),/SOGS root \(lod-meta\.json or meta\.json\).*WebP textures/);assert.deepEqual(await fs.readFile(path.join(output,'imports/scan/env/sh0.webp')),Buffer.from('RIFF\0\0\0\0WEBPtestfixture'));}finally{await fs.rm(root,{recursive:true,force:true});}});
 test('remote SOG portable export retains required entry filenames; referenced export retains the CDN',async()=>{const root=await fs.mkdtemp(path.join(os.tmpdir(),'sogs remote '));let server;try{const scene=path.join(root,'scene'),working=path.join(root,'project'),dist=path.join(root,'viewer');await writeScene(scene);await fs.mkdir(working);await viewer(dist);server=http.createServer(async(req,res)=>{try{const rel=decodeURIComponent(new URL(req.url,'http://local/').pathname).slice(1);res.end(await fs.readFile(path.join(scene,rel)));}catch{res.writeHead(404).end();}});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const url=`http://127.0.0.1:${server.address().port}/lod-meta.json`,p=project(url),hosting={assetBaseUrl:'./',sceneUrls:{}};const output=path.join(root,'portable');await exportTour({project:p,hosting,projectRoot:working,sources:{},destination:output,dist,portable:true,websiteOnly:true});const exported=JSON.parse(await fs.readFile(path.join(output,'config/tour.json'),'utf8'));assert.equal(exported.scenes[0].source,'imports/remote-1/lod-meta.json');assert.equal((await sogFiles(path.join(output,exported.scenes[0].source))).files.length,19);const referenced=path.join(root,'referenced');await exportTour({project:p,hosting,projectRoot:working,sources:{},destination:referenced,dist,portable:false,websiteOnly:true});assert.equal(JSON.parse(await fs.readFile(path.join(referenced,'config/tour.json'),'utf8')).scenes[0].source,url);assert.equal(existsSync(path.join(referenced,'imports')),false);await new Promise(resolve=>server.close(resolve));server=undefined;assert.equal((await sogFiles(path.join(output,exported.scenes[0].source))).files.length,19);}finally{server?.close();await fs.rm(root,{recursive:true,force:true});}});
 test('missing, escaped, private and malformed SOG graph resources fail validation',async()=>{const root=await fs.mkdtemp(path.join(os.tmpdir(),'sogs invalid '));try{const meta=await writeScene(root),file=path.join(root,'lod-meta.json');await fs.unlink(path.join(root,'coarse/sh0.webp'));await assert.rejects(sogFiles(file),/ENOENT/);await fs.writeFile(path.join(root,'coarse/sh0.webp'),'restored');meta.filenames[0]='../outside/meta.json';await fs.writeFile(file,JSON.stringify(meta));await assert.rejects(sogFiles(file),/escapes/);meta.filenames[0]='.sources.json';await fs.writeFile(file,JSON.stringify(meta));await assert.rejects(sogFiles(file),/private/);meta.filenames[0]='fine/meta.json';meta.tree.lods[0].count=100;await fs.writeFile(file,JSON.stringify(meta));await assert.rejects(sogFiles(file),/range exceeds/);meta.tree.lods[0].count=8;meta.version=2;await fs.writeFile(file,JSON.stringify(meta));await assert.rejects(sogFiles(file),/manifest/);}finally{await fs.rm(root,{recursive:true,force:true});}});
 test('SOG archive import checks metadata and each embedded texture without extracting the archive',async()=>{const root=await fs.mkdtemp(path.join(os.tmpdir(),'sog archive '));try{const archive={'meta.json':Buffer.from(JSON.stringify(single())),...Object.fromEntries(textures.map(name=>[name,Buffer.from('RIFF\0\0\0\0WEBPtestfixture')]))},source=path.join(root,'Photo #100%20 東.sog');await fs.writeFile(source,zipSync(archive));assert.equal((await sogFiles(source)).count,8);delete archive['sh0.webp'];await fs.writeFile(source,zipSync(archive));await assert.rejects(sogFiles(source),/Missing SOG texture/);}finally{await fs.rm(root,{recursive:true,force:true});}});
 test('PLY options map legacy labels but validate all explicit SOG conversion tuning',()=>{assert.equal(conversionOptions({method:'quality'}).method,'adaptive');assert.equal(conversionOptions({method:'quick'}).method,'uniform');for(const value of [{method:'other'},{levels:1},{chunkCount:0},{chunkExtent:0},{maxSh:4},{iterations:0}])assert.throws(()=>conversionOptions(value),/Invalid/);});
-test('older SOG v2 without explicit harmonic bands keeps the supported centroid-width inference path',()=>{const meta={...single(),shN:{count:64,codebook:[0],files:['shN_centroids.webp','shN_labels.webp']}};assert.equal(textureNames(meta).files.length,7);for(const bands of [0,4,-1,1.5])assert.throws(()=>textureNames({...meta,shN:{...meta.shN,bands}}),/harmonic degree/);for(const bands of [1,2,3])assert.equal(textureNames({...meta,shN:{...meta.shN,bands}}).files.length,7);});
+test('older SOG v2 without explicit harmonic bands keeps the supported centroid-width inference path',()=>{const meta={...single(),shN:{count:64,codebook:Array(256).fill(0),files:['shN_centroids.webp','shN_labels.webp']}};assert.equal(textureNames(meta).files.length,7);for(const bands of [0,4,-1,1.5])assert.throws(()=>textureNames({...meta,shN:{...meta.shN,bands}}),/harmonic degree/);for(const bands of [1,2,3])assert.equal(textureNames({...meta,shN:{...meta.shN,bands}}).files.length,7);});
 test('actual CPU PLY conversion commits only a complete SOG source and preserves original authoring through cancellation',{skip:process.platform!=='win32'||!existsSync(path.resolve('sogs-tools/convert.mjs'))},async()=>{const root=await fs.mkdtemp(path.join(os.tmpdir(),'sogs conversion '));try{const input=path.join(root,'source #100%20 東.ply'),bytes=plyFixture(128),p=project('old.rad');p.scenes[0].hotspots=[{id:'info',label:'History',position:[1,2,3],kind:'page',target:'history'}];p.pages=[{id:'history',title:'History',html:'',blocks:[]}];const original=structuredClone(p);await fs.writeFile(input,bytes);const reference=await convertPlyToSogs({source:input,projectRoot:root,tools:path.resolve('sogs-tools'),compute:'cpu',method:'adaptive',maxSh:0,levels:3,iterations:1}).promise;assert.match(reference,/^assets\/sogs\/[^/]+\/lod-meta\.json$/);assert.equal((await sogFiles(path.join(root,reference))).lodLevels,3);assert.deepEqual(await fs.readFile(input),bytes);assert.deepEqual(p,original);
  const extracted=path.join(root,'finest.ply'),config=path.join(root,'extract.json'),guard=path.join(root,'offline.cjs');
  await fs.writeFile(config,JSON.stringify({mode:'extract',source:path.join(root,reference),output:extracted}));

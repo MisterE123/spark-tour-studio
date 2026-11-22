@@ -2,10 +2,29 @@
 
 Branch: `Experiemental-Radix-SOGS` (the requested spelling).
 Based on the released Studio **1.23.0**. Main and its portable executable are
-separate from this experiment. This branch runs its own CI. After its checks pass,
-GitHub publishes a clearly labeled **experimental prerelease**, with a unique
-`radix-sogs-experiment-*` tag and checksums. It does not change the stable latest
-release or use a `v*` release tag.
+separate from this experiment. Ordinary branch pushes run the full experimental
+workflow and publish a clearly labeled **experimental prerelease** after the
+checks pass, with a unique `radix-sogs-experiment-*` tag and checksums. Stable
+`v*` tags stay on the stable release workflow.
+
+For hardware retest candidates, put `[test candidate]` in the tip commit message
+before pushing to `Experiemental-Radix-SOGS`. The full workflow builds and verifies
+the ZIP and uploads it to the workflow run's **Artifacts** section. The prerelease
+job is skipped. For a manual run, select the experimental branch and leave
+**Publish a prerelease after the full checks pass** unchecked. Check that box
+only when deliberately publishing a tested branch build.
+
+To run the strict renderer check locally on Windows after `npm ci`:
+
+```powershell
+npx playwright install chromium --no-shell
+npm run bundle:sogs
+$env:SPARK_TEST_BROWSER_CHANNEL = 'chromium'
+node scripts/radix-backend-check.mjs
+```
+
+The check requires both actual WebGPU (SwiftShader) and actual WebGL and runs
+the same tint, surface picking, retry and cancellation assertions on each.
 
 Downloads include a complete **Windows x64 experimental ZIP** containing the
 portable editor, local tour launcher, web-runtime ZIP, instructions, build
@@ -13,7 +32,7 @@ identity, full component notices and checksums. The standalone EXE and runtime
 ZIP remain separate downloads as well. CI verifies the complete archive before
 uploading it; a missing editor bundle fails publication.
 
-## Current verified delivery — October 30
+## Verified delivery — October 30
 
 The GPU-preferred importer and corrected native packaging are compiled at
 `29c38edfe332dfb617bcca9e7fa6cfaf65cdc0bf`, with clean build metadata.

@@ -78,9 +78,13 @@ export class TourRuntime {
  get currentViewpoint(){return this.selectedViewpoint;}
  set currentViewpoint(id:string){if(id===this.selectedViewpoint)return;this.selectedViewpoint=id;this.applyScenePerformance();}
  showViewpoints=false;swapSticks=false;xrFly=false;onViewpoint=(id:string)=>{};
- private bubbleOcclusion=new WeakMap<THREE.Object3D,{at:number;eye:THREE.Vector3;point:THREE.Vector3;hidden:boolean;blockedCount:number}>();private occlusionCursor=0;private occlusionRay=new THREE.Raycaster();
+ private bubbleOcclusion=new WeakMap<THREE.Object3D,{at:number;eye:THREE.Vector3;point:THREE.Vector3;hidden:boolean;blockedCount:number}>();private occlusionCursor=0;
+ private bubbleColliderRealignment?:Promise<void>;
+ private movementMode:Mode='jumps';
+ get mode(){return this.movementMode;}
+ set mode(mode:Mode){if(mode===this.movementMode)return;this.movementMode=mode;this.clearBubbleOcclusion();}
  private menuRecenterFrames=0;private menuOpen=false;private menuTab:'move'|'scenes'|'views'|'options'='move';private menuPage=0;private confirmExit=false;private held=new Map<THREE.Object3D,THREE.Object3D|null>();private teleportController?:THREE.XRTargetRaySpace;private teleportPoint?:THREE.Vector3;private aimTime=0;private hovered?:THREE.Object3D;private routeStall=0;private lastSafeHead?:THREE.Vector3;private menuAnchor=new THREE.Vector3();private wristMenu=badge('menu','Tour menu');private teleportRing=new THREE.Mesh(new THREE.RingGeometry(.17,.25,48),new THREE.MeshBasicMaterial({color:0x9fffc8,side:THREE.DoubleSide,depthTest:false,depthWrite:false}));
- project:Project|null=null;hosting:Hosting={assetBaseUrl:'./',sceneUrls:{}};base=location.href;active:TourScene|null=null;mode:Mode='jumps';viewHeight=1.7;stepHeight=DEFAULT_STEP_HEIGHT;private visitorSpeed=1;onSpeed=(value:number)=>{};get speedMultiplier(){return this.visitorSpeed;}set speedMultiplier(value:number){if(!Number.isFinite(value)||value<.05||value>20)return;this.visitorSpeed=value;this.onSpeed(value);}private appliedXRScale=1;get speed(){return movementSpeed(this.project,this.active,this.speedMultiplier);}set speed(value:number){this.speedMultiplier=value/movementSpeed(this.project,this.active,1);}quality=1;performanceSettings:PerformanceSettings=PerformanceSettingsSchema.parse({});frameMs=16;snap=true;editing=false;blocked=false;
+ project:Project|null=null;hosting:Hosting={assetBaseUrl:'./',sceneUrls:{}};base=location.href;active:TourScene|null=null;viewHeight=1.7;stepHeight=DEFAULT_STEP_HEIGHT;private visitorSpeed=1;onSpeed=(value:number)=>{};get speedMultiplier(){return this.visitorSpeed;}set speedMultiplier(value:number){if(!Number.isFinite(value)||value<.05||value>20)return;this.visitorSpeed=value;this.onSpeed(value);}private appliedXRScale=1;get speed(){return movementSpeed(this.project,this.active,this.speedMultiplier);}set speed(value:number){this.speedMultiplier=value/movementSpeed(this.project,this.active,1);}quality=1;performanceSettings:PerformanceSettings=PerformanceSettingsSchema.parse({});frameMs=16;snap=true;editing=false;blocked=false;
  private firstDisplay?:{mesh:SplatAssetGroup};
  loading:SceneLoadState|null=null;onLoading=(state:SceneLoadState|null)=>{};
  private loadingListeners=new Set<()=>void>();
@@ -256,7 +260,7 @@ export class TourRuntime {
  openViewDetails(){const view=this.active?.viewpoints.find(view=>view.id===this.currentViewpoint),details=view?.extendedDescription;if(!view)return;this.currentPage=details?.enabled?{id:'view-details-'+view.id,title:view.name,html:'',blocks:[{type:'text',text:richTextPlainText(details.richText),richText:details.richText,url:''}],sceneLinks:details.links}:{id:'view-description',title:view.name,html:'',blocks:[{type:'text',text:view.description||'',url:''}]};this.menuOpen=true;this.refreshHud(true);}
  private get velocityY(){return this.walking.velocityY;}
  private set velocityY(value:number){this.walking.velocityY=value;}
- private clearPhysics(){this.walking.reset();this.walkCamera.reset();this.routes.dispose();this.world?.free();this.world=undefined;this.body=undefined;this.character=undefined;this.capsule=undefined;this.lastSafeHead=undefined;this.bubbleOcclusion=new WeakMap();}
+ private clearPhysics(){this.walking.reset();this.walkCamera.reset();this.routes.dispose();this.world?.free();this.world=undefined;this.body=undefined;this.character=undefined;this.capsule=undefined;this.lastSafeHead=undefined;this.bubbleColliderRealignment=undefined;this.clearBubbleOcclusion();}
  private clearCollider(){this.colliderLoading=false;this.colliderFailure='';++this.colliderGeneration;++this.modeRequest;this.preparingMode=false;this.colliderAbort?.abort();this.colliderAbort=undefined;this.pagedCollider?.dispose();this.pagedCollider=undefined;this.fallbackNavigationDirty=false;this.colliderSource='';this.clearPhysics();if(this.collider){release(this.collider);this.collider=undefined;}}
  private loadInitialCollider(sceneId:string,token:number,progress:(phase:string)=>void):Promise<void>{
   const pending=this.initialColliderLoad;if(pending?.generation===token&&pending.sceneId===sceneId)return pending.promise;
@@ -280,7 +284,7 @@ export class TourRuntime {
   if(isPagedCollision(s.collider)){
    progress('Loading navigation coverage…');const abort=this.colliderAbort=new AbortController(),response=await fetch(url,{signal:abort.signal});if(!response.ok)throw Error(`Collision manifest request failed (${response.status}).`);const text=new TextDecoder().decode(await readCollisionResponse(response,32*1024*1024)),manifest=validatePagedCollisionManifest(JSON.parse(text));await initializingPhysics;if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead)return;
    this.world=new RAPIER.World({x:0,y:-9.81,z:0});const root=new THREE.Group();apply(root,this.active!.colliderTransform);this.content.add(root);this.collider=root;root.visible=this.colliderVisible;
-   const paged=this.pagedCollider=new PagedCollider(manifest,url,this.world);root.add(paged.group);this.overlay.add(paged.overview.group);paged.overview.setVisible(this.colliderVisible);this.syncCollisionActivity();this.createCharacter();paged.onError=message=>{this.report('Nearby navigation data: '+message,true,'navigation');};paged.onChange=()=>{this.bubbleOcclusion=new WeakMap();if(!this.pagedNavigationAligned)this.fallbackNavigationDirty=true;};
+   const paged=this.pagedCollider=new PagedCollider(manifest,url,this.world);root.add(paged.group);this.overlay.add(paged.overview.group);paged.overview.setVisible(this.colliderVisible);this.syncCollisionActivity();this.createCharacter();paged.onError=message=>{this.report('Nearby navigation data: '+message,true,'navigation');};paged.onChange=()=>{this.clearBubbleOcclusion();if(!this.pagedNavigationAligned)this.fallbackNavigationDirty=true;};
    const entry=s.viewpoints.find(view=>view.id===(this.pendingDestination?.id===s.id&&this.pendingDestination.viewpoint||s.entry));progress('Opening nearby navigation tiles…');if(this.editing&&entry)try{await paged.ensure(this.content.localToWorld(v(entry.position)),4);}catch(error){if((error as Error)?.name!=='AbortError'||this.editing||this.mode!=='jumps')throw error;}
    if(token!==this.generation||colliderToken!==this.colliderGeneration||this.dead)return;this.configurePagedNavigation();this.transformKey=JSON.stringify(s.transform);this.colliderTransformKey=JSON.stringify(s.colliderTransform);return;
   }
@@ -290,7 +294,16 @@ export class TourRuntime {
   root.traverse(o=>{if(!(o instanceof THREE.Mesh))return;for(const m of Array.isArray(o.material)?o.material:[o.material])m.dispose();o.material=new THREE.MeshBasicMaterial({color:0x77efd3,wireframe:true,transparent:true,opacity:.45});});root.visible=this.colliderVisible;this.rebuildPhysics();
  }
  private rebuildPhysics(){
-  if(this.pagedCollider){const paged=this.pagedCollider,realigned=paged.realign().then(()=>{if(this.pagedCollider===paged)this.configurePagedNavigation();}).catch(error=>{if(this.pagedCollider===paged)this.onStatus(String(error),true);});if(!this.colliderLoading)this.colliderTransition=realigned;return;}
+  if(this.pagedCollider){
+   const paged=this.pagedCollider;
+   this.clearBubbleOcclusion();
+   const realigned=paged.realign().then(()=>{if(this.pagedCollider===paged)this.configurePagedNavigation();})
+    .catch(error=>{if(this.pagedCollider===paged)this.onStatus(String(error),true);})
+    .finally(()=>{if(this.bubbleColliderRealignment===realigned)this.bubbleColliderRealignment=undefined;});
+   this.bubbleColliderRealignment=realigned;
+   if(!this.colliderLoading)this.colliderTransition=realigned;
+   return;
+  }
   const position=this.body?.translation()||{x:this.rig.position.x,y:this.rig.position.y-.85,z:this.rig.position.z},root=this.collider;if(!root)return;this.clearPhysics();this.content.updateMatrixWorld(true);this.world=new RAPIER.World({x:0,y:-9.81,z:0});
   const navigationParts:{positions:Float32Array;indices:Uint32Array}[]=[];root.traverse(o=>{if(!(o instanceof THREE.Mesh))return;const pos=o.geometry.getAttribute('position');if(!pos)return;const verts=collisionVertices(pos,o.matrixWorld);const indices=o.geometry.index?new Uint32Array(o.geometry.index.array):Uint32Array.from({length:pos.count},(_,i)=>i);this.world!.createCollider(RAPIER.ColliderDesc.trimesh(verts,indices));navigationParts.push({positions:verts,indices});});
   this.body=this.world.createRigidBody(RAPIER.RigidBodyDesc.kinematicPositionBased().setTranslation(position.x,position.y,position.z));this.capsule=this.world.createCollider(RAPIER.ColliderDesc.capsule(this.crouched?.3:.6,.25),this.body);this.character=this.world.createCharacterController(.015);configureWalkingController(this.character);this.walking.reset();this.walkCamera.reset();this.world.step();this.routes.build(navigationParts,{stepHeight:this.stepHeight});
@@ -489,34 +502,43 @@ export class TourRuntime {
  rebuildMarkers(){for(const o of [...this.viewMarkers.children])releaseUI(o);this.viewMarkers.visible=false;}
  private pointerRay(e:PointerEvent){const b=this.renderer.domElement.getBoundingClientRect();this.ray.near=0;this.ray.far=Infinity;this.ray.setFromCamera(document.pointerLockElement===this.renderer.domElement?new THREE.Vector2():new THREE.Vector2((e.clientX-b.left)/b.width*2-1,-(e.clientY-b.top)/b.height*2+1),this.camera);}
  private controllerRay(controller:THREE.Object3D){this.ray.set(controller.getWorldPosition(new THREE.Vector3()),new THREE.Vector3(0,0,-1).applyQuaternion(controller.getWorldQuaternion(new THREE.Quaternion())));this.ray.near=0;this.ray.far=30;}
- private updateBubbleVisibility(object:THREE.Object3D,cameraPosition:THREE.Vector3){const position=object.getWorldPosition(new THREE.Vector3()),distance=position.distanceTo(cameraPosition),reveal=this.editing&&object===this.selected,appearance=bubbleAppearance(resolveBubbleSettings(this.project,this.active),object.userData.hotspot?.size,distance,reveal),occlusion=this.bubbleOcclusion.get(object);if(!reveal&&resolveBubbleSettings(this.project,this.active).occlusion!==false&&occlusion?.hidden&&occlusion.point.distanceToSquared(position)<.0001&&occlusion.eye.distanceToSquared(cameraPosition)<.25){appearance.visibility=0;appearance.interactive=false;}badgeVisibility(object,appearance.visibility);return {appearance,distance};}
- private checkBubbleOcclusion(point:THREE.Vector3,eye:THREE.Vector3){
-  if(!this.occlusionRayBlocked(point,eye))return false;
+ private clearBubbleOcclusion(){this.bubbleOcclusion=new WeakMap();this.occlusionCursor=0;}
+ private get bubbleOcclusionWorld(){
+  // Viewpoints may retain collision data after Walk or Drone. Bubble visibility
+  // should be the same whether the visitor entered Viewpoints directly or later.
+  if(this.mode==='jumps'||this.colliderLoading||this.bubbleColliderRealignment||!this.collider||!this.active?.collider||this.colliderSource!==this.active.collider)return;
+  return this.world;
+ }
+ private updateBubbleVisibility(object:THREE.Object3D,cameraPosition:THREE.Vector3){
+  const position=object.getWorldPosition(new THREE.Vector3()),distance=position.distanceTo(cameraPosition);
+  const reveal=this.editing&&object===this.selected,settings=resolveBubbleSettings(this.project,this.active);
+  const appearance=bubbleAppearance(settings,object.userData.hotspot?.size,distance,reveal);
+  const occlusion=settings.occlusion&&this.bubbleOcclusionWorld?this.bubbleOcclusion.get(object):undefined;
+  if(!reveal&&occlusion?.hidden&&occlusion.point.distanceToSquared(position)<.0001&&occlusion.eye.distanceToSquared(cameraPosition)<.25){appearance.visibility=0;appearance.interactive=false;}
+  badgeVisibility(object,appearance.visibility);return {appearance,distance};
+ }
+ private checkBubbleOcclusion(point:THREE.Vector3,eye:THREE.Vector3,world=this.world){
+  if(!world||!this.occlusionRayBlocked(point,eye,world))return false;
   // A marker is partially visible if any of its small surrounding probes clears
   // rough ground or a mesh edge. Keep the extra work bounded and cached below.
   const radius=THREE.MathUtils.clamp(point.distanceTo(eye)*.02,.22,.55),side=point.clone().sub(eye).cross(new THREE.Vector3(0,1,0)).normalize().multiplyScalar(radius);
-  for(const offset of [new THREE.Vector3(0,radius,0),side,side.clone().negate()])if(!this.occlusionRayBlocked(point.clone().add(offset),eye))return false;
+  for(const offset of [new THREE.Vector3(0,radius,0),side,side.clone().negate()])if(!this.occlusionRayBlocked(point.clone().add(offset),eye,world))return false;
   return true;
  }
- private occlusionRayBlocked(point:THREE.Vector3,eye:THREE.Vector3){
+ private occlusionRayBlocked(point:THREE.Vector3,eye:THREE.Vector3,world:Rapier.World){
   const distance=point.distanceTo(eye),limit=bubbleOcclusionLimit(distance);if(limit<=.15)return false;
   const direction=point.clone().sub(eye).normalize();
-  if(this.world){const hit=this.world.castRay(new RAPIER.Ray(eye.clone().addScaledVector(direction,.1),direction),Math.max(0,limit-.1),true,undefined,undefined,this.capsule);if(hit)return true;}
-  const mesh=this.mesh;if(!mesh?.parent||!mesh.visible)return false;
-  // Radix exposes a bounded coarse proxy for placement. Its samples do not
-  // prove occlusion; imported collision geometry remains authoritative here.
-  return false;
+  return !!world.castRay(new RAPIER.Ray(eye.clone().addScaledVector(direction,.1),direction),limit-.1,true,undefined,undefined,this.capsule);
  }
  private updateBubbleOcclusion(eye:THREE.Vector3,time:number){
-  if(resolveBubbleSettings(this.project,this.active).occlusion===false||!this.bubbles.children.length||(!this.world&&!this.mesh))return;
-  // Spark maintains a reduced LoD raycast set for paged scenes. Reuse that set
-  // instead of asking for a full-resolution readback or walking millions of splats.
+  const settings=resolveBubbleSettings(this.project,this.active),world=this.bubbleOcclusionWorld;
+  if(!settings.occlusion||!this.bubbles.children.length||!world)return;
   const objects=this.bubbles.children,forward=this.camera.getWorldDirection(new THREE.Vector3()),started=performance.now();let checks=0;
   for(let scanned=0;scanned<objects.length&&checks<2&&performance.now()-started<2;scanned++){
    const object=objects[this.occlusionCursor++%objects.length];if(this.editing&&object===this.selected)continue;
-   const point=object.getWorldPosition(new THREE.Vector3()),offset=point.clone().sub(eye),distance=offset.length();if(offset.dot(forward)<=0||bubbleAppearance(resolveBubbleSettings(this.project,this.active),object.userData.hotspot?.size,distance).visibility===0)continue;
+   const point=object.getWorldPosition(new THREE.Vector3()),offset=point.clone().sub(eye),distance=offset.length();if(offset.dot(forward)<=0||bubbleAppearance(settings,object.userData.hotspot?.size,distance).visibility===0)continue;
    const previous=this.bubbleOcclusion.get(object);if(previous&&time-previous.at<180&&previous.eye.distanceToSquared(eye)<.0004&&previous.point.distanceToSquared(point)<.000004)continue;
-   const blocked=this.checkBubbleOcclusion(point,eye),same=previous&&previous.eye.distanceToSquared(eye)<.25&&previous.point.distanceToSquared(point)<.0001,blockedCount=blocked?Math.min(2,(same?previous.blockedCount:0)+1):0;
+   const blocked=this.checkBubbleOcclusion(point,eye,world),same=previous&&previous.eye.distanceToSquared(eye)<.25&&previous.point.distanceToSquared(point)<.0001,blockedCount=blocked?Math.min(2,(same?previous.blockedCount:0)+1):0;
    this.bubbleOcclusion.set(object,{at:time,eye:eye.clone(),point,hidden:blockedCount>=2,blockedCount});checks++;
   }
  }

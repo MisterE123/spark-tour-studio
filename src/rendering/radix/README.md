@@ -12,6 +12,8 @@ Local adaptations replace external imports with the pinned distribution, validat
 
 `index.ts`, `surface-proxy.ts` and `../backend.ts` are application integration code. They retain the application's navigation, physics, annotations and authoring model outside the renderer boundary.
 
+The metadata checks extracted into `shared/sog-metadata.mjs` serve both the desktop importer and the adapted visitor loader under the same notice.
+
 ## Integration contract
 
 `await createRadixBackend()` creates one initialized Three `WebGPURenderer` and one splat renderer. Add `backend.node` to the primary scene. The backend owns both and disposes them, its worker pool, and its canvas. Call `backend.update(camera,time)` before the primary scene render and `backend.markRendered()` immediately afterward.

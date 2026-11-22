@@ -84,6 +84,47 @@ try{
  await page.evaluate(async()=>{test.runtime.setEditing(false);test.runtime.setMode('jumps');await test.startXR();test.tickXR(2);test.runtime.jump('far',false);});let xr=await page.evaluate(()=>test.tickXR(2));assert.deepEqual(xr,{session:true,manager:true,array:true,eyes:2,ended:0});state=await record('Authored preview keeps the actual Three XR session and stereo cameras');assert.ok(state.paused);
  await page.evaluate(async()=>{test.runtime.setMode('fly');await test.runtime.modeTransition;test.hold=true;test.runtime.rig.position.set(12,0,4);test.runtime.focusCollision();});await page.waitForFunction(()=>test.held.length>0);const xrBefore=await page.evaluate(()=>test.steps);await page.evaluate(()=>test.runtime.setMode('jumps'));await page.waitForFunction(()=>!test.runtime.pagedCollider.work);await page.evaluate(()=>{test.hold=false;test.release();});xr=await page.evaluate(()=>test.tickXR(2));assert.deepEqual(xr,{session:true,manager:true,array:true,eyes:2,ended:0});assert.equal(await page.evaluate(()=>test.steps),xrBefore,'late Drone patch cannot step physics after XR switches to Viewpoints');
  await page.evaluate(async()=>{test.runtime.setMode('explore');await test.runtime.modeTransition;});state=await record('Walk resumes fresh paged collision inside the same actual XR session');assert.equal(state.mode,'explore');assert.ok(!state.paused);assert.equal(state.status,'');xr=await page.evaluate(()=>test.tickXR(2));assert.deepEqual(xr,{session:true,manager:true,array:true,eyes:2,ended:0});report.xr=xr;
+ await page.evaluate(async()=>{
+  const live=test.runtime.pagedCollider,pager=new live.constructor(live.manifest,live.url,test.runtime.world);
+  const from={x:21.5,y:1.5,z:4.5},to={x:23.45,y:1.5,z:4.5},radius=.415;
+  await pager.ensure({x:20,y:1.5,z:4.5});
+  test.emptyMotion={pager,from,to,radius};
+  test.hold=true;
+  pager.update(from,performance.now());
+ });
+ await page.waitForFunction(()=>test.held.length>0);
+ const unknownHalo=await page.evaluate(()=>{
+  const {pager,from,to,radius}=test.emptyMotion;
+  const allowed=pager.allowsMotion(from,to,radius,true);
+  test.hold=false;test.release();
+  return allowed;
+ });
+ assert.equal(unknownHalo,false);
+ await page.waitForFunction(()=>!test.emptyMotion.pager.work);
+ await page.evaluate(async()=>{
+  const {pager}=test.emptyMotion;
+  test.emptyMotion.oldSurface=pager.surfaces.get('23,1,4');
+  test.hold=true;
+  await pager.stream.load(pager.stream.entries.get('3,0,0'));
+ });
+ await page.waitForFunction(()=>test.held.length>0);
+ report.emptyMotion=await page.evaluate(()=>{
+  const {pager,from,to,radius}=test.emptyMotion;
+  const prepared=pager.physicsChunks;
+  const drone=pager.allowsMotion(from,to,radius,true),standard=pager.allowsMotion(from,to,radius);
+  const nearWallFrom={...from,y:2.2},nearWallTo={...to,y:2.2};
+  const nearWallVoxels=pager.probeHeadMotion(nearWallFrom,nearWallTo,radius);
+  const mixedHalo=pager.allowsMotion(nearWallFrom,nearWallTo,radius,true);
+  const outsideWindow=pager.allowsMotion(from,{...to,x:25.45},radius,true);
+  const unchanged=pager.physicsChunks===prepared;
+  const retainedSurface=!!test.emptyMotion.oldSurface&&pager.surfaces.get('23,1,4')===test.emptyMotion.oldSurface;
+  test.hold=false;test.release();
+  return {drone,standard,nearWallVoxels,mixedHalo,outsideWindow,unchanged,retainedSurface};
+ });
+ assert.deepEqual(report.emptyMotion,{drone:true,standard:false,nearWallVoxels:'clear',mixedHalo:false,outsideWindow:false,unchanged:true,retainedSurface:true});
+ await page.waitForFunction(()=>!test.emptyMotion.pager.work);
+ assert.equal(await page.evaluate(()=>{const {pager,from,to,radius}=test.emptyMotion;const allowed=pager.allowsMotion(from,to,radius);pager.dispose();return allowed;}),true);
+ await record('Immersive Drone can cross a certified empty pending block while mixed and unknown blocks stay closed');
  }
  assert.deepEqual(errors,[]);report.errors=errors;report.pass=true;await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));console.log('PASS: '+report.cases.length+' real collision lifecycle cases; '+output);
 }catch(error){report.error=String(error);report.errors=errors;report.failureState=await page?.evaluate(()=>({state:test.snapshot(),statuses:test.statuses,session:!!test.session,callback:!!test.session?.callback,actualSession:!!test.runtime.renderer.xr.getSession()})).catch(()=>null);await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));console.error(JSON.stringify(report.failureState));throw error;}

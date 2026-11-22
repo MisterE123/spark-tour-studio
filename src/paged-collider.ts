@@ -15,6 +15,7 @@ type Resident={mesh:THREE.Mesh;collider:Rapier.Collider;triangles:number};
 type FocusWindow={point:THREE.Vector3;body?:THREE.Vector3;samples?:THREE.Vector3[]};
 export type PhysicsLease={release():void};
 const MAX_TRIANGLES=600000,MAX_CHUNKS=2048,BATCH=4;
+const MAX_EMPTY_PROOF_VOXELS=1200,MAX_EMPTY_PROOFS=12;
 const vector=(p:Point)=>new THREE.Vector3(p.x,p.y,p.z);
 
 /** Verified page caching is independent of the exact physics installed near visitors. */
@@ -135,14 +136,31 @@ export class PagedCollider {
  updateOverview(camera:THREE.PerspectiveCamera,height:number){this.overview.update(camera,height);}
  async realign(){this.prepared.clear();this.skipped.clear();this.planKey='';this.focusKey='';this.plan();await this.flush();}
  navigationParts(){this.updateFrame(true);return [...this.surfaces.values()].map(({mesh})=>{const input=mesh.geometry.getAttribute('position'),positions=new Float32Array(input.count*3),point=new THREE.Vector3();for(let i=0;i<input.count;i++){point.fromBufferAttribute(input,i).applyMatrix4(mesh.matrixWorld);point.toArray(positions,i*3);}return {positions,indices:new Uint32Array(mesh.geometry.index!.array)};});}
- private covered(a:THREE.Vector3,b:THREE.Vector3,radius:number,halfExtent=[0,0,0]){
+ private verifiedEmptyPendingChunk(key:string,coord:number[]){
+  if(this.dead||this.paused||!this.desired.has(key)||this.skipped.has(key))return false;
+  // The worker emits faces only between allowed and blocked voxels. Prove
+  // every voxel in the block and its one-voxel halo is allowed. This box
+  // overlaps the halo voxels without reaching the next voxel past the halo.
+  // Leave any previously installed boundary in Rapier until its normal update.
+  const {size}=this.config,detail=this.manifest.detail,center=coord.map(i=>(i+.5)*size),half=size/2+.75*detail;
+  return this.stream.probeCapsule(center,center,detail*.001,[half,half,half])==='clear';
+ }
+ private covered(a:THREE.Vector3,b:THREE.Vector3,radius:number,halfExtent=[0,0,0],verifyEmptyPending=false){
   const start=a.toArray(),end=b.toArray(),size=this.config.size,n=this.manifest.tileCells,detail=this.manifest.detail,low=start.map((value,i)=>Math.floor((Math.min(value,end[i])-radius-halfExtent[i])/size)),high=start.map((value,i)=>Math.floor((Math.max(value,end[i])+radius+halfExtent[i])/size));
   const tileLow=start.map((value,i)=>Math.floor((Math.min(value,end[i])-radius-halfExtent[i])/(n*detail))),tileHigh=start.map((value,i)=>Math.floor((Math.max(value,end[i])+radius+halfExtent[i])/(n*detail)));if(this.stream.air.containingNode(tileLow,tileHigh))return true;
   if(low.reduce((count,value,i)=>count*(high[i]-value+1),1)>16384)return false;const threshold=radius*radius-Math.min(1e-10,radius*radius*1e-6);
-  for(let x=low[0];x<=high[0];x++)for(let y=low[1];y<=high[1];y++)for(let z=low[2];z<=high[2];z++){const coord=[x,y,z],key=coord.join(',');if(this.prepared.has(key))continue;const min=coord.map((value,i)=>value*size-halfExtent[i]),max=coord.map((value,i)=>(value+1)*size+halfExtent[i]);if(radius===0||segmentBoxDistanceSquared(start,end,min,max)<threshold)return false;}return true;
+  // Large fine-voxel chunks stay on the worker path.
+  let remainingProofs=verifyEmptyPending?Math.min(MAX_EMPTY_PROOFS,Math.floor(MAX_EMPTY_PROOF_VOXELS/(this.config.cells+2)**3)):0;
+  for(let x=low[0];x<=high[0];x++)for(let y=low[1];y<=high[1];y++)for(let z=low[2];z<=high[2];z++){
+   const coord=[x,y,z],key=coord.join(',');if(this.prepared.has(key))continue;
+   const min=coord.map((value,i)=>value*size-halfExtent[i]),max=coord.map((value,i)=>(value+1)*size+halfExtent[i]);
+   if(radius!==0&&segmentBoxDistanceSquared(start,end,min,max)>=threshold)continue;
+   if(remainingProofs--<=0||!this.verifiedEmptyPendingChunk(key,coord))return false;
+  }
+  return true;
  }
  allows(point:Point,halfHeight=0,radius=.19){const a=this.toGeneration({x:point.x,y:point.y-halfHeight,z:point.z}),b=this.toGeneration({x:point.x,y:point.y+halfHeight,z:point.z}),r=radius/this.scale();return this.covered(a,b,r)&&this.stream.allowsCapsule(a,b,r);}
- allowsMotion(from:Point,to:Point,radius=.19){const a=this.toGeneration(from),b=this.toGeneration(to),r=radius/this.scale();return this.covered(a,b,r)&&this.stream.allowsCapsule(a,b,r);}
+ allowsMotion(from:Point,to:Point,radius=.19,verifyEmptyPending=false){const a=this.toGeneration(from),b=this.toGeneration(to),r=radius/this.scale();return this.covered(a,b,r,undefined,verifyEmptyPending)&&this.stream.allowsCapsule(a,b,r);}
  /** Head visibility uses known voxel evidence, independently of physics readiness. */
  probeHeadMotion(from:Point,to:Point,radius=.095){const a=this.toGeneration(from),b=this.toGeneration(to);return this.stream.probeCapsule(a,b,radius/this.scale());}
  allowsWalkingMotion(from:Point,to:Point,halfHeight=.6,radius=.24){const a=this.toGeneration(from),b=this.toGeneration(to),axis=this.toGeneration({x:from.x,y:from.y+halfHeight,z:from.z}).sub(a),half=axis.toArray().map(Math.abs),r=radius/this.scale();return this.covered(a,b,r,half)&&this.stream.allowsCapsule(a,b,r,half);}

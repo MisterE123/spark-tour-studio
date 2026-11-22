@@ -658,7 +658,21 @@ export class TourRuntime {
  toggleMenu(){if(this.xrInputSuspended)return;this.menuOpen=!this.menuOpen;this.currentPage=null;this.confirmExit=false;this.cancelTeleport();this.routes.cancel();this.refreshHud(true);}
  closeContent(id?:string){if(id&&this.currentPage?.id!==id)return;this.currentPage=null;this.menuOpen=false;this.refreshHud();}
  refreshHud(reposition=false){for(const c of [...this.hud.children])releaseUI(c);if(!this.currentPage)this.xrContent.reset();this.hud.visible=this.renderer.xr.isPresenting&&(this.menuOpen||!!this.loading);if(!this.hud.visible)return;this.hud.scale.setScalar((this.currentPage?(this.xrContent.page===this.currentPage&&this.xrContent.focus>=0?.85:.75):.6)*this.xrUnit);
-  if(reposition||this.menuAnchor.lengthSq()===0){const head=this.camera,position=head.getWorldPosition(new THREE.Vector3()),direction=head.getWorldDirection(new THREE.Vector3());direction.y=0;if(direction.lengthSq()<.01)direction.set(0,0,-1);direction.normalize();this.hud.position.copy(position).addScaledVector(direction,1.75*this.xrUnit);this.hud.position.y-=.12*this.xrUnit;this.hud.lookAt(position.x,this.hud.position.y,position.z);this.menuAnchor.copy(this.hud.position);}
+  if(reposition||this.menuAnchor.lengthSq()===0){
+   const head=this.camera,direction=head.getWorldDirection(new THREE.Vector3());
+   if(this.currentPage&&!this.loading&&!this.confirmExit){
+    // Open bubble content in the tracked line of sight, including when the
+    // visitor picked a bubble above or below eye level. Anchor it in the world.
+    this.hud.position.copy(this.trackedHeadPosition()).addScaledVector(direction,1.75*this.xrUnit);
+    this.hud.quaternion.copy(head.getWorldQuaternion(new THREE.Quaternion()));
+   }else{
+    const position=head.getWorldPosition(new THREE.Vector3());
+    direction.y=0;if(direction.lengthSq()<.01)direction.set(0,0,-1);direction.normalize();
+    this.hud.position.copy(position).addScaledVector(direction,1.75*this.xrUnit);this.hud.position.y-=.12*this.xrUnit;
+    this.hud.lookAt(position.x,this.hud.position.y,position.z);
+   }
+   this.menuAnchor.copy(this.hud.position);
+  }
   const glass=`rgba(0,0,0,${Math.max(.22,Math.min(.7,this.project?.appearance?.glassShade??.26))})`;
   if(this.currentPage&&!this.loading&&!this.confirmExit){
    const focused=this.xrContent.page===this.currentPage&&this.xrContent.focus>=0;
@@ -667,7 +681,7 @@ export class TourRuntime {
    this.button('',focused?1.36:1.17,()=>this.closeContent(),.22,focused?1.28:1.15,glass,'close');
    this.xrContent.render(this.hud,this.currentPage,this.base,()=>this.refreshHud(),link=>this.followSceneLink(link));
    if(focused){this.button('Back to content',-1.37,()=>{this.xrContent.focus=-1;this.refreshHud();},2.55,0,glass,'chevron_left');}
-   else{const hint=panel('Scroll with the left stick · select a photo to enlarge',2.3,.14,'rgba(0,0,0,0)');hint.position.set(0,-.98,.03);this.hud.add(hint);this.button('Tour menu',-1.16,()=>{this.currentPage=null;this.refreshHud();},1.12,-.64,glass,'menu');const up=this.button('Up',-1.16,()=>this.xrContent.scroll(-.45),.48,.30,glass,'expand_less');up.userData.contentScroll=-1;const down=this.button('Down',-1.16,()=>this.xrContent.scroll(.45),.54,.91,glass,'expand_more');down.userData.contentScroll=1;}
+   else{const hint=panel('Scroll with the left stick · select a photo to enlarge',2.3,.14,'rgba(0,0,0,0)');hint.position.set(0,-.98,.03);this.hud.add(hint);this.button('Tour menu',-1.16,()=>{this.currentPage=null;this.refreshHud(true);},1.12,-.64,glass,'menu');const up=this.button('Up',-1.16,()=>this.xrContent.scroll(-.45),.48,.30,glass,'expand_less');up.userData.contentScroll=-1;const down=this.button('Down',-1.16,()=>this.xrContent.scroll(.45),.54,.91,glass,'expand_more');down.userData.contentScroll=1;}
    return;
   }
   const background=panel('',1.95,2.2,glass);background.position.z=-.015;background.renderOrder=90;background.userData.blocks=true;this.hud.add(background);const title=panel('Tour menu',1.55,.19,'rgba(0,0,0,0)','menu');title.position.set(-.12,.93,.02);this.hud.add(title);this.button('',.93,()=>{this.menuOpen=false;this.currentPage=null;this.refreshHud();},.22,.78,glass,'close');

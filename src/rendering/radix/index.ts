@@ -115,13 +115,13 @@ class RadixAsset extends SplatAssetGroup {
  get collection(){return this.current;}
  notePublished(){this.published=true;}
  reportError(error:unknown){this.fail(error,true);}
- update(now:number){
+ update(now:number,eyes?:readonly THREE.Camera[]){
   if(this.dead)return;
   this.updateWorldMatrix(true,false);this.updateDistances();
   if(this.stream){
    // Streaming uses asset-local units. Keep both tracked eyes inside the
    // near guard even for tours with a custom scene or headset scale.
-   if(this.stream.update(now,this.owner.rearCoverageMargin/this.lastScale))this.current=this.stream.collection;
+   if(this.stream.update(now,this.owner.rearCoverageMargin/this.lastScale,eyes))this.current=this.stream.collection;
    const s=this.stream.stats;Object.assign(this.stats,{selected:s.selected,shown:s.shown,residentSplats:s.residentSplats,residentFiles:s.residentFiles,loading:s.loading,failed:s.failed});
    if(this.stream.baseReady)this.finish();
    const sources=this.stream.proxySources();for(const source of sources)this.proxy.offer(source.key,source.arrays,source.retain,sources.length);
@@ -239,7 +239,7 @@ export class RadixBackend implements SplatBackend {
   Object.assign(this.stats,{selected:0,shown:0,residentSplats:0,loading:0,failed:0,coarseCoverageSplats:undefined});
   for(const asset of this.assets){
    if(!this.attached(asset))continue;
-   if(applied)try{asset.update(time);}catch(error){asset.reportError(error);}
+   if(applied)try{asset.update(time,view.cameras);}catch(error){asset.reportError(error);}
    objects.push(...asset.collection.objects.map(entry=>entry.object));if(asset.collection.count)members.add(asset);
    this.stats.selected+=asset.stats.selected;this.stats.shown+=asset.stats.shown;this.stats.residentSplats+=asset.stats.residentSplats;this.stats.loading+=asset.stats.loading;this.stats.failed+=asset.stats.failed;
    this.includeCoarseCoverage(asset);

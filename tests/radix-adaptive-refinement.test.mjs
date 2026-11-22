@@ -14,7 +14,7 @@ const output = await fs.mkdtemp(path.join(outputRoot, 'radix-refinement-'));
 const bundle = path.join(output, 'stream.mjs');
 await build({
   stdin: {
-    contents: 'export * from "./src/rendering/radix/sog/lod"; export {SogLodStream} from "./src/rendering/radix/sog/lodStream";',
+    contents: 'export * from "./src/rendering/radix/sog/lod"; export {SogLodStream} from "./src/rendering/radix/sog/lodStream"; export {StereoCoverage} from "./src/rendering/radix/sog/stereo-coverage";',
     resolveDir: process.cwd(),
   },
   outfile: bundle, bundle: true, format: 'esm', platform: 'node', packages: 'external', logLevel: 'silent',
@@ -41,7 +41,7 @@ test.after(async () => {
   await fs.unlink(bundle);
   await fs.rmdir(output);
 });
-const {parseLod, SogLodStream, defaultLodSettings, selectLevels} = api;
+const {parseLod, SogLodStream, defaultLodSettings, selectLevels, StereoCoverage} = api;
 
 const authored = 4_000_000;
 const floor = 1_013_712;
@@ -384,6 +384,145 @@ test('immersive snap turns and teleports restore warm coarse ranges before new d
     camera.position.z = -4;
     tick(115);
     assert.ok(stream.shown[front] >= 0);
+    assert.ok(stream.baseReady);
+  } finally {
+    stream.dispose();
+  }
+});
+
+function stereoEyes(fov, aspect) {
+  return [-.032,.032].map(x=>{
+    const eye=new THREE.PerspectiveCamera(fov,aspect,.05,100);
+    eye.position.x=x;
+    eye.updateMatrixWorld();
+    return eye;
+  });
+}
+
+test('a long offscreen range pays for detail only when its nearest corners also clear the motion guard', () => {
+  const stereo = new StereoCoverage();
+  stereo.update(stereoEyes(90, 1), new THREE.Matrix4());
+  const bounds = new Float32Array([6, -1, -3, 60, 1, -2]);
+  assert.equal(stereo.outside(bounds, 0, .35), true);
+  bounds[0] = 5;
+  assert.equal(stereo.outside(bounds, 0, .35), false, 'motion could reveal the inward end of the same range');
+});
+
+test('stereo side exclusion funds nearby floor and central detail at the existing coarse budget', () => {
+  const tree=xrTree({
+    floor:[[-.5,-.45,-1.15],[.5,-.35,-.55]],
+    center:[[-.15,-.1,-1.35],[.15,.25,-.85]],
+    left:[[-5,-.25,-1.3],[-4,.25,-.6]],
+    right:[[4,-.25,-1.3],[5,.25,-.6]],
+  });
+  const ids=['floor','center','left','right'];
+  const budget=tree.levelTotals[1],settings={...defaultLodSettings(true),splatBudget:budget,viewPriority:true,coverage:{mode:'guarded-view'}};
+  const eyes=stereoEyes(70,.75),stereo=new StereoCoverage();
+  const identity=new THREE.Matrix4();
+  stereo.update(eyes,identity);
+  const select=(coverage,viewPriority,eyes)=>{
+    const levels=new Int8Array(tree.leaves);
+    const count=selectLevels(tree,{x:0,y:0,z:0},{x:0,y:0,z:-1},{...settings,coverage,viewPriority},levels,new Float32Array(tree.leaves),1,.1,undefined,eyes);
+    return {count,levels:ids.map(id=>levels[xrLeaf(tree,id)])};
+  };
+  assert.equal(budget,40);
+  assert.deepEqual(select(settings.coverage,true,undefined),{count:budget,levels:[1,1,1,1]},'head-plane-only culling leaves no room for either foreground upgrade');
+  assert.deepEqual(select(settings.coverage,true,stereo),{count:36,levels:[0,0,-1,-1]});
+  for(const viewPriority of [true,false])assert.deepEqual(select({mode:'whole-scene'},viewPriority,stereo),{count:budget,levels:[1,1,1,1]},'fixed and distance-only whole-scene coverage stay intact');
+
+  const rotation=new THREE.Quaternion().setFromEuler(new THREE.Euler(.32,-.71,.21));
+  const asset=new THREE.Matrix4().compose(new THREE.Vector3(7,-3,11),rotation,new THREE.Vector3(2.5,2.5,2.5));
+  for(const eye of eyes){eye.position.applyMatrix4(asset);eye.quaternion.copy(rotation);eye.updateMatrixWorld();}
+  stereo.update(eyes,asset);
+  assert.deepEqual(select(settings.coverage,true,stereo),{count:36,levels:[0,0,-1,-1]},'local-space coverage survives an authored move, rotation and scale');
+});
+
+test('stereo coverage retains either asymmetric eye, edge straddlers and the motion guard', () => {
+  const [left,right]=stereoEyes(90,1),stereo=new StereoCoverage();
+  left.projectionMatrix.makePerspective(-.08,.02,.05,-.05,.05,100);
+  right.projectionMatrix.makePerspective(-.02,.08,.05,-.05,.05,100);
+  stereo.update([left,right],new THREE.Matrix4());
+  const outside=(values,margin=0)=>stereo.outside(Float32Array.from(values),0,margin);
+  for(const [x,only,other] of [[-2.4,left,right],[2.4,right,left]]){
+    const center=new THREE.Vector3(x,0,-2);
+    assert.ok(Math.abs(center.clone().project(only).x)<1);
+    assert.ok(Math.abs(center.clone().project(other).x)>1);
+    const box=[x-.04,-.04,-2.04,x+.04,.04,-1.96];
+    assert.equal(outside(box),false,'one eye can retain the region independently');
+    stereo.update([other,other],new THREE.Matrix4());
+    assert.equal(outside(box),true,'the other eye alone would drop it');
+    stereo.update([left,right],new THREE.Matrix4());
+  }
+  assert.equal(outside([3,-.1,-2.1,5,.1,-1.9]),false,'a leaf whose bounds intersect the right eye stays eligible');
+  const justOffscreen=[3.7,-.1,-2.02,3.8,.1,-1.98];
+  assert.ok(new THREE.Vector3(3.7,0,-2.02).project(right).x>1,'the entire near-edge box is beyond the wider eye');
+  assert.equal(outside(justOffscreen),false,'the angular motion guard retains the near-edge box');
+  const guarded=[5.8,-.1,-2.02,5.9,.1,-1.98];
+  assert.equal(outside(guarded),true,'the same out-of-view box is removable with no translation allowance');
+  assert.equal(outside(guarded,.35),false,'the translation allowance covers the near-margin region in world units');
+  assert.equal(outside([8,-.1,-2.1,8.1,.1,-1.9],.35),true,'farther offscreen ranges can still fund refinement');
+
+  const tree=xrTree({
+    center:[[-.2,-.2,-2.1],[.2,.2,-1.9]],
+    leftOnly:[[-2.44,-.04,-2.04],[-2.36,.04,-1.96]],
+    rightOnly:[[2.36,-.04,-2.04],[2.44,.04,-1.96]],
+    straddler:[[3,-.1,-2.1],[5,.1,-1.9]],
+    guard:[[5.8,-.1,-2.02],[5.9,.1,-1.98]],
+    out:[[8,-.1,-2.1],[8.1,.1,-1.9]],
+  });
+  const budget=tree.levelTotals[1],levels=new Int8Array(tree.leaves);
+  const settings={...defaultLodSettings(true),splatBudget:budget,viewPriority:true,coverage:{mode:'guarded-view'}};
+  const count=selectLevels(tree,{x:0,y:0,z:0},{x:0,y:0,z:-1},settings,levels,new Float32Array(tree.leaves),1,.35,undefined,stereo);
+  assert.ok(count<=budget);
+  for(const id of ['leftOnly','rightOnly','straddler','guard'])assert.ok(levels[xrLeaf(tree,id)]>=0,id);
+  assert.equal(levels[xrLeaf(tree,'out')],-1);
+  assert.equal(levels[xrLeaf(tree,'center')],0);
+});
+
+test('the pager restores stereo coverage before its timer on roll, snap or missing eyes', () => {
+  const tree=xrTree({
+    center:[[-.2,-.2,-2.1],[.2,.2,-1.9]],
+    side:[[1.8,-.1,-2.1],[1.9,.1,-1.9]],
+    farSide:[[3.8,-.1,-1.7],[3.9,.1,-1.6]],
+    upper:[[-.1,1.8,-2.1],[.1,1.9,-1.9]],
+  });
+  const camera=new THREE.PerspectiveCamera(100,.4,.05,100),eyes=stereoEyes(100,.4);
+  const budget=tree.levelTotals[1],settings={...defaultLodSettings(true),splatBudget:budget,residentBudget:budget,viewPriority:true,coverage:{mode:'guarded-view'}};
+  const stream=new SogLodStream({renderer:{},tree,camera,matrixWorld:new THREE.Matrix4(),settings,degree:0});
+  readyFiles(stream);
+  const side=xrLeaf(tree,'side'),upper=xrLeaf(tree,'upper'),farSide=xrLeaf(tree,'farSide');
+  const tick=(time,eyeViews=eyes,margin=.1)=>{
+    camera.updateMatrixWorld();eyes.forEach(eye=>eye.updateMatrixWorld());
+    stream.update(time,margin,eyeViews);
+  };
+  const nextSelection=(time,action,eyeViews,margin)=>{
+    const before=stream.stats.selections;
+    action();tick(time,eyeViews,margin);
+    assert.equal(stream.stats.selections,before+1,'the view guard bypasses the 100 ms selection timer');
+  };
+  try{
+    for(let time=0;time<=100;time+=10)tick(time);
+    assert.equal(stream.shown[side],-1);
+    assert.ok(stream.shown[upper]>=0);
+    assert.ok(stream.baseReady,'dropped side coverage stays warm');
+    const forward=camera.getWorldDirection(new THREE.Vector3());
+    nextSelection(102,()=>{for(const view of [camera,...eyes])view.rotation.z=Math.PI/2;});
+    assert.ok(camera.getWorldDirection(new THREE.Vector3()).distanceTo(forward)<1e-8,'roll does not rotate the head-forward vector');
+    assert.equal(stream.shown[side],1,'the newly visible side draws from warm coarse data on the first roll frame');
+    assert.equal(stream.shown[upper],-1);
+
+    const projection=eyes[1].projectionMatrix.clone();
+    nextSelection(104,()=>eyes[1].projectionMatrix.set(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0));
+    assert.ok(stream.shown[upper]>=0,'invalid projection restores the now-unproven upper coverage');
+    nextSelection(106,()=>eyes[1].projectionMatrix.copy(projection));
+    assert.equal(stream.shown[upper],-1,'valid stereo coverage resumes immediately');
+    nextSelection(108,()=>{},[]);
+    assert.ok(stream.shown[side]>=0&&stream.shown[upper]>=0,'missing eyes conservatively restore resident coverage');
+
+    nextSelection(110,()=>{});
+    assert.equal(stream.shown[farSide],-1);
+    nextSelection(112,()=>{for(const view of [camera,...eyes])view.rotation.set(0,-1.15,0);});
+    assert.equal(stream.shown[farSide],1,'warm far-side coverage appears on the first yaw snap frame');
     assert.ok(stream.baseReady);
   } finally {
     stream.dispose();

@@ -86,7 +86,7 @@ Camera view priority works with either a fixed or an automatic budget. When all 
 
 In a browser window the selector keeps coarse coverage around the viewer. A reduced automatic budget can allow extra room above coarse coverage, up to 10% of the smaller of the reduced request and the coarse count.
 
-In VR, automatic detail starts at the smaller of the preset budget and 750,000 splats per asset. With camera view priority, the selector can spend a tight budget on detail in front of the headset by omitting regions safely outside both eyes. Their coarse files stay resident for head turns. Fixed budgets, the Distance priority and a behind-view distance factor of 1 keep whole-scene coarse coverage. Required coverage can exceed the requested budget.
+In VR, automatic detail starts at the smaller of the preset budget and 750,000 splats per asset. With camera view priority, the selector can spend a tight budget on detail in front of the headset by omitting regions safely outside both eyes. The test uses both tracked eye projections and leaves room for head movement, including roll. A region visible to either eye keeps coverage. Omitted regions keep their coarse files resident for turns and teleports. Fixed budgets, the Distance priority and a behind-view distance factor of 1 keep whole-scene coarse coverage. Required coverage can exceed the requested budget.
 
 The readout totals visible draw/sort splats, supplied fallback splats, selected detail and resident splats across the active foreground and background, and reports the actual WebGPU/WebGL2 backend. These counts describe splats. Memory use, transfer time and frame rate require separate measurements.
 

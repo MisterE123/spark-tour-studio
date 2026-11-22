@@ -49,8 +49,8 @@ runtime.renderer.backend.makeXRCompatible=async()=>{};
 const gl=runtime.renderer.backend.gl,debug=gl.getExtension('WEBGL_debug_renderer_info');
 const ovr=gl.getExtension('OVR_multiview2');state.capabilities={ovr:!!ovr,ovrFramebufferMultisample:typeof ovr?.framebufferTextureMultisampleMultiviewOVR==='function',renderer:debug?gl.getParameter(debug.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER),extensions:gl.getSupportedExtensions(),multiviewRequested:new URL(location.href).searchParams.get('multiview')!=='0'};
 state.identity={renderer:runtime.renderer,manager:runtime.renderer.xr,camera:runtime.camera,rig:runtime.rig,array:runtime.renderer.xr.getCamera(),canvas:runtime.renderer.domElement};
-const scene=newScene('scene','Projection layer SOG','scan/lod-meta.json');scene.modes=['jumps','fly'];scene.background={type:'solid',color:'#183340'};scene.hotspots=[{id:'info',label:'Projection bubble',position:[0,1.6,-2],kind:'scene',target:'scene'}];
-const project=blankProject();project.scenes=[scene];project.startScene=scene.id;
+const scene=newScene('scene','Projection layer SOG','scan/lod-meta.json');scene.modes=['jumps','fly'];scene.background={type:'solid',color:'#183340'};scene.hotspots=[{id:'info',label:'Projection bubble',position:[0,1.6,-2],kind:'page',target:'bubble-page'}];
+const project=blankProject();project.scenes=[scene];project.startScene=scene.id;project.pages=[{id:'bubble-page',title:'Projection bubble',html:'',blocks:[{type:'text',text:'Content panel opens in the tracked line of sight.',url:''}]}];
 state.loaded=runtime.load(ProjectSchema.parse(project),{assetBaseUrl:'./',sceneUrls:{}},location.href).catch(error=>state.errors.push(String(error)));
 state.tick=(frames=1)=>{for(let n=0;n<frames;n++){
  const session=runtime.renderer.xr.getSession();if(!session?.callback)throw Error('Missing actual XRManager callback');state.time=Math.max(state.time,performance.now())+1000/72;
@@ -60,6 +60,17 @@ state.tick=(frames=1)=>{for(let n=0;n<frames;n++){
  }};
 state.attach=()=>{const session=runtime.renderer.xr.getSession();state.controls=['left','right'].map((hand,index)=>({handedness:hand,targetRayMode:'tracked-pointer',targetRaySpace:{},profiles:['oculus-touch-v3'],gamepad:{mapping:'xr-standard',axes:[0,0,0,0],buttons:Array.from({length:6},()=>({pressed:false,touched:false,value:0}))},pose:new THREE.Matrix4().compose(new THREE.Vector3(index?.25:-.25,1.3,-.35),new THREE.Quaternion(),new THREE.Vector3(1,1,1))}));session.inputSources.push(...state.controls);const event=new Event('inputsourceschange');event.added=state.controls;event.removed=[];session.dispatchEvent(event);state.tick(3);};
 state.event=(type,hand='left')=>{const event=new Event(type);event.inputSource=state.controls.find(s=>s.handedness===hand);event.frame=state.frame;runtime.renderer.xr.getSession().dispatchEvent(event);};
+state.aimBubble=pitch=>{
+ state.orientation.setFromEuler(new THREE.Euler(pitch,0,0));state.tick(3);
+ const eye=runtime.trackedHeadPosition(),direction=runtime.camera.getWorldDirection(new THREE.Vector3());
+ const bubble=runtime.bubbles.children.find(item=>item.userData.id==='info');
+ bubble.position.copy(runtime.bubbles.worldToLocal(eye.clone().addScaledVector(direction,3)));
+ const source=state.controls[1],origin=new THREE.Vector3().setFromMatrixPosition(source.pose),target=runtime.rig.worldToLocal(bubble.getWorldPosition(new THREE.Vector3()));
+ const rotation=new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().lookAt(origin,target,new THREE.Vector3(0,1,0)));
+ source.pose.compose(origin,rotation,new THREE.Vector3(1,1,1));state.tick(3);
+ runtime.controllerRay(runtime.controllers.find(controller=>controller.userData.handedness==='right'));
+ return runtime.hitUI()===bubble;
+};
 state.read=()=>{
  const layer=state.layers.at(-1),previousRead=gl.getParameter(gl.READ_FRAMEBUFFER_BINDING),previousDraw=gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING),readBuffer=gl.getParameter(gl.READ_BUFFER),framebuffer=gl.createFramebuffer(),eyes=[];
  try{gl.bindFramebuffer(gl.FRAMEBUFFER,framebuffer);gl.readBuffer(gl.COLOR_ATTACHMENT0);for(let eye=0;eye<2;eye++){
@@ -68,7 +79,8 @@ state.read=()=>{
   const width=layer.array?layer.textureWidth:Math.floor(layer.textureWidth/2),pixels=new Uint8Array(width*layer.textureHeight*4);gl.readPixels(layer.array?0:eye*width,0,width,layer.textureHeight,gl.RGBA,gl.UNSIGNED_BYTE,pixels);eyes.push({width,height:layer.textureHeight,pixels});
  }}finally{gl.bindFramebuffer(gl.READ_FRAMEBUFFER,previousRead);gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER,previousDraw);gl.readBuffer(readBuffer);gl.deleteFramebuffer(framebuffer);}return eyes;
 };
-state.compare=()=>{const after=state.read(),before=state.before;return after.map((eye,index)=>{let changed=0,bright=0;for(let i=0;i<eye.pixels.length;i+=4){if(Math.abs(eye.pixels[i]-before[index].pixels[i])+Math.abs(eye.pixels[i+1]-before[index].pixels[i+1])+Math.abs(eye.pixels[i+2]-before[index].pixels[i+2])>45)changed++;if(eye.pixels[i]>120&&eye.pixels[i+1]>120&&eye.pixels[i+2]>120)bright++;}return{width:eye.width,height:eye.height,changed,bright};});};
+state.compare=(central=false)=>{const after=state.read(),before=state.before;return after.map((eye,index)=>{let changed=0,bright=0;for(let i=0;i<eye.pixels.length;i+=4){const pixel=i/4,x=(pixel%eye.width)/eye.width,y=Math.floor(pixel/eye.width)/eye.height;if(central&&(x<.25||x>.75||y<.2||y>.8))continue;const differs=Math.abs(eye.pixels[i]-before[index].pixels[i])+Math.abs(eye.pixels[i+1]-before[index].pixels[i+1])+Math.abs(eye.pixels[i+2]-before[index].pixels[i+2])>45;if(differs)changed++;if((!central||differs)&&eye.pixels[i]>120&&eye.pixels[i+1]>120&&eye.pixels[i+2]>120)bright++;}return{width:eye.width,height:eye.height,changed,bright};});};
+state.content=()=>({page:runtime.currentPage?.id,visible:runtime.hud.visible,anchor:runtime.hud.getWorldPosition(new THREE.Vector3()).toArray(),center:runtime.renderer.xr.getCamera().cameras.map(eye=>runtime.hud.getWorldPosition(new THREE.Vector3()).project(eye).toArray()),pixels:state.compare(true)});
 state.snapshot=()=>({capabilities:state.capabilities,actualManager:runtime.renderer instanceof WebGPURenderer&&runtime.renderer.xr.constructor.name==='XRManager',identities:{renderer:runtime.renderer===state.identity.renderer,manager:runtime.renderer.xr===state.identity.manager,camera:runtime.camera===state.identity.camera,rig:runtime.rig===state.identity.rig,array:runtime.renderer.xr.getCamera()===state.identity.array,canvas:runtime.renderer.domElement===state.identity.canvas,session:runtime.renderer.xr.getSession()===state.sessions[0]},presenting:runtime.renderer.xr.isPresenting,multiview:runtime.renderer.xr.useMultiview(),projectionLayer:runtime.renderer.xr._glProjLayer===state.layers.at(-1),output:runtime.renderer.getOutputRenderTarget()===runtime.renderer.xr._xrRenderTarget,eyes:runtime.renderer.xr.getCamera().cameras.map(eye=>({position:eye.getWorldPosition(new THREE.Vector3()).toArray(),viewport:eye.viewport.toArray(),determinant:eye.matrixWorld.determinant()})),hudVisible:runtime.hud.visible,menuOpen:runtime.menuOpen,wristVisible:runtime.wristMenu.visible,controllers:runtime.controllers.map(c=>({visible:c.visible,hand:c.userData.handedness})),layers:state.layers.map(l=>({width:l.textureWidth,height:l.textureHeight,array:l.array,init:l.init})),stats:{...runtime.backend.stats},errors:state.errors,statuses:state.statuses,glError:gl.getError()});
 state.ready=true;
 `);
@@ -101,9 +113,28 @@ try{
   assert.ok(row.open.state.actualManager&&row.open.state.projectionLayer&&row.open.state.output);assert.ok(Object.values(row.open.state.identities).every(Boolean));assert.ok(row.open.state.controllers.every(c=>c.visible));assert.ok(row.open.state.wristVisible&&row.open.state.menuOpen&&row.open.state.hudVisible);
   assert.equal(row.open.state.layers[0].array,multiview&&row.open.state.capabilities.ovr,'only genuine OVR support enables texture-array multiview');assert.equal(row.open.state.multiview,row.open.state.layers[0].array);assert.ok(row.open.pixels.every(eye=>eye.changed>300&&eye.bright>30),'menu background and text must draw into both actual projection eye textures: '+JSON.stringify(row.open));assert.ok(row.open.state.eyes.every(e=>Math.abs(e.determinant-1)<1e-6));assert.equal(row.open.state.glError,0);
   await page.evaluate(()=>{test.event('squeezestart');test.tick(3);});row.closed=await page.evaluate(()=>test.snapshot());assert.equal(row.closed.menuOpen,false);assert.equal(row.closed.hudVisible,false);assert.ok(Object.values(row.closed.identities).every(Boolean));
+  row.bubble=[];
+  for(const degrees of [-65,65]){
+   const aimed=await page.evaluate(pitch=>test.aimBubble(pitch),degrees*Math.PI/180);assert.equal(aimed,true,'tracked right controller reaches the pitched bubble');
+   await page.evaluate(()=>{test.before=test.read();test.event('selectstart','right');test.event('selectend','right');test.tick(4);});
+   await page.waitForTimeout(100);await page.evaluate(()=>test.tick(5));
+   const content=await page.evaluate(()=>test.content());row.bubble.push({degrees,...content});
+   assert.equal(content.page,'bubble-page');assert.equal(content.visible,true);
+   assert.ok(content.center.every(([x,y])=>Math.abs(x)<.08&&Math.abs(y)<.05),'content panel must open in both eyes at the bubble viewing pitch: '+JSON.stringify(content));
+   assert.ok(content.pixels.every(eye=>eye.changed>300&&eye.bright>30),'content panel must produce legible central pixels in both eyes: '+JSON.stringify(content));
+   const returned=await page.evaluate(()=>{
+    const r=test.runtime;test.orientation.setFromAxisAngle(r.rig.up,.12);test.tick(3);
+    const anchor=r.hud.position.toArray();r.hud.children.find(item=>item.userData.label==='Tour menu').userData.action();test.tick(3);
+    const recentered={page:r.currentPage,visible:r.hud.visible,anchor:r.hud.position.toArray()};
+    test.event('squeezestart');test.tick(3);return {anchor,recentered};
+   });
+   assert.deepEqual(returned.anchor,content.anchor,'open content stays anchored as the viewer moves their head');
+   assert.equal(returned.recentered.page,null);assert.equal(returned.recentered.visible,true);
+   assert.ok(Math.abs(returned.recentered.anchor[1]-content.anchor[1])>1,'returning from bubble content restores the level menu');
+  }
   const ignored=messages.filter(s=>s.startsWith("THREE.TSL: Return statement used in an inline 'Fn()'. Define a layout struct to allow return values.")||/^\[\.WebGL-[^\]]+\]GL Driver Message \(OpenGL, Performance, GL_CLOSE_PATH_NV, High\): GPU stall due to ReadPixels(?: \(this message will no longer repeat\))?$/.test(s));row.ignoredObserverWarnings=ignored;assert.deepEqual(errors,[]);assert.deepEqual(messages.filter(s=>!ignored.includes(s)),[],'no unexpected GPU/browser errors');
   await page.evaluate(async()=>{await test.runtime.renderer.xr.getSession().end();test.runtime.dispose();});await page.close();page=undefined;
  }
- await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));console.log('PASS actual projection-layer textures: both-eye menus, grip events, renderer/session continuity; genuine OVR exercised only if reported. '+output);
+ await fs.writeFile(path.join(output,'result.json'),JSON.stringify(report,null,2));console.log('PASS actual projection-layer textures: both-eye menus, pitched bubble content, grip events, renderer/session continuity; genuine OVR exercised only if reported. '+output);
 }catch(error){report.error=String(error);report.stack=error.stack;if(page)report.state=await page.evaluate(()=>window.test?.snapshot()).catch(()=>null);await fs.writeFile(path.join(output,'failure.json'),JSON.stringify(report,null,2));throw error;}
 finally{if(page)await page.evaluate(async()=>{await test.runtime.renderer.xr.getSession()?.end();test.runtime.dispose();}).catch(()=>{});await browser?.close();server.closeAllConnections?.();await new Promise(resolve=>server.close(resolve));}

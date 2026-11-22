@@ -221,7 +221,7 @@ export class SogLodStream {
     const distance = this.eye.distanceTo(this.lastEye);
     const angle = THREE.MathUtils.radToDeg(this.forward.angleTo(this.lastForward));
     const moved = distance > s.updateDistance || angle > turnAngle;
-    // A snap turn, head roll or teleport can cross an eye’s guard between adjacent
+    // A snap turn, head roll or teleport can cross an eye guard between adjacent
     // frames. Restore newly visible resident coverage on the next update.
     const crossedGuard = s.coverage.mode === 'guarded-view' && (angle >= XR_GUARD_ANGLE || headMargin > 0 && distance >= headMargin
       || headMargin === Infinity && this.lastHeadMargin !== Infinity

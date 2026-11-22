@@ -19,17 +19,20 @@
 .mobile-tour-menu header small{display:block;font-size:10px;color:var(--muted);max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mobile-tour-menu header h2{font-size:17px;margin:4px 0 0;letter-spacing:0}
 .mobile-tour-menu header button{width:44px;height:44px;padding:10px;flex:none;border-radius:50%}
+.mobile-tour-menu-header-actions{display:flex;align-items:center;gap:7px}
+.mobile-tour-menu-header-actions .material-icon{margin:0}
 .mobile-tour-menu-scroll{min-height:0;overflow:auto;overscroll-behavior:contain;padding:0 14px 14px}
 .mobile-tour-menu .field{margin:14px 0}
 .mobile-tour-menu select{min-height:44px;font-size:16px}
-.mobile-mode-choice{display:flex;gap:6px;max-width:100%;margin:10px 0 16px}
+.mobile-menu-label{margin:5px 0 7px;font-size:11px;color:var(--muted)}
+.mobile-mode-choice{display:flex;gap:6px;max-width:100%}
 .mobile-mode-choice button{flex:1;min-height:44px;font-size:12px;white-space:nowrap;padding:8px 10px}
-.mobile-view-list{display:grid;gap:6px}
-.mobile-view-list h3{margin:5px 0 3px;font-size:11px;color:var(--muted)}
+.mobile-view-list{display:grid;gap:6px;margin-top:14px}
+.mobile-view-list .mobile-menu-label{margin-bottom:0}
 .mobile-view-list button{justify-content:flex-start;min-height:44px;text-align:left;font-size:12px}
-.mobile-view-list button>span:nth-child(2){flex:1;overflow-wrap:anywhere;min-width:0}
+.mobile-view-list button>span{flex:1;overflow-wrap:anywhere;min-width:0}
 .mobile-view-list button>.material-icon{flex:none}
-.mobile-tour-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid #ffffff25}
+.mobile-tour-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px;padding:10px 0;border-block:1px solid #ffffff25}
 .mobile-tour-actions button{justify-content:flex-start;min-height:44px;padding:10px;font-size:12px}
 .viewer-compact .settings.floating{inset:max(10px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) auto max(10px,env(safe-area-inset-left));width:auto;max-height:calc(100dvh - max(20px,env(safe-area-inset-top)) - max(20px,env(safe-area-inset-bottom)));padding:14px;overscroll-behavior:contain}
 .viewer-compact .settings>header{position:sticky;top:-14px;margin:-14px -14px 12px;padding:12px 14px;z-index:1;background:var(--glass-strong);backdrop-filter:var(--blur)}

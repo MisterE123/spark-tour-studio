@@ -62,6 +62,10 @@ jobs:
         env:
           SPARK_TEST_BROWSER_CHANNEL: chromium
         run: node scripts/radix-walking-detail-check.mjs
+      - name: Verify desktop and mobile visitor navigation and Settings dismissal
+        env:
+          SPARK_TEST_BROWSER_CHANNEL: chromium
+        run: node scripts/mobile-viewer-check.mjs
       - name: Check conversion with the exact packaged native GPU and CPU tools
         env:
           SPARK_SOGS_TOOLS: experimental-release/win-unpacked/resources/sogs-tools

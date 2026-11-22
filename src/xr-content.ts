@@ -6,6 +6,15 @@ import {imagePanel,panel} from './spatial-ui';
 type ContentMesh=THREE.Mesh<THREE.PlaneGeometry,THREE.MeshBasicMaterial>;
 type Item={mesh:ContentMesh;height:number;top:number};
 
+// These are solid bars. Rasterizing the narrow track as a text panel would
+// allocate a 768 by 61,440 canvas every time the visitor opened a page.
+function scrollBar(width:number,height:number,opacity:number){
+ const material=new THREE.MeshBasicMaterial({color:0xffffff,opacity,transparent:true,depthTest:false,depthWrite:false,toneMapped:false});
+ const bar=new THREE.Mesh(new THREE.PlaneGeometry(width,height),material);
+ bar.renderOrder=100;
+ return bar;
+}
+
 // XR uses the same block order as the browser. Scroll only moves existing
 // surfaces; it never reloads images or changes the document/XR session.
 export class XRContent {
@@ -51,8 +60,8 @@ export class XRContent {
    else text(block.text||'');
   }
   for(const link of page.sceneLinks||[]){const button=panel(link.label,this.width,.24,'rgba(255,255,255,.14)','image_arrow_up');button.userData.label=link.label;button.userData.action=()=>onSceneLink?.(link);add(button);}
-  this.track=panel('',.022,this.top-this.bottom,'rgba(255,255,255,.12)');this.track.position.set(1.2,(this.top+this.bottom)/2,.04);hud.add(this.track);
-  this.thumb=panel('',.026,.2,'rgba(255,255,255,.65)');this.thumb.position.set(1.2,0,.045);hud.add(this.thumb);
+  this.track=scrollBar(.022,this.top-this.bottom,.12);this.track.position.set(1.2,(this.top+this.bottom)/2,.04);hud.add(this.track);
+  this.thumb=scrollBar(.026,.2,.65);this.thumb.position.set(1.2,0,.045);hud.add(this.thumb);
   this.layout();
  }
  private layout(){

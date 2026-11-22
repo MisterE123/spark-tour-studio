@@ -10,7 +10,7 @@ export function Icon({name,size=20,className='',...props}:{name:IconName;size?:n
  return <svg {...props} className={`material-icon ${className}`} width={size} height={size} viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" focusable="false"><path d={materialSymbols[name]}/></svg>;
 }
 
-export function IconButton({icon,label,children,className='',...props}:{icon:IconName;label:string}&React.ButtonHTMLAttributes<HTMLButtonElement>){
+export function IconButton({icon,label,children,className='',...props}:{icon:IconName;label:string}&React.ComponentPropsWithRef<'button'>){
  const id=useId(),[tooltip,setTooltip]=useState<{left:number;top:number;above:boolean}|null>(null);
  const show=(button:HTMLButtonElement)=>{const rect=button.getBoundingClientRect(),above=rect.bottom+45>innerHeight;setTooltip({left:Math.max(115,Math.min(innerWidth-115,rect.left+rect.width/2)),top:above?rect.top-7:rect.bottom+7,above});};
  return <><button {...props} type={props.type||'button'} title={tooltip?undefined:label} aria-label={label} aria-describedby={tooltip?id:undefined} className={`icon-button ${children?'icon-with-label':''} ${className}`}
